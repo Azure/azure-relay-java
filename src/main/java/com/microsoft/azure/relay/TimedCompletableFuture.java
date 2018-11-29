@@ -29,8 +29,6 @@ public final class TimedCompletableFuture {
 		return futureToCompletableFuture(timeout, executor.submit(callable));
 	}
 	
-	
-	
 	@SuppressWarnings("unchecked")
 	public static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Future<?> future) {
 		TimeoutHelper.throwIfNegativeArgument(timeout);

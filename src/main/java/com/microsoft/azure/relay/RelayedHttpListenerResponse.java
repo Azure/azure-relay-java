@@ -15,7 +15,7 @@ public class RelayedHttpListenerResponse {
     private int statusCode;
     private String statusDescription;
     private Map<String, String> headers;
-    private OutputStream outputStream;
+    private HybridHttpConnection.ResponseStream outputStream;
     private RelayedHttpListenerContext context;
 
     public int getStatusCode() {
@@ -56,7 +56,7 @@ public class RelayedHttpListenerResponse {
 	public OutputStream getOutputStream() {
 		return outputStream;
 	}
-	public void setOutputStream(OutputStream outputStream) {
+	public void setOutputStream(HybridHttpConnection.ResponseStream outputStream) {
 		this.outputStream = outputStream;
 	}
 	public RelayedHttpListenerContext getContext() {
@@ -72,12 +72,9 @@ public class RelayedHttpListenerResponse {
 
     /// <summary>Sends the response to the client and releases the resources held by this <see cref="RelayedHttpListenerResponse"/> instance.</summary>
     public void close() {
-    	try {
-			this.outputStream.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+    	if (this.outputStream != null) {
+        	this.outputStream.closeAsync();
+    	}
         this.disposed = true;
     }
     

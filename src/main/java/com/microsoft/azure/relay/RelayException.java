@@ -11,7 +11,7 @@ public class RelayException extends Exception {
 		return isTransient;
 	}
 
-	public void setTransient(boolean isTransient) {
+	protected void setTransient(boolean isTransient) {
 		this.isTransient = isTransient;
 	}
 

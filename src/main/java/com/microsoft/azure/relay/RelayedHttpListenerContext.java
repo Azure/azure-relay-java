@@ -85,7 +85,7 @@ public class RelayedHttpListenerContext {
 //            clientWebSocket.Options.AddSubProtocol(subProtocol);
 //        }
         
-        ClientWebSocket webSocket = new ClientWebSocket("RelayedHttpListenerContext acceptAsync");
+        ClientWebSocket webSocket = new ClientWebSocket();
         return TimedCompletableFuture.timedSupplyAsync(ACCEPT_TIMEOUT, () -> {
 			webSocket.connectAsync(rendezvousUri);
 			return webSocket;
@@ -109,7 +109,7 @@ public class RelayedHttpListenerContext {
         	.append(URLEncoder.encode(this.response.getStatusDescription(), StringUtil.UTF8.name()));
     	URI rejectURI = new URI(builder.toString());
     	
-    	ClientWebSocket webSocket = new ClientWebSocket("RelayedHttpListenerContext rejectAsync");
+    	ClientWebSocket webSocket = new ClientWebSocket();
     	
         return TimedCompletableFuture.timedRunAsync(ACCEPT_TIMEOUT, () -> {
 			try {

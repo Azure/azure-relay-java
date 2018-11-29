@@ -3,10 +3,12 @@ package com.microsoft.azure.relay;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Field;
 import java.net.Proxy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,6 +35,7 @@ import javax.websocket.WebSocketContainer;
 import javax.websocket.server.ServerContainer;
 import javax.websocket.server.ServerEndpoint;
 
+import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -45,10 +48,10 @@ public class HybridConnectionListener {
 	private final InputQueue<ClientWebSocket> connectionInputQueue;
 	private final ControlConnection controlConnection;
 	private Proxy proxy;
-	private String cachedToString;
 	private boolean openCalled;
 	private volatile boolean closeCalled;
 	private Duration operationTimeout;
+	private int maxWebSocketBufferSize;
 	private Object thisLock = new Object();
 	private boolean shouldAccept;
 
@@ -180,6 +183,14 @@ public class HybridConnectionListener {
 		return this.operationTimeout;
 	}
 	
+	public int getMaxWebSocketBufferSize() {
+		return maxWebSocketBufferSize;
+	}
+
+	public void setMaxWebSocketBufferSize(int maxWebSocketBufferSize) {
+		this.maxWebSocketBufferSize = maxWebSocketBufferSize;
+	}
+
 	public BiConsumer<Object, Object[]> getConnectingHandler() {
 		return onConnecting;
 	}
@@ -409,7 +420,7 @@ public class HybridConnectionListener {
             if (!this.openCalled) {
             	// TODO: trace
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.ObjectNotOpened), this);
-            	throw new RuntimeException("cannot accept connection because socket is not open.");
+            	throw new RuntimeException("cannot accept connection because listener is not open.");
             }
         }
         return this.connectionInputQueue.dequeueAsync();
@@ -468,11 +479,11 @@ public class HybridConnectionListener {
 	}
 
 	private void onCommandAsync(String message, ClientWebSocket controlWebSocket) {
-		System.out.println("received message");
 		JSONObject jsonObj = new JSONObject(message);
 		ListenerCommand listenerCommand = new ListenerCommand(jsonObj);
 
         if (listenerCommand.getAccept() != null) {
+        	System.out.println("Listener received accept command.");
         	try {
 				this.onAcceptCommandAsync(listenerCommand.getAccept());
 			} catch (URISyntaxException e) {
@@ -481,31 +492,10 @@ public class HybridConnectionListener {
 			}      
         }
         else if (listenerCommand.getRequest() != null) {
+        	System.out.println("Listener received request command.");
         	HybridHttpConnection httpConnection = new HybridHttpConnection();
         	httpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
         }
-		
-		
-//        try {
-//            var listenerCommand = ListenerCommand.ReadObject(commandBuffer);
-//            if (listenerCommand.Accept != null) {
-//                this.onAcceptCommandAsync(listenerCommand.Accept).ConfigureAwait(false);
-//            }
-//            else if (listenerCommand.Request != null) {
-//                HybridHttpConnection.createAsync(this, listenerCommand.Request, webSocket).ConfigureAwait(false);
-//            }
-//            else {
-//                String json = Encoding.UTF8.GetString(
-//                    commandBuffer.Array,
-//                    commandBuffer.Offset,
-//                    Math.Min(commandBuffer.Count, HybridConnectionConstants.MaxUnrecognizedJson));
-//                RelayEventSource.Log.Warning(this, $"Received an unknown command: {json}.");
-//            }
-//        }
-//        catch (Exception exception) when (!Fx.IsFatal(exception))
-//        {
-//            RelayEventSource.Log.HandledExceptionAsWarning(this, exception);
-//        }
     }
 
     private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand) throws URISyntaxException {
@@ -522,34 +512,31 @@ public class HybridConnectionListener {
     	
         // TODO: trace
 //      RelayEventSource.Log.RelayListenerRendezvousStart(listenerContext.Listener, listenerContext.TrackingContext.TrackingId, acceptCommand.Address);
-        return CompletableFuture.runAsync(() -> {
-        	try {
-                if (acceptHandler != null) {
-                    // Invoke and await the user's AcceptHandler method
-                	try {
-                		this.shouldAccept = acceptHandler.apply(listenerContext);
-                	}
-                	catch (Exception userException) {
-                    	// TODO: trace
+    	try {
+            if (acceptHandler != null) {
+                // Invoke and await the user's AcceptHandler method
+            	try {
+            		this.shouldAccept = acceptHandler.apply(listenerContext);
+            	}
+            	catch (Exception userException) {
+                	// TODO: trace
 //                    	when (!Fx.IsFatal(userException)) {
 //                        String description = SR.GetString(SR.AcceptHandlerException, listenerContext.TrackingContext.TrackingId);
 //                        RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, description + " " + userException);
 //                        listenerContext.Response.StatusCode = HttpStatusCode.BadGateway;
 //                        listenerContext.Response.StatusDescription = description;
-                	}
-                }
-                // Don't block the pump waiting for the rendezvous
-        		CompletableFuture.runAsync(() -> {
-        			this.completeAcceptAsync(listenerContext, rendezvousUri);
-        		});
-        	}
-            catch (Exception exception) {
-				// TODO: trace
+            	}
+            }
+            // Don't block the pump waiting for the rendezvous
+    		return this.completeAcceptAsync(listenerContext, rendezvousUri);
+    	}
+        catch (Exception exception) {
+			// TODO: trace
 //	        	when (!Fx.IsFatal(exception)) {
 //	            RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, exception);
 //	            RelayEventSource.Log.RelayListenerRendezvousStop();
-            }
-        });
+        	throw new RuntimeIOException("could not connect to rendezvous.");
+        }
     }
 
 	// <summary>
@@ -569,7 +556,7 @@ public class HybridConnectionListener {
 	private CompletableFuture<Void> completeAcceptAsync(RelayedHttpListenerContext listenerContext, URI rendezvousUri) {
 		try {
             if (this.shouldAccept) {
-            	ClientWebSocket webSocket = new ClientWebSocket("HybridConnection rendezvous");
+            	ClientWebSocket webSocket = new ClientWebSocket();
                 
                 synchronized (this.thisLock) {
                     if (this.closeCalled) {
@@ -635,11 +622,12 @@ public class HybridConnectionListener {
 		private final String path;
 		private final TokenRenewer tokenRenewer;
 		private final AsyncLock sendAsyncLock;
-		private CompletableFuture<ClientWebSocket> connectAsyncTask;
+		private CompletableFuture<Void> connectAsyncTask;
 		private CompletableFuture<Void> receivePumpTask;
 		private int connectDelayIndex;
 		private boolean isOnline;
 		private Exception lastError;
+		private final ByteBuffer receiveBuffer = ByteBuffer.allocate(RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE);
 		private BiConsumer<Object, Object[]> connectingHandler;
 		private BiConsumer<Object, Object[]> offlineHandler;
 		private BiConsumer<Object, Object[]> onlineHandler;
@@ -686,7 +674,7 @@ public class HybridConnectionListener {
 //			this.shutdownCancellationSource = new CancellationTokenSource();
 			this.sendAsyncLock = new AsyncLock();
 			this.tokenRenewer = new TokenRenewer(this.listener, this.address.toString(), TokenProvider.DEFAULT_TOKEN_TIMEOUT);
-			this.webSocket = new ClientWebSocket("HybridconnectionListener control");
+			this.webSocket = new ClientWebSocket();
 		}
 
 		// TODO: cancellationtoken
@@ -697,8 +685,12 @@ public class HybridConnectionListener {
 	            try {
 	                // Block so we surface any errors to the user right away.
 	            	ensureConnectTask(timeout).get();
-	//                this.tokenRenewer.setOnTokenRenewed((token) -> this.onTokenRenewed(token));
-	//                this.receivePumpTask = this.ReceivePumpAsync();
+	            	
+	                this.tokenRenewer.setOnTokenRenewed((token) -> this.onTokenRenewed(token));
+	                Thread t = new Thread(() -> this.receivePumpAsync());
+//	                this.receivePumpTask = 
+	                
+	                t.start();
 	                succeeded = true;
 	            }
 	            catch (InterruptedException | ExecutionException e) {
@@ -744,30 +736,33 @@ public class HybridConnectionListener {
 
 		// TODO: cancellationtoken param
 		CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer stream, Duration timeout) {
-			
-			return this.sendAsyncLock.lockAsync(timeout).thenApplyAsync((lock) -> {
-				CompletableFuture<ClientWebSocket> connectTask = null;
+
+			return this.sendAsyncLock.lockAsync(timeout).thenApplyAsync((lockRelease) -> {
+//				CompletableFuture<Void> connectTask = null;
 				try {
-					connectTask = this.ensureConnectTask(timeout);
-				} catch (InterruptedException e1) {
+					this.ensureConnectTask(timeout).get();
+				} catch (InterruptedException | ExecutionException e1) {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
-				CompletableFuture<Void> sendCommand;
-				CompletableFuture<Void> sendStream;
-				String json = JSONObject.valueToString(command);
+				CompletableFuture<Void> sendCommandTask;
+				CompletableFuture<Void> sendStreamTask;
+				String json = command.getResponse().toJsonString();
 				
-				ClientWebSocket webSocket = null;
-				try {
-					webSocket = connectTask.get();
-				} catch (InterruptedException | ExecutionException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				sendCommand = webSocket.sendAsync(json);
-				sendStream = (stream != null) ? webSocket.sendAsync(stream.array(), timeout) : CompletableFuture.completedFuture(null);
+//				String json = JSONObject.valueToString(command);
+				
+//				ClientWebSocket webSocket = null;
+//				try {
+//					webSocket = connectTask.get();
+//				} catch (InterruptedException | ExecutionException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+				sendCommandTask = this.webSocket.sendCommandAsync(json, null);
+				sendStreamTask = (stream != null) ? webSocket.sendAsync(stream.array(), timeout) : CompletableFuture.completedFuture(null);
+				lockRelease.release();
 
-				return CompletableFuture.allOf(sendCommand, sendStream);
+				return CompletableFuture.allOf(sendCommandTask, sendStreamTask);
 			}).thenAccept((completedBoth) -> {});
 		}
 
@@ -776,7 +771,7 @@ public class HybridConnectionListener {
 		// one is faulted or canceled a new one is created.
 		// </summary>
 		// TODO: cancellationtoken param
-		private CompletableFuture<ClientWebSocket> ensureConnectTask(Duration timeout) throws InterruptedException {
+		private CompletableFuture<Void> ensureConnectTask(Duration timeout) throws InterruptedException {
 			
 			synchronized (this.thisLock) {
 				// TODO: isFaulted, isCanceled
@@ -789,7 +784,7 @@ public class HybridConnectionListener {
 		}
 
 		// TODO: cancellationtoken param
-		private CompletableFuture<ClientWebSocket> connectAsync(Duration timeout) throws InterruptedException {
+		private CompletableFuture<Void> connectAsync(Duration timeout) throws InterruptedException {
             this.listener.throwIfDisposed();
             
             Map<String, List<String>> headers = new HashMap<String, List<String>>();
@@ -837,92 +832,61 @@ public class HybridConnectionListener {
 					throw new IllegalArgumentException("uri is invalid.");
 				}
 				
-				return CompletableFuture.supplyAsync(() -> {
-					this.webSocket.setOnMessage((msg) -> this.onMessage(msg));
-					try {
-						this.webSocket.connectAsync(websocketUri).get();
-					} catch (InterruptedException | ExecutionException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-					this.onOnline();
-					return this.webSocket;
-				});
+//				this.webSocket.setOnMessage((msg) -> this.onMessage(msg));
+//				this.webSocket.setOnConnect((sess) -> this.onOnline());
+				return this.webSocket.connectAsync(websocketUri);
                 
 //                // TODO: trace
 ////                RelayEventSource.Log.ObjectConnected(this.listener);
-//                Session mysession = null;
-//				try {
-//					mysession = session.get();
-//				} catch (ExecutionException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//                if (mysession.isOpen()) {
-//                	System.out.println("open.");
-//                }
-//                return webSocket;
-//            }
-//            catch (WebSocketException wsException) {
-//                throw RelayEventSource.Log.ThrowingException(
-//                    WebSocketExceptionHelper.ConvertToRelayContract(wsException, this.listener.TrackingContext, webSocket.Response), this.listener);
-//            }
         }
 
 		// TODO: cancellationtoken param
-//		private CompletableFuture<Void> closeOrAbortWebSocketAsync(
-//            CompletableFuture<WebSocket> connectTask,
-//            boolean abort,
-//            WebSocketCloseStatus closeStatus,
-//            String statusDescription) {
+		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
 			
-//			if (closeStatus == null) closeStatus = WebSocketCloseStatus.EMPTY;
-//			
 //			// TODO: fx
 ////            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
 ////            Fx.Assert(connectTask.IsCompleted || !abort, "CloseOrAbortWebSocketAsync(abort=true) should only be called with a completed connectTask");
-//            
-//			synchronized (this.thisLock) {
-//                if (object.ReferenceEquals(connectTask, this.connectAsyncTask)) {
-//                    this.connectAsyncTask = null;
-//                }
-//            }
-//
-//            WebSocket webSocket = null;
-//            try {
-//                webSocket = await connectTask.ConfigureAwait(false);
-//                if (abort) {
-//                    webSocket.Abort();
-//                }
-//                else {
-//                    await webSocket.CloseOutputAsync(closeStatus, statusDescription, cancellationToken).ConfigureAwait(false);
-//                    await webSocket.CloseAsync(closeStatus, statusDescription, cancellationToken).ConfigureAwait(false);
-//                }
-//            }
-//            catch (Exception e) when (!Fx.IsFatal(e))
-//            {
-//                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
-//                webSocket?.Abort();
-//            }
-//        }
+            
+			synchronized (this.thisLock) {
+                if (connectTask == this.connectAsyncTask) {
+                    this.connectAsyncTask = null;
+                }
+            }
 
-//		private CompletableFuture<Void> receivePumpAsync() {
-//            Exception exception = null;
-//            try {
-//                boolean keepGoing;
-//                do {
-//                    keepGoing = await this.ReceivePumpCoreAsync().ConfigureAwait(false);
-//                }
-//                while (keepGoing && !this.shutdownCancellationSource.IsCancellationRequested);
-//            }
-//            catch (Exception e) when (!Fx.IsFatal(e)) {
+            try {
+                return connectTask.thenRun(() -> this.webSocket.closeAsync(reason, null));
+            }
+            catch (Exception e)
+//            when (!Fx.IsFatal(e))
+            {
+            	// TODO: trace
 //                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
-//                exception = e;
-//            }
-//            finally {
-//                this.onOffline(exception);
-//            }
-//        }
+                return webSocket.closeAsync(null, null);
+            }
+        }
+
+		private CompletableFuture<Void> receivePumpAsync() {
+            Exception exception = null;
+            try {
+                boolean keepGoing;
+                do {
+                    keepGoing = this.receivePumpCoreAsync().get();
+                }
+                while (keepGoing);
+//                while (keepGoing && !this.shutdownCancellationSource.IsCancellationRequested);
+            }
+            catch (Exception e) 
+//            TODO: when (!Fx.IsFatal(e)) 
+            {
+            	// TODO: trace
+//                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
+                exception = e;
+            }
+            finally {
+                this.onOffline(exception);
+            }
+            return CompletableFuture.completedFuture(null);
+        }
 
 		// <summary>
 		// Ensure we have a connected webSocket, listens for command messages, and
@@ -930,59 +894,52 @@ public class HybridConnectionListener {
 		// </summary>
 		// <returns>A boolean indicating whether or not the receive pump should keep
 		// running.</returns>
-//		private CompletableFuture<Boolean> receivePumpCoreAsync()
-//        {
-//            boolean keepGoing = true;
-////            CancellationToken shutdownToken = this.shutdownCancellationSource.Token;
-////            Task<WebSocket> connectTask = this.ensureConnectTask(shutdownToken);
-//            try
-//            {
-//            	Session session = this.ensureConnectTask(null).get();
-//            	if (session.isOpen()) {
-//            		
-//            	}
-//            	
-////                WebSocket webSocket = await connectTask.ConfigureAwait(false);
-////                int totalBytesRead = 0;
-//                do {
-//                    var currentReadBuffer = new ArraySegment<byte>(this.receiveBuffer.Array, this.receiveBuffer.Offset + totalBytesRead, this.receiveBuffer.Count - totalBytesRead);
-//                    WebSocketReceiveResult receiveResult = await webSocket.ReceiveAsync(currentReadBuffer, CancellationToken.None).ConfigureAwait(false);
-//                    if (receiveResult.MessageType == WebSocketMessageType.Close)
-//                    {
-//                        await this.CloseOrAbortWebSocketAsync(
-//                            connectTask, false, receiveResult.CloseStatus.Value, receiveResult.CloseStatusDescription, shutdownToken).ConfigureAwait(false);
-//                        if (this.listener.closeCalled)
-//                        {
-//                            // This is the cloud service responding to our clean shutdown.
-//                            keepGoing = false;
-//                        }
-//                        else
-//                        {
-//                            keepGoing = this.OnDisconnect(new ConnectionLostException(receiveResult.CloseStatus.Value + ": " + receiveResult.CloseStatusDescription));
-//                        }
-//
-//                        break;
-//                    }
-//
-//                    totalBytesRead += receiveResult.Count;
-//                    if (receiveResult.EndOfMessage)
-//                    {
-//                        var commandBuffer = new ArraySegment<byte>(this.receiveBuffer.Array, this.receiveBuffer.Offset, totalBytesRead);
-//                        await this.listener.OnCommandAsync(commandBuffer, webSocket).ConfigureAwait(false);
-//                        totalBytesRead = 0;
-//                    }
-//                }
-//                while (!shutdownToken.IsCancellationRequested);
-//            }
-//            catch (Exception exception) when (!Fx.IsFatal(exception))
-//            {
-//                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, exception);
-//                await this.CloseOrAbortWebSocketAsync(connectTask, abort: true).ConfigureAwait(false);
-//                keepGoing = this.OnDisconnect(WebSocketExceptionHelper.ConvertToRelayContract(exception, this.listener.TrackingContext));
-//            }
-//
-//            return keepGoing;
-//        }
+		private CompletableFuture<Boolean> receivePumpCoreAsync() throws InterruptedException {
+            
+//            CancellationToken shutdownToken = this.shutdownCancellationSource.Token;
+            CompletableFuture<Void> connectTask = this.ensureConnectTask(null);
+            
+            return CompletableFuture.supplyAsync(() -> {
+            	boolean keepGoing = true;
+            	try {
+	                do {
+	                	connectTask.get();
+	                	this.receiveBuffer.clear();
+//	                	CompletableFuture<String> receivedMessage = this.webSocket.receiveControlMessageAsync();
+	                	String receivedMessage = this.webSocket.receiveControlMessageAsync().get();
+	                    
+	                    if (this.webSocket.getCloseReason() != null) {
+	                        this.closeOrAbortWebSocketAsync(connectTask, this.webSocket.getCloseReason());
+	                        if (this.listener.closeCalled) {
+	                            // This is the cloud service responding to our clean shutdown.
+	                            keepGoing = false;
+	                        }
+	                        else {
+	                            keepGoing = this.onDisconnect(new ConnectionLostException(
+	                            		this.webSocket.getCloseReason().getCloseCode() + ": " + this.webSocket.getCloseReason().getReasonPhrase()));
+	                        }
+	                        break;
+	                    }
+	                    
+//	                    receivedMessage.thenAccept((command) -> {
+//		                    this.listener.onCommandAsync(command, this.webSocket);
+//	                    });
+	                    this.listener.onCommandAsync(receivedMessage, this.webSocket);
+	                }
+	                while (keepGoing);
+	            } 
+	            catch (Exception exception) 
+	//            TODO: when (!Fx.IsFatal(exception))
+	            {
+	            	// TODO: trace
+	//                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, exception);
+	                this.closeOrAbortWebSocketAsync(connectTask, null);
+	//                keepGoing = this.onDisconnect(WebSocketExceptionHelper.ConvertToRelayContract(exception, this.listener.trackingContext));
+	                keepGoing = this.onDisconnect(exception);
+	            }
+            	return keepGoing;
+            });
+        }
 		
 		private void onOnline() {
 			synchronized (this.thisLock) {
@@ -1001,62 +958,60 @@ public class HybridConnectionListener {
 				this.onlineHandler.accept(this, null);
 			}
 		}
-		
-		private void onMessage(String message) {
-			onCommandAsync(message, this.webSocket);
-		}
 
-//		private void onOffline(Exception lastError) {
-//			synchronized (this.thisLock) {
-//				if (lastError!=null) {
-//					this.lastError = lastError;
-//				}
-//				this.isOnline=false;
-//			}
-//
-//			// TODO: trace
-//			// Stop attempting to connect
-////			RelayEventSource.Log.Info(this.listener,$"Offline. {this.listener.TrackingContext}");this.Offline?.Invoke(this,EventArgs.Empty);
-//		}
+		private void onOffline(Exception lastError) {
+			synchronized (this.thisLock) {
+				if (lastError != null) {
+					this.lastError = lastError;
+				}
+				this.isOnline = false;
+			}
+
+			// TODO: trace
+			// Stop attempting to connect
+//			RelayEventSource.Log.Info(this.listener,$"Offline. {this.listener.TrackingContext}");this.Offline?.Invoke(this,EventArgs.Empty);
+		}
 
 		// Returns true if this control connection should attempt to reconnect after
 		// this exception.
-//		private boolean onDisconnect(Exception lastError) {
-//			
-//			synchronized (this.thisLock) {
-//				this.lastError=lastError;
-//				this.isOnline=false;
-//
-//				if (this.connectDelayIndex < CONNECTION_DELAY_INTERVALS.length - 1) {
-//					this.connectDelayIndex++;
-//				}
-//			}
-//
-//			// Inspect the close status/description to see if this is a terminal case
-//			// or we should attempt to reconnect.
-//			boolean shouldReconnect = this.shouldReconnect(lastError);
-//			
-//			if(shouldReconnect && this.connectingHandler != null) {
-//				this.connectingHandler.accept(this, null);
-//			}
-//
-//			return shouldReconnect;
-//		}
+		private boolean onDisconnect(Exception lastError) {
+			
+			synchronized (this.thisLock) {
+				this.lastError=lastError;
+				this.isOnline=false;
 
-//		private boolean shouldReconnect(Exception exception) {
-//			return (!(exception instanceof EndpointNotFoundException));
-//		}
+				if (this.connectDelayIndex < CONNECTION_DELAY_INTERVALS.length - 1) {
+					this.connectDelayIndex++;
+				}
+			}
 
-//		private Consumer<SecurityToken> onTokenRenewed(SecurityToken token) {
-//            try {
-//                var listenerCommand = new ListenerCommand { RenewToken = new ListenerCommand.RenewTokenCommand() };
-//                listenerCommand.RenewToken.Token = eventArgs.Token.TokenString;
-//
-//                await this.SendCommandAndStreamAsync(listenerCommand, null, CancellationToken.None).ConfigureAwait(false);
-//            }
-//            catch (Exception exception) when (!Fx.IsFatal(exception)) {
+			// Inspect the close status/description to see if this is a terminal case
+			// or we should attempt to reconnect.
+			boolean shouldReconnect = this.shouldReconnect(lastError);
+			
+			if(shouldReconnect && this.connectingHandler != null) {
+				this.connectingHandler.accept(this, null);
+			}
+
+			return shouldReconnect;
+		}
+
+		private boolean shouldReconnect(Exception exception) {
+			return (!(exception instanceof EndpointNotFoundException));
+		}
+
+		private void onTokenRenewed(SecurityToken token) {
+            try {
+            	ListenerCommand listenerCommand = new ListenerCommand(null);
+            	listenerCommand.setRenewToken(listenerCommand.new RenewTokenCommand(null));
+                listenerCommand.getRenewToken().setToken(token.toString());
+
+                this.sendCommandAndStreamAsync(listenerCommand, null, null);
+            }
+            catch (Exception exception) {
+            // TODO: when (!Fx.IsFatal(exception))
 //                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, exception);
-//            }
-//        }
+            }
+        }
 	}
 }

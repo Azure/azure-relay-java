@@ -30,6 +30,8 @@ import java.util.*;
 
 import javax.websocket.ClientEndpoint;
 import javax.websocket.ClientEndpointConfig;
+import javax.websocket.CloseReason;
+import javax.websocket.CloseReason.CloseCode;
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
 import javax.websocket.EncodeException;
@@ -38,6 +40,7 @@ import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
 import javax.websocket.server.ServerEndpoint;
 
+import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
@@ -57,15 +60,39 @@ public class Main {
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
 		HybridConnectionListener listener = new HybridConnectionListener(new URI(String.format("sb://%s/%s", RELAY_NAME_SPACE, CONNECTION_STRING)), tokenProvider);
 		
-		listener.setConnectingHandler((o, e) -> System.out.println("Connecting"));
-        listener.setOfflineHandler((o, e) -> System.out.println("Offline"));
-        listener.setOnlineHandler((o, e) -> System.out.println("Online"));
+		listener.setConnectingHandler((o, e) -> System.out.println("Connecting handler"));
+        listener.setOfflineHandler((o, e) -> System.out.println("Offline handler"));
+        listener.setOnlineHandler((o, e) -> System.out.println("Online handler"));
         
         listener.openAsync().get();
         
-		webSocketServer(listener);     
-		webSocketClient();
-//		httpClient();		
+//		webSocketServer(listener).get();
+//		webSocketClient();
+		
+        httpServer(listener);
+		httpClient();
+	}
+	
+	private static void httpServer(HybridConnectionListener listener) {
+		
+        listener.setRequestHandler((context) -> {
+            System.out.println("Listener received http msg");
+            // Do something with context.Request.Url, HttpMethod, Headers, InputStream...
+            RelayedHttpListenerResponse response = context.getResponse();
+            response.setStatusCode(HttpStatus.ACCEPTED_202);
+            response.setStatusDescription("OK");
+            
+            String receivedText = new String(context.getRequest().getInputStream().array());
+            try {
+				response.getOutputStream().write(("Echo: " + receivedText + "\n").getBytes());
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+            // The context MUST be closed here
+            context.getResponse().close();
+        });
 	}
 	
 	// sends a request to the server and prints the response code from the server
@@ -78,7 +105,7 @@ public class Main {
 		conn.setRequestMethod("GET");
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
 		
-		String message = "testStr";
+		String message = testStr;
 		conn.setDoOutput(true);
 		OutputStreamWriter out = new OutputStreamWriter(conn.getOutputStream());
 		out.write(message, 0, message.length());
@@ -88,38 +115,44 @@ public class Main {
 		BufferedReader inStream = new BufferedReader(new InputStreamReader(conn.getInputStream()));
 		String inputLine;
 		
-		while ((inputLine = inStream.readLine()) != null) {
-			System.out.println(inputLine);
-		}
-		
 		System.out.println(conn.getResponseCode());
+		StringBuilder builder = new StringBuilder();
+		while ((inputLine = inStream.readLine()) != null) {
+			builder.append(inputLine);
+		}
+		System.out.println("Received back " + builder.length() + " bytes, original was " + message.length() + " bytes.");
 	}
 	
 	// sends a message to the server through websocket
 	private static void webSocketClient() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
 		HybridConnectionClient client = new HybridConnectionClient(new URI(String.format("sb://%s/%s", RELAY_NAME_SPACE, CONNECTION_STRING)), tokenProvider);
-		ClientWebSocket webSocket = client.createConnectionAsync().get();
-		
+		ClientWebSocket webSocket = new ClientWebSocket();
 		webSocket.setOnMessage((msg) -> {
 			bytes += msg.length();
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + msg);
-			try {
-				Thread.sleep(3000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			webSocket.closeAsync(null);
 		});
+		
+		client.createConnectionAsync(webSocket).get();
 		webSocket.sendAsync("hello");
+		webSocket.sendAsync("world");
+		webSocket.sendAsync("hello2");
+		webSocket.sendAsync("world2");
 	}
 	
-	private static void webSocketServer(HybridConnectionListener listener) throws InterruptedException, ExecutionException {
-		listener.acceptConnectionAsync().thenAccept((websocket) -> {
-			websocket.setOnMessage((msg) -> {
-				websocket.sendAsync("Received: " + msg);
+	private static CompletableFuture<Void> webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {
+		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
+		conn.thenAcceptAsync((websocket) -> {
+			CompletableFuture<ByteBuffer> bufferReceived = websocket.receiveMessageAsync();
+			bufferReceived.thenAccept((msgBuffer) -> {
+				String msg = new String(msgBuffer.array());
+				System.out.println("Listener Received: " + msg);
+				websocket.sendAsync(msg);
 			});
+			
 		});
+		return CompletableFuture.completedFuture(null);
 	}
 	
 	// test string that's over 64kb

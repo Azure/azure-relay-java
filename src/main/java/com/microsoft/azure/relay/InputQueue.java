@@ -193,7 +193,7 @@ public final class InputQueue<T extends Object> {
 
         if (reader != null) {
             invokeDequeuedCallback(item);
-            reader.complete((T) item);
+            reader.complete((T) item.getValue());
         }
     }
 
@@ -273,7 +273,6 @@ public final class InputQueue<T extends Object> {
         boolean dispose = false;
 
         synchronized (thisLock) {
-
         	if (queueState != QueueState.CLOSED) {
                 queueState = QueueState.CLOSED;
                 dispose = true;
@@ -281,7 +280,6 @@ public final class InputQueue<T extends Object> {
         }
 
         if (dispose) {
-        	
             while (readerQueue.size() > 0) {
                 CompletableFuture<T> reader = readerQueue.remove();
                 reader.complete((T) new Item());
@@ -374,55 +372,45 @@ public final class InputQueue<T extends Object> {
         boolean itemAvailable = true;
 
         synchronized (thisLock) {
-        	
             itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
             waiters = this.getWaiters();
 
             if (queueState == QueueState.OPEN) {
-                if (canDispatchOnThisThread)
-                {
-                    if (this.readerQueue.size() == 0)
-                    {
+                if (canDispatchOnThisThread) {
+                    if (this.readerQueue.size() == 0) {
                         itemQueue.enqueueAvailableItem(item);
                     }
-                    else
-                    {
+                    else {
                         reader = this.readerQueue.remove();
                     }
                 }
-                else
-                {
-                    if (readerQueue.size() == 0)
-                    {
+                else {
+                    if (readerQueue.size() == 0) {
                         itemQueue.enqueueAvailableItem(item);
                     }
-                    else
-                    {
+                    else {
                         itemQueue.enqueuePendingItem(item);
                         dispatchLater = true;
                     }
                 }
             }
-            else // queueState == QueueState.Closed || queueState == QueueState.Shutdown
-            {
+            else { // queueState == QueueState.Closed || queueState == QueueState.Shutdown
                 disposeItem = true;
             }
         }
 
         if (waiters != null) {
-            if (canDispatchOnThisThread)
-            {
+            if (canDispatchOnThisThread) {
                 completeWaiters(itemAvailable, waiters);
             }
-            else
-            {
+            else {
                 completeWaitersLater(itemAvailable, waiters);
             }
         }
 
         if (reader != null) {
             invokeDequeuedCallback(item);
-            reader.complete((T) item);
+            reader.complete((T) item.getValue());
         }
 
         if (dispatchLater) {

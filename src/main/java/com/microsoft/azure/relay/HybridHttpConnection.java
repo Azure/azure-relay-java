@@ -2,6 +2,7 @@ package com.microsoft.azure.relay;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
@@ -13,14 +14,23 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+
+import javax.management.RuntimeErrorException;
+import javax.websocket.CloseReason;
+import javax.websocket.CloseReason.CloseCode;
+import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.json.JSONObject;
 
+import com.microsoft.azure.relay.AsyncLock.LockRelease;
+import com.microsoft.azure.relay.ListenerCommand.RequestCommand;
+
 public class HybridHttpConnection {
-	private static final int MAX_CONTROL_CONNECTION_BODY_SIZE = 8 * 1024;
+	private static final int MAX_CONTROL_CONNECTION_BODY_SIZE = 64 * 1024;
     private static final int BUFFER_SIZE = 8 * 1024;
     private final HybridConnectionListener listener;
     private final ClientWebSocket controlWebSocket;
@@ -62,14 +72,14 @@ public class HybridHttpConnection {
     	HybridHttpConnection hybridHttpConnection = new HybridHttpConnection(listener, controlWebSocket, requestCommand.getAddress());
 
         // Do only what we need to do (receive any request body from control channel) and then let this Task complete.
-        boolean requestOverControlConnection = requestCommand.hasBody();
+        Boolean requestOverControlConnection = requestCommand.hasBody();
         CompletableFuture<RequestCommandAndStream> requestAndStream = CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, null));
-        if (requestOverControlConnection) {
+        if (requestOverControlConnection != null && requestOverControlConnection == true) {
             requestAndStream = hybridHttpConnection.receiveRequestBodyOverControlAsync(requestCommand);
         }
 
         // ProcessFirstRequestAsync runs without blocking the listener control connection:
-        return CompletableFuture.runAsync(() -> hybridHttpConnection.processFirstRequestAsync(requestAndStream.get()));
+        return requestAndStream.thenAccept((requestCommandAndStream) -> hybridHttpConnection.processFirstRequestAsync(requestCommandAndStream));
     }
 
 //    @Override
@@ -94,11 +104,11 @@ public class HybridHttpConnection {
     	try {
     		ListenerCommand.RequestCommand requestCommand = requestAndStream.getRequestCommand();
             
-            if (!requestCommand.hasBody()) {
+            if (requestCommand.hasBody() == null) {
                 // Need to rendezvous to get the real RequestCommand
-//                requestAndStream = this.receiveRequestOverRendezvousAsync();
+                requestAndStream = this.receiveRequestOverRendezvousAsync().get();
             }
-            this.InvokeRequestHandler(requestAndStream);
+            this.invokeRequestHandler(requestAndStream);
         }
         catch (Exception e)
     	// TODO: when (!Fx.IsFatal(e))
@@ -113,66 +123,45 @@ public class HybridHttpConnection {
     private CompletableFuture<RequestCommandAndStream> receiveRequestBodyOverControlAsync(ListenerCommand.RequestCommand requestCommand) {
     	ByteBuffer requestStream = null;
     	
-        if (requestCommand.hasBody()) {
-            // We need to buffer this body stream so we can let go of the listener control connection
-            requestStream = ByteBuffer.allocate(BUFFER_SIZE);
-            ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
-            
-            var readResult = WebSocketUtility.readMessageAsync(this.controlWebSocket, buffer, requestStream, cts.Token).ConfigureAwait(false);
-            if (readResult.MessageType == WebSocketMessageType.Close)
-            {
-                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.EntityClosedOrAborted), this);
-            }
-            else if (readResult.MessageType != WebSocketMessageType.Binary)
-            {
-                throw RelayEventSource.Log.ThrowingException(
-                    new ProtocolViolationException(SR.GetString(SR.InvalidType, WebSocketMessageType.Binary, readResult.MessageType)), this);
-            }
-
-            requestStream.Position = 0;
-        }
-        return CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, requestStream));
+    	if (requestCommand.hasBody()) {
+			CompletableFuture<ByteBuffer> receiveOverControlSocketTask = this.controlWebSocket.receiveMessageAsync();
+			return receiveOverControlSocketTask.thenApply((receivedData) -> new RequestCommandAndStream(requestCommand, receivedData));
+    	}
+    	return CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, requestStream));
     }
 
     private CompletableFuture<RequestCommandAndStream> receiveRequestOverRendezvousAsync() {
     	// A Rendezvous is required to get full request
-    	this.ensureRendezvousAsync(this.getOperationTimeout());
-
-    	// TODO: trace
-//        RelayEventSource.Log.HybridHttpReadRendezvousValue(this, "request command");
-//        BufferedReader reader = new BufferedReader(reader, 0);
-        ListenerCommand.RequestCommand requestCommand = null;
-        
-//        using (var rendezvousCommandStream = new WebSocketMessageStream(this.rendezvousWebSocket, this.OperationTimeout))
-//        {
-//            requestCommand = ListenerCommand.ReadObject(rendezvousCommandStream).Request;
-//            if (rendezvousCommandStream.MessageType == WebSocketMessageType.Close)
-//            {
-//                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.EntityClosedOrAborted), this);
-//            }
-//            else if (rendezvousCommandStream.MessageType != WebSocketMessageType.Text)
-//            {
-//                throw RelayEventSource.Log.ThrowingException(
-//                    new ProtocolViolationException(SR.GetString(SR.InvalidType, WebSocketMessageType.Text, rendezvousCommandStream.MessageType)), this);
-//            }
-//            else if (requestCommand == null)
-//            {
-//                throw RelayEventSource.Log.ThrowingException(new ProtocolViolationException(SR.GetString(SR.InvalidType, "request", "{unknown}")), this);
-//            }
-//        }
-
-        ByteBuffer requestStream = null;
-        if (requestCommand.hasBody()) {
-        	// TODO: trace
-//            RelayEventSource.Log.HybridHttpReadRendezvousValue(this, "request body");
-            requestStream = ByteBuffer.allocate(BUFFER_SIZE);
-//            new WebSocketMessageStream(this.rendezvousWebSocket, this.OperationTimeout);
-        }
-
-        return CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, requestStream));
+    	try {
+			this.ensureRendezvousAsync(this.getOperationTimeout()).get();
+		} catch (InterruptedException | ExecutionException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+    	
+		CompletableFuture<String> receiveCommandOverRendezvousTask = this.rendezvousWebSocket.receiveControlMessageAsync();
+		CompletableFuture<ByteBuffer> receiveMessageOverRendezvousTask = this.rendezvousWebSocket.receiveMessageAsync();
+		
+		return receiveCommandOverRendezvousTask.thenApply((commandJson) -> {
+			JSONObject jsonObj = new JSONObject(commandJson);
+			ListenerCommand.RequestCommand realRequestCommand = new ListenerCommand(jsonObj).getRequest();
+			ByteBuffer requestStream = null;
+			 
+			if (realRequestCommand != null && realRequestCommand.hasBody()) {
+	        	// TODO: trace
+//	            RelayEventSource.Log.HybridHttpReadRendezvousValue(this, "request body");
+				try {
+					requestStream = receiveMessageOverRendezvousTask.get();
+				} catch (InterruptedException | ExecutionException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			return new RequestCommandAndStream(realRequestCommand, requestStream);
+		});
     }
 
-    void InvokeRequestHandler(RequestCommandAndStream requestAndStream) {
+    void invokeRequestHandler(RequestCommandAndStream requestAndStream) throws URISyntaxException {
         ListenerCommand.RequestCommand requestCommand = requestAndStream.getRequestCommand();
         String listenerAddress = this.listener.getAddress().toString();
         String requestTarget = requestCommand.getRequestTarget();
@@ -193,8 +182,7 @@ public class HybridHttpConnection {
 //        RelayEventSource.Log.HybridHttpRequestReceived(listenerContext.TrackingContext, requestCommand.Method);
 
         ByteBuffer requestStream = requestAndStream.getStream();
-        if (requestStream != null)
-        {
+        if (requestStream != null) {
             listenerContext.getRequest().setHasEntityBody(true);
             listenerContext.getRequest().setInputStream(requestStream);
         }
@@ -218,8 +206,7 @@ public class HybridHttpConnection {
                 return;
             }
         }
-        else
-        {
+        else {
         	// TODO: trace
 //            RelayEventSource.Log.HybridHttpConnectionMissingRequestHandler();
             listenerContext.getResponse().setStatusCode(HttpStatus.NOT_IMPLEMENTED_501);
@@ -240,26 +227,33 @@ public class HybridHttpConnection {
         else {
         	// TODO: tracing
 //            RelayEventSource.Log.HybridHttpConnectionSendResponse(this.TrackingContext, "rendezvous", responseCommand.StatusCode);
-            CompletableFuture<Void> rendezvousconnection = this.ensureRendezvousAsync(timeout);
+            try {
+				this.ensureRendezvousAsync(timeout).get();
+			} catch (InterruptedException | ExecutionException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 
             ListenerCommand listenerCommand = new ListenerCommand(null);
             listenerCommand.setResponse(responseCommand);
-            String command = JSONObject.valueToString(listenerCommand);
+            String command = listenerCommand.getResponse().toJsonString();
 
             // We need to respond over the rendezvous connection
-            rendezvousconnection.get();
-            this.rendezvousWebSocket.sendAsync(command, timeout);
-
+            CompletableFuture<Void> sendCommandTask = this.rendezvousWebSocket.sendCommandAsync(command, timeout);
             if (responseCommand.hasBody() && responseBodyStream != null) {
-                this.rendezvousWebSocket.sendAsync(responseBodyStream.array(), timeout);
+            	return sendCommandTask.thenRun(() -> {
+            		System.out.println("finished sending command");
+            		this.rendezvousWebSocket.sendAsync(responseBodyStream.array(), timeout);
+            	});
             }
+            return sendCommandTask;
         }
     }
 
     private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteBuffer buffer, Duration timeout) {
     	// TODO: trace
 //        RelayEventSource.Log.HybridHttpConnectionSendBytes(this.TrackingContext, buffer.Count);
-        return this.rendezvousWebSocket.sendAsync(buffer, timeout);
+        return this.rendezvousWebSocket.sendAsync(buffer.array(), timeout);
     }
 
     private CompletableFuture<Void> ensureRendezvousAsync(Duration timeout) {
@@ -268,26 +262,26 @@ public class HybridHttpConnection {
 //            RelayEventSource.Log.HybridHttpCreatingRendezvousConnection(this.TrackingContext);
             // TODO: proxy
 //            clientWebSocket.Options.Proxy = this.listener.Proxy;
-            this.rendezvousWebSocket = new ClientWebSocket("HybridHttpConnection ensure Rendezvous");
+            this.rendezvousWebSocket = new ClientWebSocket();
             return this.rendezvousWebSocket.connectAsync(this.rendezvousAddress, timeout);
         }
         return CompletableFuture.completedFuture(null);
     }
 
-//    private CompletableFuture<Void> closeAsync() {
-////        if (this.rendezvousWebSocket != null) {
-////            using (var cts = new CancellationTokenSource(this.OperationTimeout))
-////            {
-////                RelayEventSource.Log.ObjectClosing(this);
-////                await this.rendezvousWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "NormalClosure", cts.Token).ConfigureAwait(false);
-////                RelayEventSource.Log.ObjectClosed(this);
-////            }
-////        }
-//    }
+    private CompletableFuture<Void> closeAsync() {
+        if (this.rendezvousWebSocket != null) {
+        	// TODO: trace
+//            RelayEventSource.Log.ObjectClosing(this);
+            return this.rendezvousWebSocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"), this.operationTimeout);
+//            RelayEventSource.Log.ObjectClosed(this);
+        }
+        return CompletableFuture.completedFuture(null);
+    }
 
     static ListenerCommand.ResponseCommand createResponseCommand(RelayedHttpListenerContext listenerContext) {
     	RelayedHttpListenerResponse response = listenerContext.getResponse();
-    	ListenerCommand.ResponseCommand responseCommand = new ListenerCommand.ResponseCommand();
+    	ListenerCommand listenerCommand = new ListenerCommand(null);
+    	ListenerCommand.ResponseCommand responseCommand = listenerCommand.new ResponseCommand();
         responseCommand.setStatusCode((int) response.getStatusCode());
         responseCommand.setStatusDescription(response.getStatusDescription());
         responseCommand.setRequestId(listenerContext.getTrackingContext().getTrackingId());
@@ -336,66 +330,109 @@ public class HybridHttpConnection {
                 responseCommand.setBody(true);
 
                 // At this point we have no choice but to rendezvous
-                CompletableFuture<Void> connectRendezvous = this.connection.ensureRendezvousAsync(timeout);
-
                 // Send the response command over the rendezvous connection
-                connectRendezvous.thenRunAsync(() -> this.connection.sendResponseAsync(responseCommand, null, timeout));
-                this.responseCommandSent = true;
+                CompletableFuture<Void> sendResponseTask = this.connection.ensureRendezvousAsync(timeout).thenRun(() -> {
+                	this.connection.sendResponseAsync(responseCommand, null, timeout);
+                })
+                .thenRun(() -> this.responseCommandSent = true);
+                
 
-                if (this.writeBufferStream != null && this.writeBufferStream.Length > 0)
-                {
-                    var writeBuffer = this.writeBufferStream.GetArraySegment();
-                    await this.connection.SendBytesOverRendezvousAsync(writeBuffer, WebSocketMessageType.Binary, false, cancelToken).ConfigureAwait(false);
-
-                    this.writeBufferStream.Dispose();
-                    this.writeBufferStream = null;
-                    this.CancelWriteBufferFlushTimer();
+                if (this.writeBufferStream != null && this.writeBufferStream.position() > 0) {
+                    return CompletableFuture.allOf(sendResponseTask, 
+                    		this.connection.sendBytesOverRendezvousAsync(this.writeBufferStream, timeout).thenRun(() -> {
+                        	this.writeBufferStream.clear();
+                            this.writeBufferFlushTimer.cancel();
+                    }));
                 }
+                return sendResponseTask;
             }
+            return CompletableFuture.completedFuture(null);
         }
 
+		@Override
+		public void write(int b) throws IOException {
+			try {
+				this.writeAsync(new byte[] {(byte) b}, 0, 1).get();
+			} catch (InterruptedException | ExecutionException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		public void write(byte[] bytes) {
+			try {
+				this.writeAsync(bytes, 0, bytes.length).get();
+			} catch (InterruptedException | ExecutionException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		public void write(String text) {
+			try {
+				this.writeAsync(text.getBytes(), 0, text.length()).get();
+			} catch (InterruptedException | ExecutionException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
         public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
         	// TODO: trace
 //            RelayEventSource.Log.HybridHttpResponseStreamWrite(this.TrackingContext, count);
         	Duration timeout = Duration.ofMillis(this.writeTimeout);
-        	this.asyncLock.lockAsync(timeout).get();
-        	
-    		if (!this.responseCommandSent) {
-                FlushReason flushReason;
-                if (this.connection.rendezvousWebSocket != null) {
-                    flushReason = FlushReason.RENDEZVOUS_EXISTS;
-                }
-                else {
-                    int bufferedCount = this.writeBufferStream != null ? this.writeBufferStream.position() : 0;
-                    if (count + bufferedCount <= MAX_CONTROL_CONNECTION_BODY_SIZE) {
-                    	
-                        // There's still a chance we might be able to respond over the control connection, accumulate bytes
-                        if (this.writeBufferStream == null) {
-                            int initialStreamSize = Math.min(count * 2, MAX_CONTROL_CONNECTION_BODY_SIZE);
-                            this.writeBufferStream = ByteBuffer.allocate(initialStreamSize);
-                            this.writeBufferFlushTimer = new Timer();
-                            
-                            this.writeBufferFlushTimer.schedule(new TimerTask() {	
-								@Override
-								public void run() {
-									OnWriteBufferFlushTimer();
-								}
-							}, WRITE_BUFFER_FLUSH_TIMEOUT, Long.MAX_VALUE);		
-                            		
-                        }
-                        this.writeBufferStream.write(array, offset, count);
-                        return CompletableFuture.completedFuture(null);
-                    }
+        	try {
+				LockRelease lockRelease = this.asyncLock.lockAsync(timeout).get();
+				CompletableFuture<Void> flushCoreTask = null;
+				
+	    		if (!this.responseCommandSent) {
+	                FlushReason flushReason;
+	                if (this.connection.rendezvousWebSocket != null) {
+	                    flushReason = FlushReason.RENDEZVOUS_EXISTS;
+	                }
+	                else {
+	                    int bufferedCount = this.writeBufferStream != null ? this.writeBufferStream.position() : 0;
+	                    if (count + bufferedCount <= MAX_CONTROL_CONNECTION_BODY_SIZE) {
+	                    	
+	                        // There's still a chance we might be able to respond over the control connection, accumulate bytes
+	                        if (this.writeBufferStream == null) {
+	                            int initialStreamSize = Math.min(count * 2, MAX_CONTROL_CONNECTION_BODY_SIZE);
+	                            this.writeBufferStream = ByteBuffer.allocate(initialStreamSize);
+	                            this.writeBufferFlushTimer = new Timer();
+	                            
+	                            this.writeBufferFlushTimer.schedule(new TimerTask() {	
+									@Override
+									public void run() {
+										onWriteBufferFlushTimer();
+									}
+								}, WRITE_BUFFER_FLUSH_TIMEOUT, Long.MAX_VALUE);		
+	                            		
+	                        }
+	                        this.writeBufferStream.put(array, offset, count);
+	                        lockRelease.release();
+	                        return CompletableFuture.completedFuture(null);
+	                    }
+	                    flushReason = FlushReason.BUFFER_FULL;
+	                }
 
-                    flushReason = FlushReason.BUFFER_FULL;
-                }
-
-                // FlushCoreAsync will rendezvous, send the responseCommand, and any writeBufferStream bytes
-                this.flushCoreAsync(flushReason, timeout).get();
-    		}
-    		
-    		ByteArrayBuffer buffer = new ByteArrayBuffer(array, offset, count);
-            return this.connection.sendBytesOverRendezvousAsync(buffer, timeout);
+	                // FlushCoreAsync will rendezvous, send the responseCommand, and any writeBufferStream bytes
+	                flushCoreTask = this.flushCoreAsync(flushReason, timeout);
+	    		}
+	    		
+	    		ByteBuffer buffer = ByteBuffer.wrap(array, offset, count);
+	    		if (flushCoreTask == null) {
+	    			flushCoreTask = CompletableFuture.completedFuture(null);
+	    		}
+	    		lockRelease.release();
+	    		return flushCoreTask.thenRun(() -> {
+//	    			System.out.println("sending command isDone: ");
+	    			this.connection.sendBytesOverRendezvousAsync(buffer, timeout);
+	    		});
+			} 
+        	catch (InterruptedException | ExecutionException e) {
+				// TODO Auto-generated catch block
+				throw new RuntimeException(e.getMessage());
+			}
         }
 
         @Override
@@ -418,70 +455,58 @@ public class HybridHttpConnection {
 //            }
 //        }
 
-        public CompletableFuture<Void> CloseAsync() {
+        public CompletableFuture<Void> closeAsync() {
             if (this.closed) {
                 return CompletableFuture.completedFuture(null);
             }
-
+            
+            CompletableFuture<Void> closeTask;
+            CompletableFuture<Void> sendTask;
             try {
             	// TODO: trace
 //                RelayEventSource.Log.ObjectClosing(this);
-            	this.asyncLock.lockAsync(Duration.ofMillis(this.writeTimeout)).thenRunAsync(() -> {
-            		
+
+            	Duration timeout = Duration.ofMillis(this.writeTimeout);
+            	// TODO: asynclock if needed
+//            	this.asyncLock.lockAsync(timeout).thenAccept((lockRelease) -> {
             		if (!this.responseCommandSent) {
-                        ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
-                        if (this.writeBufferStream != null) {
-                            responseCommand.setBody(true);
-                            this.writeBufferStream.Position = 0;
-                        }
-
-                        // Don't force any rendezvous now
-                        await this.connection.SendResponseAsync(responseCommand, this.writeBufferStream, cancelSource.Token).ConfigureAwait(false);
-                        this.responseCommandSent = true;
-                        this.CancelWriteBufferFlushTimer();
-                    }
-                    else
-                    {
-                        var buffer = new ArraySegment<byte>(Array.Empty<byte>(), 0, 0);
-                        await this.connection.SendBytesOverRendezvousAsync(buffer, WebSocketMessageType.Binary, true, cancelSource.Token).ConfigureAwait(false);
-                    }
-            	});
-
-                RelayEventSource.Log.ObjectClosed(this);
+	                    ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
+	                    if (this.writeBufferStream != null) {
+	                        responseCommand.setBody(true);
+	                        this.writeBufferStream.position(0);
+	                    }
+	
+	                    // Don't force any rendezvous now
+	                    sendTask = this.connection.sendResponseAsync(responseCommand, this.writeBufferStream, timeout);
+	                    this.responseCommandSent = true;
+	                    this.writeBufferFlushTimer.cancel();
+	                }
+	                else {
+	                	sendTask = this.connection.sendBytesOverRendezvousAsync(null, timeout);
+	                }
+	            	// TODO: trace
+	//                RelayEventSource.Log.ObjectClosed(this);
+            		
+//            		lockRelease.release();
+//            	});
             }
-            catch (Exception e) when (!Fx.IsFatal(e))
-            {
-                RelayEventSource.Log.ThrowingException(e, this);
-                throw;
+            catch (Exception e) {
+//           TODO: when (!Fx.IsFatal(e)) {
+//                RelayEventSource.Log.ThrowingException(e, this);
+                throw new RuntimeException(e.getMessage());
             }
-            finally
-            {
-                await this.connection.CloseAsync().ConfigureAwait(false);
+            finally {
+                closeTask = this.connection.closeAsync();
                 this.closed = true;
             }
+            return CompletableFuture.allOf(sendTask, closeTask);
         }
 
-        async void OnWriteBufferFlushTimer() {
-            try
-            {
-                using (var cancelSource = new CancellationTokenSource(this.WriteTimeout))
-                using (await this.asyncLock.LockAsync(cancelSource.Token).ConfigureAwait(false))
-                {
-                    await this.FlushCoreAsync(FlushReason.Timer, cancelSource.Token).ConfigureAwait(false);
-                }
-            }
-            catch (Exception e) when (!Fx.IsFatal(e))
-            {
-                RelayEventSource.Log.HandledExceptionAsWarning(this, e);
-            }
-        }
-
-        void CancelWriteBufferFlushTimer() {
-            if (this.writeBufferFlushTimer != null) {
-                this.writeBufferFlushTimer.Change(Timeout.Infinite, Timeout.Infinite);
-                this.writeBufferFlushTimer.Dispose();
-                this.writeBufferFlushTimer = null;
-            }
+        CompletableFuture<Void> onWriteBufferFlushTimer() {
+            return this.asyncLock.lockAsync().thenAccept((lockRelease) -> {
+                this.flushCoreAsync(FlushReason.TIMER, Duration.ofSeconds(this.writeTimeout));
+                lockRelease.release();
+            });
         }
     }
 
@@ -502,7 +527,6 @@ public class HybridHttpConnection {
 			this.stream = stream;
 		}
 
-		
 		public RequestCommandAndStream(ListenerCommand.RequestCommand requestCommand, ByteBuffer stream) {
             this.requestCommand = requestCommand;
             this.stream = stream;

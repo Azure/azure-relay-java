@@ -177,7 +177,7 @@ public class HybridConnectionClient {
 	/// <summary>
 	/// Establishes a new send-side HybridConnection and returns the Stream.
 	/// </summary>
-	public CompletableFuture<ClientWebSocket> createConnectionAsync() {
+	public CompletableFuture<ClientWebSocket> createConnectionAsync(ClientWebSocket webSocket) {
 		// TODO: trace
         TrackingContext trackingContext = createTrackingContext(this.address);
 //         String traceSource = nameof(HybridConnectionClient) + "(" + trackingContext + ")";
@@ -185,7 +185,7 @@ public class HybridConnectionClient {
 
       // TODO: trace
 //         RelayEventSource.Log.ObjectConnecting(traceSource, trackingContext); 
-
+        
 		if (this.tokenProvider != null) {
 			String audience = HybridConnectionUtil.getAudience(this.address);
 			CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience, TokenProvider.DEFAULT_TOKEN_TIMEOUT);
@@ -198,8 +198,6 @@ public class HybridConnectionClient {
 			}
 			HybridConnectionEndpointConfigurator.setHeaders(headers);
 		    
-		    ClientWebSocket webSocket = new ClientWebSocket("HybridConnectionclient createConnectionAsync");
-		    
 		    return TimedCompletableFuture.timedSupplyAsync(null, () -> {
 				try {
 					URI uri = HybridConnectionUtil.BuildUri(
@@ -210,7 +208,13 @@ public class HybridConnectionClient {
 					    HybridConnectionConstants.Actions.CONNECT,
 					    trackingContext.getTrackingId()
 					);
-					webSocket.connectAsync(uri).get();
+			        if (webSocket == null) {
+			        	ClientWebSocket newSocket = new ClientWebSocket();
+			        	newSocket.connectAsync(uri).get();
+			        	return newSocket;
+			        } else {
+			        	webSocket.connectAsync(uri).get();
+			        }
 				} catch (URISyntaxException | InterruptedException | ExecutionException e1) {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();

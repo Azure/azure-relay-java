@@ -1,10 +1,12 @@
 package com.microsoft.azure.relay;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -134,7 +136,7 @@ public class ListenerCommand {
 		private String method;
 		private Endpoint remoteEndpoint;
 		private Map<String, String> requestHeaders;
-		private boolean body;
+		private Boolean body;
 		
 		public String getAddress() {
 			return address;
@@ -172,10 +174,10 @@ public class ListenerCommand {
 		public void setRequestHeaders(Map<String, String> requestHeaders) {
 			this.requestHeaders = requestHeaders;
 		}
-		public boolean hasBody() {
+		public Boolean hasBody() {
 			return body;
 		}
-		public void setBody(boolean body) {
+		public void setBody(Boolean body) {
 			this.body = body;
 		}
 		
@@ -184,11 +186,13 @@ public class ListenerCommand {
 			this.id = json.optString("id");
 			this.requestTarget = json.optString("requestTarget");
 			this.method = json.optString("method");
-			this.body = json.optBoolean("body");
-			this.remoteEndpoint = new Endpoint(json.getJSONObject("remoteEndpoint"));
-			Map<String, Object> headers = json.getJSONObject("requestHeaders").toMap();
-			this.requestHeaders = new HashMap<String, String>();
-			headers.forEach((k, v) -> this.requestHeaders.put(k, (String)v));
+			this.body = json.has("body") ? json.optBoolean("body") : null;
+			this.remoteEndpoint = json.has("remoteEndpoint") ? new Endpoint(json.getJSONObject("remoteEndpoint")) : null;
+			if (json.has("requestHeaders")) {
+				Map<String, Object> headers = json.getJSONObject("requestHeaders").toMap();
+				this.requestHeaders = new HashMap<String, String>();
+				headers.forEach((k, v) -> this.requestHeaders.put(k, (String)v));
+			}
 		}
 	}
 	
@@ -203,7 +207,9 @@ public class ListenerCommand {
 		}
 		
 		public RenewTokenCommand(JSONObject json) {
-			this.token = json.optString("token");
+			if (json != null) {
+				this.token = json.optString("token");
+			}
 		}
 	}
 	
@@ -255,6 +261,34 @@ public class ListenerCommand {
 			Map<String, Object> headers = json.getJSONObject("responseHeaders").toMap();
 			this.responseHeaders = new HashMap<String, String>();
 			headers.forEach((k, v) -> this.responseHeaders.put(k, (String)v));
+		}
+		
+		public String toJsonString() {
+			StringBuilder builder = new StringBuilder("{\"response\":{");
+			List<String> fields = new ArrayList<String>();
+			
+			if (this.requestId != null) {
+				fields.add("\"requestId\":\"" + this.requestId + "\"");
+			}
+			
+			if (this.body == null) {
+				fields.add("\"body\":\"null\"");
+			}
+			else if (this.body == true) {
+				fields.add("\"body\":\"true\"");
+			}
+			else if (this.body == false) {
+				fields.add("\"body\":\"false\"");
+			}
+			
+			fields.add("\"statusCode\":" + this.statusCode);
+			
+			if (this.statusDescription != null) {
+				fields.add("\"statusDescription\":\"" + this.statusDescription + "\"");
+			}
+			
+			builder.append(String.join(",", fields)).append("}}");
+			return builder.toString();
 		}
 	}
 	
