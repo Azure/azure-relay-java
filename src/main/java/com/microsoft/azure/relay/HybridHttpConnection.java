@@ -424,7 +424,6 @@ public class HybridHttpConnection {
 	    		}
 	    		lockRelease.release();
 	    		return flushCoreTask.thenRun(() -> {
-	    			System.out.println("command finished sending");
 	    			this.connection.sendBytesOverRendezvousAsync(buffer, timeout);
 	    		});
 			} 
