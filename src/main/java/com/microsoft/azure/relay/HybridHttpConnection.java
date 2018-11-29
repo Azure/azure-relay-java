@@ -329,14 +329,13 @@ public class HybridHttpConnection {
             	ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
                 responseCommand.setBody(true);
 
-                // At this point we have no choice but to rendezvous
-                // Send the response command over the rendezvous connection
-                CompletableFuture<Void> sendResponseTask = this.connection.ensureRendezvousAsync(timeout).thenRun(() -> {
-                	this.connection.sendResponseAsync(responseCommand, null, timeout);
+                // At this point we have no choice but to rendezvous send the response command over the rendezvous connection
+                CompletableFuture<Void> sendResponseTask = this.connection.ensureRendezvousAsync(timeout).thenComposeAsync((result) -> {
+                	return this.connection.sendResponseAsync(responseCommand, null, timeout);
                 })
                 .thenRun(() -> this.responseCommandSent = true);
                 
-
+                // When there is no request message body
                 if (this.writeBufferStream != null && this.writeBufferStream.position() > 0) {
                     return CompletableFuture.allOf(sendResponseTask, 
                     		this.connection.sendBytesOverRendezvousAsync(this.writeBufferStream, timeout).thenRun(() -> {
@@ -425,7 +424,7 @@ public class HybridHttpConnection {
 	    		}
 	    		lockRelease.release();
 	    		return flushCoreTask.thenRun(() -> {
-//	    			System.out.println("sending command isDone: ");
+	    			System.out.println("command finished sending");
 	    			this.connection.sendBytesOverRendezvousAsync(buffer, timeout);
 	    		});
 			} 
