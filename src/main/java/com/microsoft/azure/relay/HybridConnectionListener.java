@@ -366,48 +366,59 @@ public class HybridConnectionListener {
 	// <param name="cancellationToken">A cancellation token to observe.</param>
 	// TODO: cancellationtoken param
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
-//        try {
-//        	List<Session> clients;
-//            synchronized (this.thisLock) {
-//                if (this.closeCalled) {
-//                    return null;
-//                }
-//
-//                // TODO: trace
-////                RelayEventSource.Log.ObjectClosing(this);
-//                this.closeCalled = true;
-//
-//                // If the input queue is empty this completes all pending waiters with null and prevents
-//                // any new items being added to the input queue.
-//                this.connectionInputQueue.shutdown();
-//
-//                // Close any unaccepted rendezvous.  DequeueAsync won't block since we've called connectionInputQueue.Shutdown().
-//                clients = new ArrayList<Session>(this.connectionInputQueue.getPendingCount());
-//                Session session;
-//                
-//                while ((session = TimedCompletableFuture.timedSupplyAsync(timeout, () ->
-//                	this.connectionInputQueue.dequeueAsync().get()).get()) != null) {
-//                    
-//                	clients.add(session);
-//                }
-//            }
-//
-//            CompletableFuture<Void> closeControl = TimedCompletableFuture.timedRunAsync(timeout, () -> this.controlConnection.closeAsync(timeout));
-//
-//            clients.forEach(client -> client.close());
-//
-//            // TODO: trace
-////            RelayEventSource.Log.ObjectClosed(this);
-//        }
-//        // TODO: fx
-//        catch (Exception e) // when (!Fx.IsFatal(e))
-//        {
-////            RelayEventSource.Log.ThrowingException(e, this);
-//            System.out.println(e.getMessage());
-//        }
-//        finally {
-//            this.connectionInputQueue.dispose(); 
-//        }
+        try {
+        	List<ClientWebSocket> clients;
+            synchronized (this.thisLock) {
+                if (this.closeCalled) {
+                    return null;
+                }
+
+                // TODO: trace
+//                RelayEventSource.Log.ObjectClosing(this);
+                this.closeCalled = true;
+
+                // If the input queue is empty this completes all pending waiters with null and prevents
+                // any new items being added to the input queue.
+                this.connectionInputQueue.shutdown();
+
+                // Close any unaccepted rendezvous.  DequeueAsync won't block since we've called connectionInputQueue.Shutdown().
+                clients = new ArrayList<ClientWebSocket>(this.connectionInputQueue.getPendingCount());
+                ClientWebSocket webSocket;
+                
+                do {
+                	webSocket = TimedCompletableFuture.timedSupplyAsync(timeout, () -> {
+                    	ClientWebSocket socket = null;
+                    	try {
+                    		socket = this.connectionInputQueue.dequeueAsync().get();
+    					} catch (InterruptedException | ExecutionException e) {
+    						// TODO trace
+//    						e.printStackTrace();
+    					}
+                    	return socket;
+                    }).get();
+                	
+                	if (webSocket != null) {
+                		clients.add(webSocket);
+                	}
+                } while (webSocket != null);
+            }
+
+            CompletableFuture<Void> closeControl = TimedCompletableFuture.timedRunAsync(timeout, () -> this.controlConnection.closeAsync(timeout));
+
+            clients.forEach(client -> client.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"), null));
+
+            // TODO: trace
+//            RelayEventSource.Log.ObjectClosed(this);
+        }
+        // TODO: fx
+        catch (Exception e) // when (!Fx.IsFatal(e))
+        {
+//            RelayEventSource.Log.ThrowingException(e, this);
+            System.out.println(e.getMessage());
+        }
+        finally {
+            this.connectionInputQueue.dispose(); 
+        }
         return CompletableFuture.completedFuture(null);
     }
 
@@ -501,7 +512,7 @@ public class HybridConnectionListener {
     private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand) throws URISyntaxException {
         URI rendezvousUri = new URI(acceptCommand.getAddress());
         URI requestUri = this.generateAcceptRequestUri(rendezvousUri);
-        
+
         RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(
             this, requestUri, acceptCommand.getId(), "GET", acceptCommand.getConnectHeaders());
         listenerContext.getRequest().setRemoteAddress(acceptCommand.getRemoteEndpoint());

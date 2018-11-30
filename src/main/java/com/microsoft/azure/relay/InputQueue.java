@@ -100,7 +100,7 @@ public final class InputQueue<T extends Object> {
         }
 
         invokeDequeuedCallback(item);
-        return CompletableFuture.completedFuture(item.getValue());
+        return (item != null) ? CompletableFuture.completedFuture(item.getValue()) : CompletableFuture.completedFuture(null);
     }
 
     // TODO: cancellationtoken
