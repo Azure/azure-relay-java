@@ -1,4 +1,4 @@
-package com.microsoft.azure.relay;
+package test;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -47,6 +47,12 @@ import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.json.JSONObject;
+
+import com.microsoft.azure.relay.ClientWebSocket;
+import com.microsoft.azure.relay.HybridConnectionClient;
+import com.microsoft.azure.relay.HybridConnectionListener;
+import com.microsoft.azure.relay.RelayedHttpListenerResponse;
+import com.microsoft.azure.relay.TokenProvider;
 
 public class Main {
 
