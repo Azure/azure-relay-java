@@ -5,6 +5,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -35,13 +36,10 @@ public class ClientWebSocket {
 //	private StringBuffer textBuffer;
 //	private char[] charBuffer = new char[RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE];
 //	private final byte[] byteBuffer = new byte[RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE];
-	private ByteBuffer receiveBuffer;
 	private int maxMessageBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
-	private boolean messageReceivedByBuffer;
 	private CloseReason closeReason;
 	private InputQueue<MessageFragment> messageQueue;
 	private InputQueue<String> controlMessageQueue;
-	private int bytesBuffered;
 	
 	public Consumer<String> getOnMessage() {
 		return onMessage;
@@ -76,11 +74,9 @@ public class ClientWebSocket {
 	}
 	
 	public ClientWebSocket() {
-		this.receiveBuffer = ByteBuffer.allocate(64000);
 		this.controlMessageQueue = new InputQueue<String>();
 		this.messageQueue = new InputQueue<MessageFragment>();
 		this.closeReason = null;
-		this.bytesBuffered = 0;
 	}
 	
 	public CompletableFuture<Void> connectAsync(URI uri) {
@@ -88,7 +84,7 @@ public class ClientWebSocket {
 	}
 	
 	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) {
-		return TimedCompletableFuture.timedRunAsync(Duration.ofMillis(9999999), () -> {
+		return TimedCompletableFuture.timedRunAsync(timeout, () -> {
 			try {
 				this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 				this.session = this.container.connectToServer(this, uri);
@@ -100,42 +96,31 @@ public class ClientWebSocket {
 			}
 		});
 	}
-
-	// read the buffer data into the given buffer, returns the number of bytes read
-//	public CompletableFuture<ByteBuffer> receiveMessageAsync(ByteBuffer buffer) throws InvalidActivityException {
-//		return this.receiveMessageAsync(buffer, 0, buffer.remaining());
-//	}
 	
 	public CompletableFuture<String> receiveControlMessageAsync() {
-		CompletableFuture<String> messageFuture = this.controlMessageQueue.dequeueAsync();
-		try {
-			Thread.sleep(1);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		return messageFuture.thenApply((msg) -> msg);
+		return this.controlMessageQueue.dequeueAsync();
 	}
 	
 	// read the buffer data into the given buffer segment starting at offset and segment length of len, returns the number of bytes read
 	public CompletableFuture<ByteBuffer> receiveMessageAsync() {
-		AtomicBoolean receivedWholeMsg = new AtomicBoolean(false);
+		AtomicBoolean receivedWholeMsg = new AtomicBoolean(true);
 		LinkedList<byte[]> fragments = new LinkedList<byte[]>();
 		AtomicInteger messageSize = new AtomicInteger(0);
-
+		
 		return CompletableFuture.supplyAsync(() -> {
 			do {
 				CompletableFuture<MessageFragment> messageFuture = messageQueue.dequeueAsync();
+				
+				MessageFragment fragment = null;
 				try {
-					Thread.sleep(1);
-				} catch (InterruptedException e) {
+					fragment = messageFuture.get();
+				} catch (InterruptedException | ExecutionException e) {
+					// TODO: trace
 					e.printStackTrace();
 				}
-				
-				messageFuture.thenAccept((fragment) -> {
-					messageSize.set(messageSize.get() + fragment.getBytes().length);
-					fragments.add(fragment.getBytes());
-					receivedWholeMsg.set(fragment.hasEnded());
-				});
+				messageSize.set(messageSize.get() + fragment.getBytes().length);
+				fragments.add(fragment.getBytes());
+				receivedWholeMsg.set(fragment.hasEnded());
 			}
 			while (!receivedWholeMsg.get());
 			
@@ -155,7 +140,7 @@ public class ClientWebSocket {
 	}
 	
 	public CompletableFuture<Void> sendAsync(Object data, Duration timeout) {
-		if (this.session != null) {
+		if (this.session != null && this.session.isOpen()) {
 			RemoteEndpoint.Async remote = this.session.getAsyncRemote();
 			
 			if (data == null) {
@@ -166,6 +151,9 @@ public class ClientWebSocket {
 				System.out.println("Sending: " + text);
 				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap(text.getBytes())));
 			} 
+			else if (data instanceof byte[]) {
+				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap((byte[]) data)));
+			}
 			else {
 				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendObject(data));
 			}
@@ -185,27 +173,20 @@ public class ClientWebSocket {
 		});
 	}
 	
-	public CompletableFuture<Void> closeAsync(Duration timeout) {
-		return this.closeAsync(null, timeout);
-	}
-	
-	public CompletableFuture<Void> closeAsync(CloseReason reason, Duration timeout) {
-		return TimedCompletableFuture.timedRunAsync(timeout, () -> {
-			try {
-				if (reason != null) {
-					this.session.close(reason);
-				} else {
-					this.session.close();
-				}
-			} catch (IOException e) {
-				throw new RuntimeIOException(e.getMessage());
+	public void close(CloseReason reason) {
+		try {
+			if (reason != null) {
+				this.session.close(reason);
+			} else {
+				this.session.close();
 			}
-		});
+		} catch (IOException e) {
+			throw new RuntimeIOException(e.getMessage());
+		}	
 	}
 	
     @OnOpen
     public void onWebSocketConnect(Session sess) {
-        System.out.println("Socket Connected: " + sess);
         this.closeReason = null;
         if (this.onConnect != null) {
         	this.onConnect.accept(sess);
@@ -215,7 +196,6 @@ public class ClientWebSocket {
     // Handles binary data sent to the listener
     @OnMessage
     public void onWebSocketBytes(byte[] inputBuffer, boolean isEnd) {
-    	this.bytesBuffered += inputBuffer.length;
     	MessageFragment fragment = new MessageFragment(inputBuffer, isEnd);
     	this.messageQueue.enqueueAndDispatch(fragment);
 
@@ -229,7 +209,6 @@ public class ClientWebSocket {
     @OnMessage
     public void onWebSocketText(String text, boolean isEnd) {
     	byte[] bytes = text.getBytes();
-    	this.bytesBuffered += bytes.length;	
     	this.controlMessageQueue.enqueueAndDispatch(text);
 
 		if (isEnd && this.onMessage != null) {
@@ -241,6 +220,9 @@ public class ClientWebSocket {
     public void onWebSocketClose(CloseReason reason) {
     	System.out.println("Close reason: " + reason.getReasonPhrase());
     	this.closeReason = reason;
+    	if (this.closeReason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
+    		throw new RuntimeIOException("did not close properly");
+    	}
     	if (this.onDisconnect != null) {
     		this.onDisconnect.accept(reason);
     	}

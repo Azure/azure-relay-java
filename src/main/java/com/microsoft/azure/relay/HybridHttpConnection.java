@@ -241,9 +241,8 @@ public class HybridHttpConnection {
             // We need to respond over the rendezvous connection
             CompletableFuture<Void> sendCommandTask = this.rendezvousWebSocket.sendCommandAsync(command, timeout);
             if (responseCommand.hasBody() && responseBodyStream != null) {
-            	return sendCommandTask.thenRun(() -> {
-            		System.out.println("finished sending command");
-            		this.rendezvousWebSocket.sendAsync(responseBodyStream.array(), timeout);
+            	return sendCommandTask.thenCompose((result) -> {
+            		return this.rendezvousWebSocket.sendAsync(responseBodyStream.array(), timeout);
             	});
             }
             return sendCommandTask;
@@ -253,7 +252,7 @@ public class HybridHttpConnection {
     private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteBuffer buffer, Duration timeout) {
     	// TODO: trace
 //        RelayEventSource.Log.HybridHttpConnectionSendBytes(this.TrackingContext, buffer.Count);
-        return this.rendezvousWebSocket.sendAsync(buffer.array(), timeout);
+        return (buffer != null) ? this.rendezvousWebSocket.sendAsync(buffer.array(), timeout) : CompletableFuture.completedFuture(null);
     }
 
     private CompletableFuture<Void> ensureRendezvousAsync(Duration timeout) {
@@ -268,14 +267,19 @@ public class HybridHttpConnection {
         return CompletableFuture.completedFuture(null);
     }
 
-    private CompletableFuture<Void> closeAsync() {
-        if (this.rendezvousWebSocket != null) {
-        	// TODO: trace
-//            RelayEventSource.Log.ObjectClosing(this);
-            return this.rendezvousWebSocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"), this.operationTimeout);
-//            RelayEventSource.Log.ObjectClosed(this);
-        }
-        return CompletableFuture.completedFuture(null);
+//    private CompletableFuture<Void> closeAsync() {
+//    	CompletableFuture<Void> closeRendezvousTask = (this.rendezvousWebSocket != null) ? 
+//    			this.rendezvousWebSocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"), null) : CompletableFuture.completedFuture(null);
+////    	CompletableFuture<Void> closeControlTask = this.controlWebSocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"), null);
+//        	// TODO: trace
+////            RelayEventSource.Log.ObjectClosing(this);
+////            RelayEventSource.Log.ObjectClosed(this);
+////        return CompletableFuture.allOf(closeControlTask, closeRendezvousTask);
+//    			return closeRendezvousTask;
+//    }
+    
+    private void closeRendezvous() {
+    	this.rendezvousWebSocket.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"));
     }
 
     static ListenerCommand.ResponseCommand createResponseCommand(RelayedHttpListenerContext listenerContext) {
@@ -291,7 +295,7 @@ public class HybridHttpConnection {
     }
 
     final class ResponseStream extends OutputStream {
-        private static final long WRITE_BUFFER_FLUSH_TIMEOUT = 2000;
+        private static final long WRITE_BUFFER_FLUSH_TIMEOUT = 200000;
         private final HybridHttpConnection connection;
         private final RelayedHttpListenerContext context;
         private final AsyncLock asyncLock;
@@ -340,7 +344,9 @@ public class HybridHttpConnection {
                     return CompletableFuture.allOf(sendResponseTask, 
                     		this.connection.sendBytesOverRendezvousAsync(this.writeBufferStream, timeout).thenRun(() -> {
                         	this.writeBufferStream.clear();
-                            this.writeBufferFlushTimer.cancel();
+                        	if (this.writeBufferFlushTimer != null) {
+                        		this.writeBufferFlushTimer.cancel();
+                        	}
                     }));
                 }
                 return sendResponseTask;
@@ -395,7 +401,7 @@ public class HybridHttpConnection {
 	                    	
 	                        // There's still a chance we might be able to respond over the control connection, accumulate bytes
 	                        if (this.writeBufferStream == null) {
-	                            int initialStreamSize = Math.min(count * 2, MAX_CONTROL_CONNECTION_BODY_SIZE);
+	                            int initialStreamSize = Math.min(count, MAX_CONTROL_CONNECTION_BODY_SIZE);
 	                            this.writeBufferStream = ByteBuffer.allocate(initialStreamSize);
 	                            this.writeBufferFlushTimer = new Timer();
 	                            
@@ -423,11 +429,9 @@ public class HybridHttpConnection {
 	    			flushCoreTask = CompletableFuture.completedFuture(null);
 	    		}
 	    		lockRelease.release();
-	    		return flushCoreTask.thenRun(() -> {
-	    			this.connection.sendBytesOverRendezvousAsync(buffer, timeout);
-	    		});
+	    		return flushCoreTask.thenCompose(result -> this.connection.sendBytesOverRendezvousAsync(buffer, timeout));
 			} 
-        	catch (InterruptedException | ExecutionException e) {
+        	catch (Exception e) {
 				// TODO Auto-generated catch block
 				throw new RuntimeException(e.getMessage());
 			}
@@ -459,7 +463,7 @@ public class HybridHttpConnection {
             }
             
             CompletableFuture<Void> closeTask;
-            CompletableFuture<Void> sendTask;
+            CompletableFuture<Void> sendTask = null;
             try {
             	// TODO: trace
 //                RelayEventSource.Log.ObjectClosing(this);
@@ -477,7 +481,9 @@ public class HybridHttpConnection {
 	                    // Don't force any rendezvous now
 	                    sendTask = this.connection.sendResponseAsync(responseCommand, this.writeBufferStream, timeout);
 	                    this.responseCommandSent = true;
-	                    this.writeBufferFlushTimer.cancel();
+	                    if (this.writeBufferFlushTimer != null) {
+		                    this.writeBufferFlushTimer.cancel();
+	                    }
 	                }
 	                else {
 	                	sendTask = this.connection.sendBytesOverRendezvousAsync(null, timeout);
@@ -494,10 +500,14 @@ public class HybridHttpConnection {
                 throw new RuntimeException(e.getMessage());
             }
             finally {
-                closeTask = this.connection.closeAsync();
+//                closeTask = sendTask.thenCompose((result) -> this.connection.closeAsync());
                 this.closed = true;
             }
-            return CompletableFuture.allOf(sendTask, closeTask);
+//            return closeTask;
+            return sendTask.thenCompose((result) -> {
+            	closeRendezvous();
+				return CompletableFuture.completedFuture(null);
+			});
         }
 
         CompletableFuture<Void> onWriteBufferFlushTimer() {

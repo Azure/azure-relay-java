@@ -403,9 +403,7 @@ public class HybridConnectionListener {
                 } while (webSocket != null);
             }
 
-            CompletableFuture<Void> closeControl = TimedCompletableFuture.timedRunAsync(timeout, () -> this.controlConnection.closeAsync(timeout));
-
-            clients.forEach(client -> client.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"), null));
+            clients.forEach(client -> client.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
 
             // TODO: trace
 //            RelayEventSource.Log.ObjectClosed(this);
@@ -748,7 +746,7 @@ public class HybridConnectionListener {
 		// TODO: cancellationtoken param
 		CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer stream, Duration timeout) {
 
-			return this.sendAsyncLock.lockAsync(timeout).thenApplyAsync((lockRelease) -> {
+			return this.sendAsyncLock.lockAsync(timeout).thenAcceptAsync((lockRelease) -> {
 //				CompletableFuture<Void> connectTask = null;
 				try {
 					this.ensureConnectTask(timeout).get();
@@ -769,12 +767,12 @@ public class HybridConnectionListener {
 //					// TODO Auto-generated catch block
 //					e.printStackTrace();
 //				}
-				sendCommandTask = this.webSocket.sendCommandAsync(json, null);
-				sendStreamTask = (stream != null) ? webSocket.sendAsync(stream.array(), timeout) : CompletableFuture.completedFuture(null);
-				lockRelease.release();
-
-				return CompletableFuture.allOf(sendCommandTask, sendStreamTask);
-			}).thenAccept((completedBoth) -> {});
+				this.webSocket.sendCommandAsync(json, null).thenComposeAsync((sendCommandResult) -> {
+					return (stream != null) ? webSocket.sendAsync(stream.array(), timeout) : CompletableFuture.completedFuture(null);
+				}).thenRun(() -> {
+					lockRelease.release();
+				});
+			});
 		}
 
 		// <summary>
@@ -852,7 +850,7 @@ public class HybridConnectionListener {
         }
 
 		// TODO: cancellationtoken param
-		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
+		private void closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
 			
 //			// TODO: fx
 ////            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
@@ -865,14 +863,14 @@ public class HybridConnectionListener {
             }
 
             try {
-                return connectTask.thenRun(() -> this.webSocket.closeAsync(reason, null));
+                connectTask.thenRun(() -> this.webSocket.close(reason));
             }
             catch (Exception e)
 //            when (!Fx.IsFatal(e))
             {
             	// TODO: trace
 //                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
-                return webSocket.closeAsync(null, null);
+                this.webSocket.close(null);
             }
         }
 
