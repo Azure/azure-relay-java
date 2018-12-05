@@ -174,6 +174,9 @@ public class ClientWebSocket {
 	}
 	
 	public void close(CloseReason reason) {
+		if (this.session == null || !this.session.isOpen()) {
+			return;
+		}
 		try {
 			if (reason != null) {
 				this.session.close(reason);
@@ -181,7 +184,7 @@ public class ClientWebSocket {
 				this.session.close();
 			}
 		} catch (IOException e) {
-			throw new RuntimeIOException(e.getMessage());
+			throw new RuntimeIOException("something went wrong when trying to close the websocket.");
 		}	
 	}
 	
@@ -207,13 +210,8 @@ public class ClientWebSocket {
     
     // Handles text from control message
     @OnMessage
-    public void onWebSocketText(String text, boolean isEnd) {
-    	byte[] bytes = text.getBytes();
+    public void onWebSocketText(String text) {
     	this.controlMessageQueue.enqueueAndDispatch(text);
-
-		if (isEnd && this.onMessage != null) {
-			this.onMessage.accept(text);
-		}
     }
     
     @OnClose

@@ -38,6 +38,7 @@ public class HybridHttpConnection {
     private ClientWebSocket rendezvousWebSocket;
     private TrackingContext trackingContext;
     private Duration operationTimeout;
+    private ListenerCommand.RequestCommand requestCommand;
     
     private enum FlushReason { BUFFER_FULL, RENDEZVOUS_EXISTS, TIMER }
 
@@ -79,7 +80,7 @@ public class HybridHttpConnection {
         }
 
         // ProcessFirstRequestAsync runs without blocking the listener control connection:
-        return requestAndStream.thenAccept((requestCommandAndStream) -> hybridHttpConnection.processFirstRequestAsync(requestCommandAndStream));
+        return requestAndStream.thenCompose((requestCommandAndStream) -> hybridHttpConnection.processFirstRequestAsync(requestCommandAndStream));
     }
 
 //    @Override
@@ -106,7 +107,14 @@ public class HybridHttpConnection {
             
             if (requestCommand.hasBody() == null) {
                 // Need to rendezvous to get the real RequestCommand
-                requestAndStream = this.receiveRequestOverRendezvousAsync().get();
+                this.receiveRequestOverRendezvousAsync().thenAccept((realRequestAndStream) -> {
+					try {
+						invokeRequestHandler(realRequestAndStream);
+					} catch (URISyntaxException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				});
             }
             this.invokeRequestHandler(requestAndStream);
         }
@@ -125,7 +133,9 @@ public class HybridHttpConnection {
     	
     	if (requestCommand.hasBody()) {
 			CompletableFuture<ByteBuffer> receiveOverControlSocketTask = this.controlWebSocket.receiveMessageAsync();
-			return receiveOverControlSocketTask.thenApply((receivedData) -> new RequestCommandAndStream(requestCommand, receivedData));
+			return receiveOverControlSocketTask.thenApply((receivedData) -> {
+				return new RequestCommandAndStream(requestCommand, receivedData);
+			});
     	}
     	return CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, requestStream));
     }
@@ -139,26 +149,41 @@ public class HybridHttpConnection {
 			e1.printStackTrace();
 		}
     	
-		CompletableFuture<String> receiveCommandOverRendezvousTask = this.rendezvousWebSocket.receiveControlMessageAsync();
-		CompletableFuture<ByteBuffer> receiveMessageOverRendezvousTask = this.rendezvousWebSocket.receiveMessageAsync();
-		
-		return receiveCommandOverRendezvousTask.thenApply((commandJson) -> {
+    	return this.ensureRendezvousAsync(this.getOperationTimeout()).thenCompose((rendezvousResult) -> {
+    		return this.rendezvousWebSocket.receiveControlMessageAsync();
+    	}).thenCompose((commandJson) -> {
 			JSONObject jsonObj = new JSONObject(commandJson);
-			ListenerCommand.RequestCommand realRequestCommand = new ListenerCommand(jsonObj).getRequest();
+			this.requestCommand = new ListenerCommand(jsonObj).getRequest();
 			ByteBuffer requestStream = null;
 			 
-			if (realRequestCommand != null && realRequestCommand.hasBody()) {
+			if (this.requestCommand != null && this.requestCommand.hasBody()) {
 	        	// TODO: trace
 //	            RelayEventSource.Log.HybridHttpReadRendezvousValue(this, "request body");
-				try {
-					requestStream = receiveMessageOverRendezvousTask.get();
-				} catch (InterruptedException | ExecutionException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
+				return this.rendezvousWebSocket.receiveMessageAsync();
 			}
-			return new RequestCommandAndStream(realRequestCommand, requestStream);
-		});
+			return CompletableFuture.completedFuture(null);
+    	}).thenApply((requestStream) -> new RequestCommandAndStream(this.requestCommand, requestStream));
+    	
+//		CompletableFuture<String> receiveCommandOverRendezvousTask = this.rendezvousWebSocket.receiveControlMessageAsync();
+//		CompletableFuture<ByteBuffer> receiveMessageOverRendezvousTask = this.rendezvousWebSocket.receiveMessageAsync();
+//		
+//		return receiveCommandOverRendezvousTask.thenCompose((commandJson) -> {
+//			JSONObject jsonObj = new JSONObject(commandJson);
+//			ListenerCommand.RequestCommand realRequestCommand = new ListenerCommand(jsonObj).getRequest();
+//			ByteBuffer requestStream = null;
+//			 
+//			if (realRequestCommand != null && realRequestCommand.hasBody()) {
+//	        	// TODO: trace
+////	            RelayEventSource.Log.HybridHttpReadRendezvousValue(this, "request body");
+//				try {
+//					requestStream = receiveMessageOverRendezvousTask.get();
+//				} catch (InterruptedException | ExecutionException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+//			}
+//			return new RequestCommandAndStream(realRequestCommand, requestStream);
+//		});
     }
 
     void invokeRequestHandler(RequestCommandAndStream requestAndStream) throws URISyntaxException {

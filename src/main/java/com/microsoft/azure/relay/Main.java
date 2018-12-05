@@ -80,7 +80,8 @@ public class Main {
         
         listener.openAsync().get();
         
-//		webSocketServer(listener).get();
+//		webSocketServer(listener);
+//		webSocketClient();
 //		webSocketClient();
 
         for (int i = 0; i < 10; i++) {
@@ -196,7 +197,7 @@ public class Main {
 		webSocket.setOnMessage((msg) -> {
 			bytes += msg.length();
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + msg);
-			webSocket.close(null);
+//			webSocket.close(null);
 		});
 		
 		client.createConnectionAsync(webSocket).get();
@@ -206,17 +207,25 @@ public class Main {
 		webSocket.sendAsync("world2");
 	}
 	
-	private static CompletableFuture<Void> webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {
-		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
-		conn.thenAcceptAsync((websocket) -> {
-			CompletableFuture<ByteBuffer> bufferReceived = websocket.receiveMessageAsync();
-			bufferReceived.thenAccept((msgBuffer) -> {
-				String msg = new String(msgBuffer.array());
-				System.out.println("Listener Received: " + msg);
-				websocket.sendAsync(msg);
+	private static void webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {
+//		do {
+//			ClientWebSocket websocket = listener.acceptConnectionAsync().join();
+			CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
+			conn.thenAccept((websocket) -> {
+				while (true) {
+					ByteBuffer bytesReceived = websocket.receiveMessageAsync().join();
+					String msg = new String(bytesReceived.array());
+					System.out.println("Listener Received: " + msg);
+					websocket.sendAsync(msg);
+					
+	//				CompletableFuture<ByteBuffer> bufferReceived = websocket.receiveMessageAsync();
+	//				bufferReceived.thenCompose((msgBuffer) -> {
+	//					String msg = new String(msgBuffer.array());
+	//					System.out.println("Listener Received: " + msg);
+	//					return websocket.sendAsync(msg);
+	//				});
+				}
 			});
-			
-		});
-		return CompletableFuture.completedFuture(null);
-	}	
+//		} while (true);	
+	} 
 }

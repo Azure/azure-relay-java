@@ -573,9 +573,10 @@ public class HybridConnectionListener {
 //                        RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.getTrackingContext().getTrackingId(), SR.ObjectClosedOrAborted);
                         return null;
                     }
-                    return CompletableFuture.runAsync(() -> {
-                    	webSocket.connectAsync(rendezvousUri);
+                    return CompletableFuture.completedFuture(null).thenCompose((empty) -> {
+                    	CompletableFuture<Void> connectTask = webSocket.connectAsync(rendezvousUri);
                     	this.connectionInputQueue.enqueueAndDispatch(webSocket, null, false);
+                    	return connectTask;
                     });
                 }
             }
@@ -583,13 +584,13 @@ public class HybridConnectionListener {
             	// TODO: trace
 //                RelayEventSource.Log.RelayListenerRendezvousRejected(
 //                    listenerContext.TrackingContext, listenerContext.Response.StatusCode, listenerContext.Response.StatusDescription);
-            	return CompletableFuture.runAsync(() -> {
+            	return CompletableFuture.completedFuture(null).thenCompose((empty) -> {
 					try {
-						listenerContext.rejectAsync(rendezvousUri);
+						return listenerContext.rejectAsync(rendezvousUri);
 					} 
 					catch (UnsupportedEncodingException | URISyntaxException | DeploymentException e) {
 						// TODO Auto-generated catch block
-							e.printStackTrace();
+							throw new RuntimeException(e.getMessage());
 					}
 				});
             }
@@ -632,14 +633,13 @@ public class HybridConnectionListener {
 		private final TokenRenewer tokenRenewer;
 		private final AsyncLock sendAsyncLock;
 		private CompletableFuture<Void> connectAsyncTask;
-		private CompletableFuture<Void> receivePumpTask;
 		private int connectDelayIndex;
 		private boolean isOnline;
 		private Exception lastError;
-		private final ByteBuffer receiveBuffer = ByteBuffer.allocate(RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE);
 		private BiConsumer<Object, Object[]> connectingHandler;
 		private BiConsumer<Object, Object[]> offlineHandler;
 		private BiConsumer<Object, Object[]> onlineHandler;
+		private CompletableFuture<Void> receiveTask;
 		private ClientWebSocket webSocket;
 		private Object thisLock = new Object();
 		
@@ -696,10 +696,8 @@ public class HybridConnectionListener {
 	            	ensureConnectTask(timeout).get();
 	            	
 	                this.tokenRenewer.setOnTokenRenewed((token) -> this.onTokenRenewed(token));
-	                Thread t = new Thread(() -> this.receivePumpAsync());
-//	                this.receivePumpTask = 
-	                
-	                t.start();
+	                this.receiveTask = CompletableFuture.runAsync(() -> this.receivePumpAsync());
+
 	                succeeded = true;
 	            }
 	            catch (InterruptedException | ExecutionException e) {
@@ -746,7 +744,7 @@ public class HybridConnectionListener {
 		// TODO: cancellationtoken param
 		CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer stream, Duration timeout) {
 
-			return this.sendAsyncLock.lockAsync(timeout).thenAcceptAsync((lockRelease) -> {
+			return this.sendAsyncLock.lockAsync(timeout).thenComposeAsync((lockRelease) -> {
 //				CompletableFuture<Void> connectTask = null;
 				try {
 					this.ensureConnectTask(timeout).get();
@@ -754,20 +752,11 @@ public class HybridConnectionListener {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
-				CompletableFuture<Void> sendCommandTask;
-				CompletableFuture<Void> sendStreamTask;
+
 				String json = command.getResponse().toJsonString();
 				
-//				String json = JSONObject.valueToString(command);
-				
-//				ClientWebSocket webSocket = null;
-//				try {
-//					webSocket = connectTask.get();
-//				} catch (InterruptedException | ExecutionException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-				this.webSocket.sendCommandAsync(json, null).thenComposeAsync((sendCommandResult) -> {
+				// sends the command then send the actual message
+				return this.webSocket.sendCommandAsync(json, null).thenComposeAsync((sendCommandResult) -> {
 					return (stream != null) ? webSocket.sendAsync(stream.array(), timeout) : CompletableFuture.completedFuture(null);
 				}).thenRun(() -> {
 					lockRelease.release();
@@ -913,7 +902,6 @@ public class HybridConnectionListener {
             	try {
 	                do {
 	                	connectTask.get();
-	                	this.receiveBuffer.clear();
 //	                	CompletableFuture<String> receivedMessage = this.webSocket.receiveControlMessageAsync();
 	                	String receivedMessage = this.webSocket.receiveControlMessageAsync().get();
 	                    
@@ -929,10 +917,7 @@ public class HybridConnectionListener {
 	                        }
 	                        break;
 	                    }
-	                    
-//	                    receivedMessage.thenAccept((command) -> {
-//		                    this.listener.onCommandAsync(command, this.webSocket);
-//	                    });
+
 	                    this.listener.onCommandAsync(receivedMessage, this.webSocket);
 	                }
 	                while (keepGoing);

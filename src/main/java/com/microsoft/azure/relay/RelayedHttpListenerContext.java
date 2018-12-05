@@ -11,7 +11,6 @@ import java.util.concurrent.CompletableFuture;
 
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
-import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
 
 import org.eclipse.jetty.http.HttpStatus;
@@ -142,8 +141,6 @@ public class RelayedHttpListenerContext {
 
     private WebSocketContainer createWebSocket() {
     	WebSocketContainer container = ContainerProvider.getWebSocketContainer();
-//    	container.setDefaultMaxBinaryMessageBufferSize(this.listener.getConnectionBufferSize());
-//    	container.setDefaultMaxTextMessageBufferSize(this.listener.getConnectionBufferSize());
     	container.setDefaultMaxSessionIdleTimeout(HybridConnectionConstants.KEEP_ALIVE_INTERVAL.toMillis());
     	return container;
 
