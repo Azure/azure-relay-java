@@ -40,10 +40,8 @@ import javax.websocket.EncodeException;
 import javax.websocket.Endpoint;
 import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
-import javax.websocket.server.ServerEndpoint;
 
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
