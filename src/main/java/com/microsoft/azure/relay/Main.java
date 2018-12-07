@@ -57,10 +57,12 @@ public class Main {
 	private static String largeStr;
 	private static HybridConnectionListener listener;
 	
-	static final String RELAY_NAME_SPACE = "bailiu-relay-test.servicebus.windows.net";
-	static final String CONNECTION_STRING = "bailiu-relay-hc";
-	static final String KEY_NAME = "RootManageSharedAccessKey";
-	static final String KEY = "kvxDAICQD8hc146rVjwEOSHxD0eV5nJoIFbAytqIlKM=";
+	static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING_ENVIRONMENT_VARIABLE";
+	static final Map<String, String> connectionParams = StringUtil.parseConnectionString(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
+	static final String RELAY_NAME_SPACE = connectionParams.get("Endpoint");
+	static final String CONNECTION_STRING = connectionParams.get("EntityPath");
+	static final String KEY_NAME = connectionParams.get("SharedAccessKeyName");
+	static final String KEY = connectionParams.get("SharedAccessKey");
 	static int bytes = 0;
 	
 	public static void main(String[] args) throws Exception {
@@ -72,7 +74,7 @@ public class Main {
 		largeStr = builder.toString();
 		
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
-		HybridConnectionListener listener = new HybridConnectionListener(new URI(String.format("sb://%s/%s", RELAY_NAME_SPACE, CONNECTION_STRING)), tokenProvider);
+		HybridConnectionListener listener = new HybridConnectionListener(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
 		
 		listener.setConnectingHandler((o, e) -> System.out.println("Connecting handler"));
         listener.setOfflineHandler((o, e) -> System.out.println("Offline handler"));
@@ -80,19 +82,19 @@ public class Main {
         
         listener.openAsync().get();
         
-//		webSocketServer(listener);
-//		webSocketClient();
+		webSocketServer(listener);
+		webSocketClient();
 //		webSocketClient();
 
-        for (int i = 0; i < 10; i++) {
-            httpGETAndSmallResponse(listener);
-            httpGETAndLargeResponse(listener);
-            httpSmallPOSTAndSmallResponse(listener);
-            httpSmallPOSTAndLargeResponse(listener);
-            httpLargePOSTAndSmallResponse(listener);
-            httpLargePOSTAndLargeResponse(listener);
-        }
-        System.out.println("done");
+//        for (int i = 0; i < 10; i++) {
+//            httpGETAndSmallResponse(listener);
+//            httpGETAndLargeResponse(listener);
+//            httpSmallPOSTAndSmallResponse(listener);
+//            httpSmallPOSTAndLargeResponse(listener);
+//            httpLargePOSTAndSmallResponse(listener);
+//            httpLargePOSTAndLargeResponse(listener);
+//        }
+        System.out.println();
 	}
 	
 	private static void httpGETAndSmallResponse(HybridConnectionListener listener) throws IOException, InterruptedException, ExecutionException {
@@ -158,7 +160,7 @@ public class Main {
 	
 	private static void requestSender(String method, String msgExpected, String msgToSend) throws IOException, InterruptedException, ExecutionException {
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
-		URL url = new URL(String.format("https://%s/%s", RELAY_NAME_SPACE, CONNECTION_STRING));
+		URL url = new URL(RELAY_NAME_SPACE + CONNECTION_STRING);
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).get().getToken();
 		
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
@@ -192,7 +194,7 @@ public class Main {
 	// sends a message to the server through websocket
 	private static void webSocketClient() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
-		HybridConnectionClient client = new HybridConnectionClient(new URI(String.format("sb://%s/%s", RELAY_NAME_SPACE, CONNECTION_STRING)), tokenProvider);
+		HybridConnectionClient client = new HybridConnectionClient(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
 		ClientWebSocket webSocket = new ClientWebSocket();
 		webSocket.setOnMessage((msg) -> {
 			bytes += msg.length();
