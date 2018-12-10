@@ -24,6 +24,7 @@ import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
 
 import org.eclipse.jetty.io.RuntimeIOException;
+import org.eclipse.jetty.util.component.LifeCycle;
 
 @ClientEndpoint(configurator = HybridConnectionEndpointConfigurator.class)
 public class ClientWebSocket {
@@ -94,6 +95,10 @@ public class ClientWebSocket {
 		});
 	}
 	
+	public boolean isOpen() {
+		return ((LifeCycle)this.container).isRunning() && this.session != null && this.session.isOpen();
+	}
+	
 	public CompletableFuture<String> receiveControlMessageAsync() {
 		return this.controlMessageQueue.dequeueAsync();
 	}
@@ -106,15 +111,8 @@ public class ClientWebSocket {
 		
 		return CompletableFuture.supplyAsync(() -> {
 			do {
-				CompletableFuture<MessageFragment> messageFuture = messageQueue.dequeueAsync();
-				
-				MessageFragment fragment = null;
-				try {
-					fragment = messageFuture.get();
-				} catch (InterruptedException | ExecutionException e) {
-					// TODO: trace
-					e.printStackTrace();
-				}
+				MessageFragment fragment = messageQueue.dequeueAsync().join();
+
 				messageSize.set(messageSize.get() + fragment.getBytes().length);
 				fragments.add(fragment.getBytes());
 				receivedWholeMsg.set(fragment.hasEnded());
@@ -145,7 +143,6 @@ public class ClientWebSocket {
 			} 
 			else if (data instanceof String) {
 				String text = (String) data;
-				System.out.println("Sending: " + text);
 				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap(text.getBytes())));
 			} 
 			else if (data instanceof byte[]) {
@@ -180,7 +177,7 @@ public class ClientWebSocket {
 			} else {
 				this.session.close();
 			}
-		} catch (IOException e) {
+		} catch (Exception e) {
 			throw new RuntimeIOException("something went wrong when trying to close the websocket.");
 		}	
 	}
@@ -197,8 +194,8 @@ public class ClientWebSocket {
     @OnMessage
     public void onWebSocketBytes(byte[] inputBuffer, boolean isEnd) {
     	MessageFragment fragment = new MessageFragment(inputBuffer, isEnd);
-    	this.messageQueue.enqueueAndDispatch(fragment);
-
+        this.messageQueue.enqueueAndDispatch(fragment);
+    	
 		if (isEnd && this.onMessage != null) {
 			String msg = new String(inputBuffer);
 			this.onMessage.accept(msg);
@@ -213,10 +210,16 @@ public class ClientWebSocket {
     
     @OnClose
     public void onWebSocketClose(CloseReason reason) {
-    	System.out.println("Close reason: " + reason.getReasonPhrase());
-    	this.closeReason = reason;
-    	if (this.closeReason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
-    		throw new RuntimeIOException("did not close properly");
+    	try {
+	    	System.out.println("Close reason: " + reason.getReasonPhrase());
+	    	this.closeReason = reason;
+	    	((LifeCycle) this.container).stop();
+	    	if (this.closeReason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
+	    		throw new RuntimeIOException("did not close properly");
+	    	}
+    	}
+    	catch (Exception e) {
+    		System.out.println(e.getMessage());
     	}
     	if (this.onDisconnect != null) {
     		this.onDisconnect.accept(reason);
@@ -225,7 +228,7 @@ public class ClientWebSocket {
     
     @OnError
     public void onWebSocketError(Throwable cause) {
-        cause.printStackTrace(System.err);
+    	// TODO: error handling if necessary
     }
     
     class MessageFragment {

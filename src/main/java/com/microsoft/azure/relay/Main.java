@@ -34,6 +34,7 @@ import javax.websocket.ClientEndpoint;
 import javax.websocket.ClientEndpointConfig;
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCode;
+import javax.websocket.CloseReason.CloseCodes;
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
 import javax.websocket.EncodeException;
@@ -82,8 +83,8 @@ public class Main {
         
         listener.openAsync().get();
         
-		webSocketServer(listener);
-		webSocketClient();
+//		webSocketServer(listener);
+//		webSocketClient();
 //		webSocketClient();
 
 //        for (int i = 0; i < 10; i++) {
@@ -94,6 +95,7 @@ public class Main {
 //            httpLargePOSTAndSmallResponse(listener);
 //            httpLargePOSTAndLargeResponse(listener);
 //        }
+        listener.closeAsync().join();
         System.out.println();
 	}
 	
@@ -199,35 +201,23 @@ public class Main {
 		webSocket.setOnMessage((msg) -> {
 			bytes += msg.length();
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + msg);
-//			webSocket.close(null);
+			webSocket.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Closed by client."));
 		});
 		
 		client.createConnectionAsync(webSocket).get();
-		webSocket.sendAsync("hello");
-		webSocket.sendAsync("world");
-		webSocket.sendAsync("hello2");
-		webSocket.sendAsync("world2");
+		webSocket.sendAsync("hello world");
 	}
 	
 	private static void webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {
-//		do {
-//			ClientWebSocket websocket = listener.acceptConnectionAsync().join();
-			CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
-			conn.thenAccept((websocket) -> {
-				while (true) {
-					ByteBuffer bytesReceived = websocket.receiveMessageAsync().join();
-					String msg = new String(bytesReceived.array());
-					System.out.println("Listener Received: " + msg);
-					websocket.sendAsync(msg);
-					
-	//				CompletableFuture<ByteBuffer> bufferReceived = websocket.receiveMessageAsync();
-	//				bufferReceived.thenCompose((msgBuffer) -> {
-	//					String msg = new String(msgBuffer.array());
-	//					System.out.println("Listener Received: " + msg);
-	//					return websocket.sendAsync(msg);
-	//				});
-				}
-			});
-//		} while (true);	
+		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
+		conn.thenAcceptAsync((websocket) -> {
+			while (true) {
+				ByteBuffer bytesReceived = websocket.receiveMessageAsync().join();
+				String msg = new String(bytesReceived.array());
+				System.out.println("Listener Received: " + msg);
+				websocket.sendAsync(msg);
+			}
+		});
+		
 	} 
 }
