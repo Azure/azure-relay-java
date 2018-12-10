@@ -147,19 +147,6 @@ public class TimeoutHelper {
 //            throw RelayEventSource.Log.ArgumentOutOfRange(argumentName, timeout, SR.GetString(SR.TimeoutMustBeNonNegative, argumentName, timeout));
         }
     }
-
-//    public static void ThrowIfNonPositiveArgument(Duration timeout)
-//    {
-//        ThrowIfNonPositiveArgument(timeout, nameof(timeout));
-//    }
-//
-//    public static void ThrowIfNonPositiveArgument(Duration timeout, String argumentName)
-//    {
-//        if (timeout <= Duration.ZERO)
-//        {
-//            throw RelayEventSource.Log.ArgumentOutOfRange(argumentName, timeout, SR.GetString(SR.TimeoutMustBePositive, argumentName, timeout));
-//        }
-//    }
     
     private boolean isMaxDuration(Duration duration) {
     	return duration.compareTo(RelayConstants.MAX_DURATION) >= 0 || duration.compareTo(RelayConstants.MIN_DURATION) <= 0;

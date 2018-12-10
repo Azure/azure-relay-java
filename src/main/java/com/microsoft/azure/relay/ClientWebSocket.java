@@ -33,9 +33,6 @@ public class ClientWebSocket {
 	private Consumer<CloseReason> onDisconnect;
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private Object thisLock = new Object();
-//	private StringBuffer textBuffer;
-//	private char[] charBuffer = new char[RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE];
-//	private final byte[] byteBuffer = new byte[RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE];
 	private int maxMessageBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
 	private CloseReason closeReason;
 	private InputQueue<MessageFragment> messageQueue;

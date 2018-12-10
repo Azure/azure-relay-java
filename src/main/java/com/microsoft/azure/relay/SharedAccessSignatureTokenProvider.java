@@ -31,34 +31,28 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
     private final String keyName;
     private final String sharedAccessSignature;
 
-    public SharedAccessSignatureTokenProvider(String sharedAccessSignature)
-    {
+    public SharedAccessSignatureTokenProvider(String sharedAccessSignature) {
         SharedAccessSignatureToken.validate(sharedAccessSignature);
         this.encodedSharedAccessKey = null;
         this.keyName = null;
         this.sharedAccessSignature = sharedAccessSignature;
     }
 
-    public SharedAccessSignatureTokenProvider(String keyName, String sharedAccessKey)
-    {
+    public SharedAccessSignatureTokenProvider(String keyName, String sharedAccessKey) {
     	this(keyName, sharedAccessKey, null);
     }
 
-    public SharedAccessSignatureTokenProvider(String keyName, String sharedAccessKey, Charset charset)
-    {
+    public SharedAccessSignatureTokenProvider(String keyName, String sharedAccessKey, Charset charset) {
     	this.sharedAccessSignature = null;
-        if (StringUtil.isNullOrEmpty(keyName) || StringUtil.isNullOrEmpty(sharedAccessKey))
-        {
+        if (StringUtil.isNullOrEmpty(keyName) || StringUtil.isNullOrEmpty(sharedAccessKey)) {
         	throw new IllegalArgumentException("keyName or key cannot be empty.");
         }
 
-        if (keyName.length() > SharedAccessSignatureToken.MAX_KEYNAME_LENGTH)
-        {
+        if (keyName.length() > SharedAccessSignatureToken.MAX_KEYNAME_LENGTH) {
             throw new IllegalArgumentException("length of keyName is " + keyName.length() + ", which exceeded the maximum of " + SharedAccessSignatureToken.MAX_KEYNAME_LENGTH);
         }
 
-        if (sharedAccessKey.length() > SharedAccessSignatureToken.MAX_KEY_LENGTH)
-        {
+        if (sharedAccessKey.length() > SharedAccessSignatureToken.MAX_KEY_LENGTH) {
         	throw new IllegalArgumentException("length of keyName is " + sharedAccessKey.length() + ", which exceeded the maximum of " + SharedAccessSignatureToken.MAX_KEY_LENGTH);
         }
 
@@ -68,15 +62,13 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
     }
 
     @Override
-    protected CompletableFuture<SecurityToken> onGetTokenAsync(String resource, Duration validFor)
-    {
+    protected CompletableFuture<SecurityToken> onGetTokenAsync(String resource, Duration validFor) {
         String tokenString = this.BuildSignature(resource, validFor);
         SharedAccessSignatureToken securityToken = new SharedAccessSignatureToken(tokenString);
         return CompletableFuture.completedFuture(securityToken);
     }
 
-    protected String BuildSignature(String resource, Duration validFor)
-    {
+    protected String BuildSignature(String resource, Duration validFor) {
         if (StringUtil.isNullOrWhiteSpace(this.sharedAccessSignature))
         {
             return SharedAccessSignatureBuilder.BuildSignature(this.keyName, this.encodedSharedAccessKey, resource, validFor);
@@ -85,8 +77,7 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
         return this.sharedAccessSignature;
     }
 
-    static class SharedAccessSignatureBuilder
-    {
+    static class SharedAccessSignatureBuilder {
     	static final String HMAC_ALGORITHM = "HMACSHA256";
     	
         public static String BuildSignature(
@@ -119,7 +110,8 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
 	                SharedAccessSignatureToken.SIGNED_EXPIRY, URLEncoder.encode(expiresOn, UTF8_ENCODING_NAME),
 	                SharedAccessSignatureToken.SIGNATURE_KEYNAME, URLEncoder.encode(keyName, UTF8_ENCODING_NAME)
 	            });
-	        } catch (UnsupportedEncodingException e) {
+	        }
+        	catch (UnsupportedEncodingException e) {
 	            throw new RuntimeException("UTF-8 encoding or HMACSHA256 algorithm is missing in the java runtime.");
 	        }
         }
