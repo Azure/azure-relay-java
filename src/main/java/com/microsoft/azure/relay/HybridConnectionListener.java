@@ -415,7 +415,10 @@ public class HybridConnectionListener {
         finally {
             this.connectionInputQueue.dispose();
             this.controlConnection.closeAsync(null);
-            TimedCompletableFuture.executor.shutdown();
+            TimedCompletableFuture.cleanup();
+            if (this.rendezvousConnection != null && this.rendezvousConnection.isOpen()) {
+            	this.rendezvousConnection.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing rendezvous normally."));
+            }
         }
         return CompletableFuture.completedFuture(null);
     }
