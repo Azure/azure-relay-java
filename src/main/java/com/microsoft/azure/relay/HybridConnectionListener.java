@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -382,7 +383,7 @@ public class HybridConnectionListener {
                 ClientWebSocket webSocket;
                 
                 do {
-                	webSocket = TimedCompletableFuture.timedSupplyAsync(timeout, () -> {
+                	webSocket = CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
                     	ClientWebSocket socket = null;
                     	try {
                     		socket = this.connectionInputQueue.dequeueAsync().get();
@@ -415,7 +416,7 @@ public class HybridConnectionListener {
         finally {
             this.connectionInputQueue.dispose();
             this.controlConnection.closeAsync(null);
-            TimedCompletableFuture.cleanup();
+            CompletableFutureUtil.cleanup();
             if (this.rendezvousConnection != null && this.rendezvousConnection.isOpen()) {
             	this.rendezvousConnection.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing rendezvous normally."));
             }
@@ -591,9 +592,9 @@ public class HybridConnectionListener {
 					try {
 						return listenerContext.rejectAsync(rendezvousUri);
 					} 
-					catch (UnsupportedEncodingException | URISyntaxException | DeploymentException e) {
+					catch (UnsupportedEncodingException | URISyntaxException | DeploymentException | TimeoutException e) {
 						// TODO Auto-generated catch block
-							throw new RuntimeException(e.getMessage());
+						throw new RuntimeException(e.getMessage());
 					}
 				});
             }
@@ -755,12 +756,18 @@ public class HybridConnectionListener {
 
 				String json = command.getResponse().toJsonString();
 				
+				CompletableFuture<Void> future = new CompletableFuture<Void>();
 				// sends the command then send the actual message
-				return this.webSocket.sendCommandAsync(json, null).thenComposeAsync((sendCommandResult) -> {
-					return (stream != null) ? webSocket.sendAsync(stream.array(), timeout) : CompletableFuture.completedFuture(null);
-				}).thenRun(() -> {
-					lockRelease.release();
-				});
+				try {
+					future = this.webSocket.sendCommandAsync(json, null).thenComposeAsync((sendCommandResult) -> {
+						return (stream != null) ? webSocket.sendAsync(stream.array()) : CompletableFuture.completedFuture(null);
+					}).thenRun(() -> {
+						lockRelease.release();
+					});
+				} catch (TimeoutException e) {
+					e.printStackTrace(); // should not be exception here because timeout is null
+				}
+				return future;
 			});
 		}
 

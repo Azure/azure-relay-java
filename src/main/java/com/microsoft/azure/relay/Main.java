@@ -83,9 +83,8 @@ public class Main {
         
         listener.openAsync().get();
         
-//		webSocketServer(listener);
-//		webSocketClient();
-//		webSocketClient();
+		webSocketServer(listener);
+		webSocketClient();
 
 //        for (int i = 0; i < 10; i++) {
 //            httpGETAndSmallResponse(listener);
@@ -95,8 +94,14 @@ public class Main {
 //            httpLargePOSTAndSmallResponse(listener);
 //            httpLargePOSTAndLargeResponse(listener);
 //        }
-        listener.closeAsync().join();
-        System.out.println();
+		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(4), () -> {
+			try {
+				Thread.sleep(6);
+			} catch (InterruptedException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+		});
 	}
 	
 	private static void httpGETAndSmallResponse(HybridConnectionListener listener) throws IOException, InterruptedException, ExecutionException {
@@ -201,11 +206,11 @@ public class Main {
 		webSocket.setOnMessage((msg) -> {
 			bytes += msg.length();
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + msg);
-			webSocket.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Closed by client."));
 		});
 		
 		client.createConnectionAsync(webSocket).get();
 		webSocket.sendAsync("hello world");
+		client.close();
 	}
 	
 	private static void webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {
@@ -216,6 +221,7 @@ public class Main {
 				String msg = new String(bytesReceived.array());
 				System.out.println("Listener Received: " + msg);
 				websocket.sendAsync(msg);
+				websocket.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Closed by client."));
 			}
 		});
 		

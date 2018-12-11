@@ -8,6 +8,7 @@ import java.net.URLEncoder;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
@@ -63,7 +64,7 @@ public class RelayedHttpListenerContext {
 		}
     }
 
-    protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) throws IOException
+    protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) throws IOException, TimeoutException
     {
         // Performance: Address Resolution (ARP) work-around: When we receive the control message from a TCP connection which hasn't had any
         // outbound traffic for 2 minutes the ARP cache no longer has the MAC address required to ACK the control message.  If we also begin
@@ -85,13 +86,13 @@ public class RelayedHttpListenerContext {
 //        }
         
         ClientWebSocket webSocket = new ClientWebSocket();
-        return TimedCompletableFuture.timedSupplyAsync(ACCEPT_TIMEOUT, () -> {
+        return CompletableFutureUtil.timedSupplyAsync(ACCEPT_TIMEOUT, () -> {
 			webSocket.connectAsync(rendezvousUri);
 			return webSocket;
 		});
     }
 
-    protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException, DeploymentException {
+    protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException, DeploymentException, TimeoutException {
     	if (this.response.getStatusCode() == HttpStatus.CONTINUE_100) {
     		this.response.setStatusCode(HttpStatus.BAD_REQUEST_400);
     		this.response.setStatusDescription("Rejected by user code");
@@ -110,7 +111,7 @@ public class RelayedHttpListenerContext {
     	
     	ClientWebSocket webSocket = new ClientWebSocket();
     	
-        return TimedCompletableFuture.timedRunAsync(ACCEPT_TIMEOUT, () -> {
+        return CompletableFutureUtil.timedRunAsync(ACCEPT_TIMEOUT, () -> {
 			try {
 				webSocket.connectAsync(rejectURI);
 				// TODO: exception

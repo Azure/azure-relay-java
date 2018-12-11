@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -78,11 +79,18 @@ public class ClientWebSocket {
 	}
 	
 	public CompletableFuture<Void> connectAsync(URI uri) {
-		return this.connectAsync(uri, null);
+		CompletableFuture<Void> future = new CompletableFuture<Void>();
+		try {
+			future = this.connectAsync(uri, null);
+		} catch (TimeoutException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return future;
 	}
 	
-	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) {
-		return TimedCompletableFuture.timedRunAsync(timeout, () -> {
+	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) throws TimeoutException {
+		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 			try {
 				this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 				this.session = this.container.connectToServer(this, uri);
@@ -131,10 +139,17 @@ public class ClientWebSocket {
 	}
 
 	public CompletableFuture<Void> sendAsync(Object data) {
-		return this.sendAsync(data, null);
+		CompletableFuture<Void> future = new CompletableFuture<Void>();
+		try {
+			future = this.sendAsync(data, null);
+		} catch (TimeoutException e) {
+			// should not be an exception here because timeout is null
+			e.printStackTrace();
+		}
+		return future;
 	}
 	
-	public CompletableFuture<Void> sendAsync(Object data, Duration timeout) {
+	public CompletableFuture<Void> sendAsync(Object data, Duration timeout) throws TimeoutException {
 		if (this.session != null && this.session.isOpen()) {
 			RemoteEndpoint.Async remote = this.session.getAsyncRemote();
 			
@@ -143,13 +158,13 @@ public class ClientWebSocket {
 			} 
 			else if (data instanceof String) {
 				String text = (String) data;
-				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap(text.getBytes())));
+				return CompletableFutureUtil.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap(text.getBytes())));
 			} 
 			else if (data instanceof byte[]) {
-				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap((byte[]) data)));
+				return CompletableFutureUtil.timedRunAsync(timeout, () -> remote.sendBinary(ByteBuffer.wrap((byte[]) data)));
 			}
 			else {
-				return TimedCompletableFuture.timedRunAsync(timeout, () -> remote.sendObject(data));
+				return CompletableFutureUtil.timedRunAsync(timeout, () -> remote.sendObject(data));
 			}
 		}
 		else {
@@ -157,12 +172,12 @@ public class ClientWebSocket {
 		}
 	}
 	
-	protected CompletableFuture<Void> sendCommandAsync(String command, Duration timeout) {
+	protected CompletableFuture<Void> sendCommandAsync(String command, Duration timeout) throws TimeoutException {
 		if (this.session == null) {
 			throw new RuntimeIOException("cannot send because the session is not connected.");
 		}
 		RemoteEndpoint.Async remote = this.session.getAsyncRemote();
-		return TimedCompletableFuture.timedRunAsync(timeout, () -> {
+		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 			remote.sendText(command);
 		});
 	}

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
@@ -198,35 +199,45 @@ public class HybridConnectionClient {
 			}
 			HybridConnectionEndpointConfigurator.setHeaders(headers);
 		    
-		    return TimedCompletableFuture.timedSupplyAsync(null, () -> {
-				try {
-					URI uri = HybridConnectionUtil.BuildUri(
-					    this.address.getHost(),
-					    this.address.getPort(),
-					    this.address.getPath(),
-					    this.address.getQuery(),
-					    HybridConnectionConstants.Actions.CONNECT,
-					    trackingContext.getTrackingId()
-					);
-			        if (webSocket == null) {
-			        	ClientWebSocket newSocket = new ClientWebSocket();
-			        	newSocket.connectAsync(uri).get();
-			        	return newSocket;
-			        } else {
-			        	webSocket.connectAsync(uri).get();
-			        }
-				} catch (URISyntaxException | InterruptedException | ExecutionException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
-				return webSocket;
-		    });
-		    
+			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
+		    try {
+		    	future = CompletableFutureUtil.timedSupplyAsync(null, () -> {
+					try {
+						URI uri = HybridConnectionUtil.BuildUri(
+						    this.address.getHost(),
+						    this.address.getPort(),
+						    this.address.getPath(),
+						    this.address.getQuery(),
+						    HybridConnectionConstants.Actions.CONNECT,
+						    trackingContext.getTrackingId()
+						);
+				        if (webSocket == null) {
+				        	ClientWebSocket newSocket = new ClientWebSocket();
+				        	newSocket.connectAsync(uri).get();
+				        	return newSocket;
+				        } else {
+				        	webSocket.connectAsync(uri).get();
+				        }
+					} catch (URISyntaxException | InterruptedException | ExecutionException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+					return webSocket;
+				});
+			} catch (TimeoutException e) {
+				// should not be exception here since timeout is null
+				e.printStackTrace();
+			}
+		    return future;
 		} else {
 			throw new IllegalArgumentException("tokenProvider cannot be null.");
 		}
 	}
 
+	public void close() {
+		CompletableFutureUtil.cleanup();
+	}
+	
 	/// <summary>
 	/// Gets the <see cref="HybridConnectionRuntimeInformation"/> for this
 	/// HybridConnection entity using the default timeout.
