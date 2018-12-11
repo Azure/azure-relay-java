@@ -20,12 +20,13 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletionException;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.*;
@@ -66,7 +67,7 @@ public class Main {
 	static final String KEY = connectionParams.get("SharedAccessKey");
 	static int bytes = 0;
 	
-	public static void main(String[] args) throws Exception {
+	public static void main(String[] args) throws URISyntaxException, ExecutionException, InterruptedException {
 		StringBuilder builder = new StringBuilder();
 		String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 		for (int i = 0; i < 2000; i++) {
@@ -81,10 +82,15 @@ public class Main {
         listener.setOfflineHandler((o, e) -> System.out.println("Offline handler"));
         listener.setOnlineHandler((o, e) -> System.out.println("Online handler"));
         
-        listener.openAsync().get();
+		listener.openAsync().join();
         
-		webSocketServer(listener);
-		webSocketClient();
+		try {
+			webSocketServer(listener);
+			webSocketClient();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 //        for (int i = 0; i < 10; i++) {
 //            httpGETAndSmallResponse(listener);
@@ -94,14 +100,7 @@ public class Main {
 //            httpLargePOSTAndSmallResponse(listener);
 //            httpLargePOSTAndLargeResponse(listener);
 //        }
-		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(4), () -> {
-			try {
-				Thread.sleep(6);
-			} catch (InterruptedException e1) {
-				// TODO Auto-generated catch block
-				e1.printStackTrace();
-			}
-		});
+		
 	}
 	
 	private static void httpGETAndSmallResponse(HybridConnectionListener listener) throws IOException, InterruptedException, ExecutionException {
@@ -199,7 +198,7 @@ public class Main {
 	}
 	
 	// sends a message to the server through websocket
-	private static void webSocketClient() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
+	private static void webSocketClient() throws IOException, URISyntaxException {
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
 		HybridConnectionClient client = new HybridConnectionClient(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
 		ClientWebSocket webSocket = new ClientWebSocket();
@@ -208,14 +207,16 @@ public class Main {
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + msg);
 		});
 		
-		client.createConnectionAsync(webSocket).get();
+		client.createConnectionAsync(webSocket).join();
+		System.out.println("client: " + webSocket.isOpen());
 		webSocket.sendAsync("hello world");
 		client.close();
 	}
 	
-	private static void webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {
+	private static void webSocketServer(HybridConnectionListener listener) throws URISyntaxException {
 		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
 		conn.thenAcceptAsync((websocket) -> {
+			System.out.println("server: " + websocket.isOpen());
 			while (true) {
 				ByteBuffer bytesReceived = websocket.receiveMessageAsync().join();
 				String msg = new String(bytesReceived.array());

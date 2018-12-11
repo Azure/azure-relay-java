@@ -2,12 +2,15 @@ package com.microsoft.azure.relay;
 
 import java.time.Duration;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -17,12 +20,12 @@ import javax.websocket.Session;
 public final class CompletableFutureUtil {
 	protected static ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));
 
-	protected static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable) throws TimeoutException {
+	protected static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable) throws CompletionException {
         initIfNeeded();
-		return futureToCompletableFuture(timeout, executor.submit(runnable));
+        return futureToCompletableFuture(timeout, runnable);
 	}
 	
-	protected static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier) throws TimeoutException {
+	protected static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier) throws CompletionException {
 		initIfNeeded();
 		Callable<T> callable = new Callable<T>() {
 			@Override
@@ -30,10 +33,11 @@ public final class CompletableFutureUtil {
 				return supplier.get();
 			}
 		};
-		return futureToCompletableFuture(timeout, executor.submit(callable));
+		return futureToCompletableFuture(timeout, callable);
 	}
 	
-	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Future<?> future) throws TimeoutException {
+	@SuppressWarnings("unchecked")
+	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task) throws CompletionException {
 		TimeoutHelper.throwIfNegativeArgument(timeout);
 		CompletableFuture<T> completableFuture = new CompletableFuture<T>();
 		
@@ -41,19 +45,28 @@ public final class CompletableFutureUtil {
 		try {
 			completableFuture = CompletableFuture.supplyAsync(throwingSupplierWrapper(() -> {
 				T result = null;
+				ScheduledFuture<?> cancelTask = null;
+				
 				try {
-					result = (timeout == null) ? (T) future.get() : (T) future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-				} catch (InterruptedException | ExecutionException e) {
-					// TODO: trace
-					e.printStackTrace();
+					Future<?> future = (task instanceof Runnable) ? executor.submit((Runnable) task) : executor.submit((Callable<T>) task);
+					if (timeout != null) {
+						cancelTask = executor.schedule(() -> {
+							future.cancel(true);
+						}, timeout.toMillis(), TimeUnit.MILLISECONDS);
+						result = (T) future.get();
+						cancelTask.cancel(false);
+					}
+					else {
+						result = (T) future.get();
+					}
+				} catch (Exception e) {
+					throw (CompletionException) e;
 				}
 				return result;
 			}));
 		} catch (Exception e) {
-			if (e instanceof TimeoutException) {
-				throw (TimeoutException) e;
-			}
-			e.printStackTrace();
+			completableFuture.cancel(true);
+			throw (CompletionException) e;
 		}
 		return completableFuture;
 	}
@@ -68,7 +81,7 @@ public final class CompletableFutureUtil {
 		executor.shutdown();
 	}
 	
-	protected static <T> Supplier<T> throwingSupplierWrapper(ThrowingSupplier<T, Exception> throwingSupplier) throws Exception {
+	protected static <T> Supplier<T> throwingSupplierWrapper(ThrowingSupplier<T, CompletionException> throwingSupplier) throws CompletionException {
 		return () -> {
 			try {
 				return throwingSupplier.supply();

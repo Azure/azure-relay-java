@@ -8,7 +8,7 @@ import java.net.URLEncoder;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletionException;
 
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
@@ -64,7 +64,7 @@ public class RelayedHttpListenerContext {
 		}
     }
 
-    protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) throws IOException, TimeoutException
+    protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) throws IOException, CompletionException
     {
         // Performance: Address Resolution (ARP) work-around: When we receive the control message from a TCP connection which hasn't had any
         // outbound traffic for 2 minutes the ARP cache no longer has the MAC address required to ACK the control message.  If we also begin
@@ -92,7 +92,7 @@ public class RelayedHttpListenerContext {
 		});
     }
 
-    protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException, DeploymentException, TimeoutException {
+    protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException, DeploymentException, CompletionException {
     	if (this.response.getStatusCode() == HttpStatus.CONTINUE_100) {
     		this.response.setStatusCode(HttpStatus.BAD_REQUEST_400);
     		this.response.setStatusDescription("Rejected by user code");

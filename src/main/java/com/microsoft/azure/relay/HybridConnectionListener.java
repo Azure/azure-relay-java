@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -479,13 +479,14 @@ public class HybridConnectionListener {
 			// TODO: trace
 //			throw RelayEventSource.Log
 //					.ThrowingException(new ObjectDisposedException(this.toString(), SR.EntityClosedOrAborted), this);
+			throw new RuntimeException("Invalid operation. Cannot call open when it's already closed.");
 		}
 	}
 
 	void throwIfReadOnly() {
 		synchronized (this.thisLock) {
 			if (this.openCalled) {
-				throw new RuntimeException("invalid operation");
+				throw new RuntimeException("Invalid operation. Cannot call open when it's already open.");
 //				throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.ObjectIsReadOnly),this);
 			}
 		}
@@ -592,7 +593,7 @@ public class HybridConnectionListener {
 					try {
 						return listenerContext.rejectAsync(rendezvousUri);
 					} 
-					catch (UnsupportedEncodingException | URISyntaxException | DeploymentException | TimeoutException e) {
+					catch (UnsupportedEncodingException | URISyntaxException | DeploymentException | CompletionException e) {
 						// TODO Auto-generated catch block
 						throw new RuntimeException(e.getMessage());
 					}
@@ -764,7 +765,7 @@ public class HybridConnectionListener {
 					}).thenRun(() -> {
 						lockRelease.release();
 					});
-				} catch (TimeoutException e) {
+				} catch (CompletionException e) {
 					e.printStackTrace(); // should not be exception here because timeout is null
 				}
 				return future;

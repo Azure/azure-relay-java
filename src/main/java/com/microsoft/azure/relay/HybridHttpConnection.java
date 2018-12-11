@@ -15,7 +15,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -142,7 +142,7 @@ public class HybridHttpConnection {
     	return CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, requestStream));
     }
 
-    private CompletableFuture<RequestCommandAndStream> receiveRequestOverRendezvousAsync() throws TimeoutException {
+    private CompletableFuture<RequestCommandAndStream> receiveRequestOverRendezvousAsync() throws CompletionException {
     	// A Rendezvous is required to get full request
     	try {
 			this.ensureRendezvousAsync(this.getOperationTimeout()).get();
@@ -243,7 +243,7 @@ public class HybridHttpConnection {
         }
     }
 
-    private CompletableFuture<Void> sendResponseAsync(ListenerCommand.ResponseCommand responseCommand, ByteBuffer responseBodyStream, Duration timeout) throws TimeoutException {
+    private CompletableFuture<Void> sendResponseAsync(ListenerCommand.ResponseCommand responseCommand, ByteBuffer responseBodyStream, Duration timeout) throws CompletionException {
         if (this.rendezvousWebSocket == null) {
         	// TODO: tracing
 //            RelayEventSource.Log.HybridHttpConnectionSendResponse(this.getTrackingContext(), "control", responseCommand.StatusCode);
@@ -276,13 +276,13 @@ public class HybridHttpConnection {
         }
     }
 
-    private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteBuffer buffer, Duration timeout) throws TimeoutException {
+    private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteBuffer buffer, Duration timeout) throws CompletionException {
     	// TODO: trace
 //        RelayEventSource.Log.HybridHttpConnectionSendBytes(this.TrackingContext, buffer.Count);
         return (buffer != null) ? this.rendezvousWebSocket.sendAsync(buffer.array(), timeout) : CompletableFuture.completedFuture(null);
     }
 
-    private CompletableFuture<Void> ensureRendezvousAsync(Duration timeout) throws TimeoutException {
+    private CompletableFuture<Void> ensureRendezvousAsync(Duration timeout) throws CompletionException {
         if (this.rendezvousWebSocket == null) {
         	// TODO: trace
 //            RelayEventSource.Log.HybridHttpCreatingRendezvousConnection(this.TrackingContext);
@@ -352,7 +352,7 @@ public class HybridHttpConnection {
         }
 
         // The caller of this method must have acquired this.asyncLock
-        CompletableFuture<Void> flushCoreAsync(FlushReason reason, Duration timeout) throws TimeoutException {
+        CompletableFuture<Void> flushCoreAsync(FlushReason reason, Duration timeout) throws CompletionException {
         	// TODO: trace
 //            RelayEventSource.Log.HybridHttpResponseStreamFlush(this.TrackingContext, reason.ToString());
         	
@@ -365,7 +365,7 @@ public class HybridHttpConnection {
                 	CompletableFuture<Void> future = new CompletableFuture<Void>();
                 	try {
 						future = this.connection.sendResponseAsync(responseCommand, null, timeout);
-					} catch (TimeoutException e) {
+					} catch (CompletionException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
@@ -467,7 +467,7 @@ public class HybridHttpConnection {
 	    			CompletableFuture<Void> future = new CompletableFuture<Void>();
 					try {
 						future = this.connection.sendBytesOverRendezvousAsync(buffer, timeout);
-					} catch (TimeoutException e) {
+					} catch (CompletionException e) {
 						e.printStackTrace();
 					}
 					return future;
@@ -556,7 +556,7 @@ public class HybridHttpConnection {
             return this.asyncLock.lockAsync().thenAccept((lockRelease) -> {
                 try {
 					this.flushCoreAsync(FlushReason.TIMER, Duration.ofSeconds(this.writeTimeout));
-				} catch (TimeoutException e) {
+				} catch (CompletionException e) {
 					e.printStackTrace();
 				}
                 lockRelease.release();

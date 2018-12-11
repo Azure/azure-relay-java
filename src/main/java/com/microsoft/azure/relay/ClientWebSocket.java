@@ -6,7 +6,7 @@ import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -82,14 +82,14 @@ public class ClientWebSocket {
 		CompletableFuture<Void> future = new CompletableFuture<Void>();
 		try {
 			future = this.connectAsync(uri, null);
-		} catch (TimeoutException e) {
+		} catch (CompletionException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return future;
 	}
 	
-	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) throws TimeoutException {
+	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) throws CompletionException {
 		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 			try {
 				this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
@@ -104,6 +104,7 @@ public class ClientWebSocket {
 	}
 	
 	public boolean isOpen() {
+		boolean isit = this.session.isOpen();
 		return ((LifeCycle)this.container).isRunning() && this.session != null && this.session.isOpen();
 	}
 	
@@ -142,14 +143,14 @@ public class ClientWebSocket {
 		CompletableFuture<Void> future = new CompletableFuture<Void>();
 		try {
 			future = this.sendAsync(data, null);
-		} catch (TimeoutException e) {
+		} catch (CompletionException e) {
 			// should not be an exception here because timeout is null
 			e.printStackTrace();
 		}
 		return future;
 	}
 	
-	public CompletableFuture<Void> sendAsync(Object data, Duration timeout) throws TimeoutException {
+	public CompletableFuture<Void> sendAsync(Object data, Duration timeout) throws CompletionException {
 		if (this.session != null && this.session.isOpen()) {
 			RemoteEndpoint.Async remote = this.session.getAsyncRemote();
 			
@@ -172,7 +173,7 @@ public class ClientWebSocket {
 		}
 	}
 	
-	protected CompletableFuture<Void> sendCommandAsync(String command, Duration timeout) throws TimeoutException {
+	protected CompletableFuture<Void> sendCommandAsync(String command, Duration timeout) throws CompletionException {
 		if (this.session == null) {
 			throw new RuntimeIOException("cannot send because the session is not connected.");
 		}
