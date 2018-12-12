@@ -117,7 +117,9 @@ public class HybridHttpConnection {
 					}
 				});
             }
-            this.invokeRequestHandler(requestAndStream);
+            else {
+            	this.invokeRequestHandler(requestAndStream);
+            }
         }
         catch (Exception e)
     	// TODO: when (!Fx.IsFatal(e))
