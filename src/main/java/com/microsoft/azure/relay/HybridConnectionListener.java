@@ -578,11 +578,8 @@ public class HybridConnectionListener {
 //                        RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.getTrackingContext().getTrackingId(), SR.ObjectClosedOrAborted);
                         return null;
                     }
-                    return CompletableFuture.completedFuture(null).thenCompose((empty) -> {
-                    	CompletableFuture<Void> connectTask = this.rendezvousConnection.connectAsync(rendezvousUri);
-                    	this.connectionInputQueue.enqueueAndDispatch(this.rendezvousConnection, null, false);
-                    	return connectTask;
-                    });
+                    return CompletableFuture.completedFuture(null).thenCompose((empty) -> this.rendezvousConnection.connectAsync(rendezvousUri))
+                    		.thenRun(() -> this.connectionInputQueue.enqueueAndDispatch(this.rendezvousConnection, null, false));
                 }
             }
             else {

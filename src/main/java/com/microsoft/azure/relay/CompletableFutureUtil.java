@@ -50,9 +50,7 @@ public final class CompletableFutureUtil {
 				try {
 					Future<?> future = (task instanceof Runnable) ? executor.submit((Runnable) task) : executor.submit((Callable<T>) task);
 					if (timeout != null) {
-						cancelTask = executor.schedule(() -> {
-							future.cancel(true);
-						}, timeout.toMillis(), TimeUnit.MILLISECONDS);
+						cancelTask = executor.schedule(() -> future.cancel(true), timeout.toMillis(), TimeUnit.MILLISECONDS);
 						result = (T) future.get();
 						cancelTask.cancel(false);
 					}
