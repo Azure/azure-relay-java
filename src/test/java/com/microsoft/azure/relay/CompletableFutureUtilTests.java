@@ -8,7 +8,7 @@ import java.util.concurrent.CompletionException;
 import org.junit.After;
 import org.junit.Test;
 
-public class CompletableFutureUtilTest {
+public class CompletableFutureUtilTests {
 	private static boolean testBool = false;
 	
 	@After

@@ -11,11 +11,14 @@ import java.net.URL;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
+import org.eclipse.jetty.http.HttpStatus;
+import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class HybridConnectionListenerTest {
+public class HybridConnectionListenerTests {
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
@@ -27,12 +30,23 @@ public class HybridConnectionListenerTest {
 		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
 		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
 		clientWebSocket = new ClientWebSocket();
-		listener.openAsync(Duration.ofSeconds(15)).join();
+	}
+	
+	@AfterClass
+	public static void cleanup() {
+		listener.closeAsync();
+		client.close();
 	}
 	
 	@Before
-	public void connectListender() {
-		
+	public void connectListener() throws URISyntaxException {
+		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+		listener.openAsync(Duration.ofSeconds(15)).join();
+	}
+	
+	@After
+	public void closeListener() {
+		listener.closeAsync();
 	}
 	
 	@Test
@@ -44,26 +58,35 @@ public class HybridConnectionListenerTest {
 	public void closeAsyncTest() throws URISyntaxException {
 		listener.closeAsync();
 		assertFalse(listener.isOnline());
-		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		listener.openAsync(Duration.ofSeconds(15)).join();
 	}
 	
 	@Test
 	public void acceptWebSocketConnectionTest() throws URISyntaxException {
-		CompletableFuture<Boolean> receivedFuture = new CompletableFuture<Boolean>();
-		CompletableFuture.supplyAsync(() -> listener).thenCompose((listener) -> listener.acceptConnectionAsync()).thenAccept((websocket) -> {
-			receivedFuture.complete(websocket.isOpen());
+		CompletableFuture<Boolean> checkSocketConnectionTask = new CompletableFuture<Boolean>();
+		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
+		client.createConnectionAsync(null);
+		conn.thenAccept((websocket) -> {
+			checkSocketConnectionTask.complete(websocket.isOpen());
 		});
-		client.createConnectionAsync(null).join();
-		boolean isTrue = receivedFuture.join();
-		assertTrue(isTrue);
+		assertTrue(checkSocketConnectionTask.join());
 	}
 	
 	@Test
 	public void acceptHttpConnectionTest() throws URISyntaxException, IOException {
 		CompletableFuture<Boolean> receivedFuture = new CompletableFuture<Boolean>();
+		int status = HttpStatus.ACCEPTED_202;
+
 		listener.setRequestHandler((context) -> {
+			RelayedHttpListenerResponse response = context.getResponse();
+            response.setStatusCode(status);
+            
 			receivedFuture.complete(true);
+			try {
+				response.getOutputStream().write(0);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			context.getResponse().close();
 		});
 		
 		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING);
@@ -74,8 +97,8 @@ public class HybridConnectionListenerTest {
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
 		conn.setRequestMethod("GET");
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
-		
-		Boolean received = receivedFuture.join();
-		assertTrue(received);
+
+		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
+		assertTrue("HTTP request was not received by listener.", receivedFuture.join());	
 	}
 }

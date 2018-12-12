@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.junit.*;
 
-public class InputQueueTest {
+public class InputQueueTests {
 	private static InputQueue<Integer> queue;
 	private static Integer num1 = 11;
 	private static Integer num2 = 22;
