@@ -20,7 +20,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class SendReceiveTests {
+public class SendReceiveTest {
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;

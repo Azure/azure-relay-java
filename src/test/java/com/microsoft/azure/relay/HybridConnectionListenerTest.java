@@ -18,7 +18,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class HybridConnectionListenerTests {
+public class HybridConnectionListenerTest {
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
