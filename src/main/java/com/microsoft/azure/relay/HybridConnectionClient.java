@@ -18,10 +18,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.CompletionException;
 
+import javax.websocket.CloseReason;
 import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
 import javax.websocket.Session;
 import javax.websocket.WebSocketContainer;
+import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
@@ -45,6 +47,7 @@ public class HybridConnectionClient {
 	private boolean useBuiltInClientWebSocket;
 	// Gets or sets the connection buffer size. Default value is 64K.
 	private int connectionBufferSize;
+	private CompletableFuture<ClientWebSocket> connectionTask;
 	
 	public URI getAddress() {
 		return address;
@@ -175,6 +178,10 @@ public class HybridConnectionClient {
 		}
 	}
 	
+	public CompletableFuture<ClientWebSocket> createConnectionAsync() {
+		return this.createConnectionAsync(null);
+	}
+	
 	/// <summary>
 	/// Establishes a new send-side HybridConnection and returns the Stream.
 	/// </summary>
@@ -201,41 +208,40 @@ public class HybridConnectionClient {
 		    
 			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
 		    try {
-		    	future = CompletableFutureUtil.timedSupplyAsync(null, () -> {
-					try {
-						URI uri = HybridConnectionUtil.BuildUri(
-						    this.address.getHost(),
-						    this.address.getPort(),
-						    this.address.getPath(),
-						    this.address.getQuery(),
-						    HybridConnectionConstants.Actions.CONNECT,
-						    trackingContext.getTrackingId()
-						);
-				        if (webSocket == null) {
-				        	ClientWebSocket newSocket = new ClientWebSocket();
-				        	newSocket.connectAsync(uri).get();
-				        	return newSocket;
-				        } else {
-				        	webSocket.connectAsync(uri).get();
-				        }
-					} catch (URISyntaxException | InterruptedException | ExecutionException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
-					}
-					return webSocket;
-				});
-			} catch (CompletionException e) {
-				// should not be exception here since timeout is null
+				URI uri = HybridConnectionUtil.BuildUri(
+					    this.address.getHost(),
+					    this.address.getPort(),
+					    this.address.getPath(),
+					    this.address.getQuery(),
+					    HybridConnectionConstants.Actions.CONNECT,
+					    trackingContext.getTrackingId()
+					);
+		        if (webSocket == null) {
+		        	ClientWebSocket newSocket = new ClientWebSocket();
+		        	future = newSocket.connectAsync(uri, null).thenApply(result -> newSocket);
+		        } else {
+		        	future = webSocket.connectAsync(uri, null).thenApply(result -> webSocket);
+		        }
+			} catch (CompletionException | URISyntaxException e) {
 				e.printStackTrace();
 			}
+		    this.connectionTask = future;
 		    return future;
 		} else {
 			throw new IllegalArgumentException("tokenProvider cannot be null.");
 		}
 	}
 
-	public void close() {
+	public CompletableFuture<Void> closeAsync() {
 		CompletableFutureUtil.cleanup();
+		if (this.connectionTask != null) {
+			ClientWebSocket socket = this.connectionTask.join();
+			this.connectionTask = null;
+			if (socket.isOpen()) {
+				return socket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Sender is closing normlly"));
+			}
+		}
+		return CompletableFuture.completedFuture(null);
 	}
 	
 	/// <summary>

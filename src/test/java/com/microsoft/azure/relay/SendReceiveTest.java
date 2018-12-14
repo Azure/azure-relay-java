@@ -14,9 +14,15 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import javax.websocket.CloseReason;
+import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -26,6 +32,8 @@ public class SendReceiveTest {
 	private static HybridConnectionClient client;
 	private static ClientWebSocket clientWebSocket;
 	private static int statusCode = HttpStatus.ACCEPTED_202;
+	private static int listenerReceiveCount = 0;
+	private static int senderReceiveCount = 0;
 	
 	// empty test string for GET method
 	private static String emptyStr = "";
@@ -38,8 +46,7 @@ public class SendReceiveTest {
 	public static void init() throws URISyntaxException {
 		tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(TestUtil.KEY_NAME, TestUtil.KEY);
 		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		clientWebSocket = new ClientWebSocket();
+
 		
 		// Build the large string in small chunks because hardcoding a large string may not compile
 		StringBuilder builder = new StringBuilder();
@@ -48,12 +55,19 @@ public class SendReceiveTest {
 			builder.append(alphabet);
 		}
 		largeStr = builder.toString();
-		listener.openAsync().join();
+		listener.openAsync(Duration.ofSeconds(15)).join();
 	}
 	
 	@AfterClass
 	public static void cleanup() {
 		listener.closeAsync().join();
+	}
+	
+	@Before
+	public void createClient() throws URISyntaxException {
+		
+		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+		clientWebSocket = new ClientWebSocket();
 	}
 	
 	@Test
@@ -79,6 +93,81 @@ public class SendReceiveTest {
 		websocketListener(largeStr, largeStr);
 		websocketClient(largeStr, largeStr);
 	}
+	
+	@Test
+	public void websocketRepeatedSendReceiveTest() {
+		int timesToRepeat = 3;
+		CompletableFuture<Integer> senderReceiveCount = new CompletableFuture<Integer>();
+		CompletableFuture<Integer> listenerReceiveCount = new CompletableFuture<Integer>();
+		
+		listener.acceptConnectionAsync().thenAcceptAsync((websocket) -> {
+			for (int i = 1; i <= timesToRepeat; i++) {
+				websocket.receiveMessageAsync().join();
+				if (i == timesToRepeat) {
+					listenerReceiveCount.complete(i);
+				}
+				websocket.sendAsync("hi");
+			}
+		});
+		
+		client.createConnectionAsync(clientWebSocket).thenRun(() -> {
+			clientWebSocket.sendAsync("hi");
+			for (int i = 1; i <= timesToRepeat; i++) {
+				clientWebSocket.receiveMessageAsync().join();
+				if (i == timesToRepeat) {
+					senderReceiveCount.complete(i);
+				}
+				if (i < timesToRepeat) {
+					clientWebSocket.sendAsync("hi");
+				}
+			}
+		});
+		
+		try {
+			assertEquals("Listener did not receive expected number of messages.", timesToRepeat, listenerReceiveCount.get(timesToRepeat * 5, TimeUnit.SECONDS).intValue());
+			assertEquals("Sender did not receive expected number of messages", timesToRepeat, senderReceiveCount.get(timesToRepeat * 5, TimeUnit.SECONDS).intValue());
+		} catch (InterruptedException | ExecutionException | TimeoutException e) {
+			fail("Repeated send and receives under websocket mode did not completely correctly in given amount of time");
+		}
+	}
+	
+	@Test
+	public void websocketMultipleSenderTest() throws URISyntaxException {
+		int numberOfSenders = 3;
+		CompletableFuture<Void> senderReceiveTask = new CompletableFuture<Void>();
+		
+		for (int i = 1; i <= numberOfSenders; i++) {
+			listener.acceptConnectionAsync().thenAccept((websocket) -> {
+				websocket.receiveMessageAsync().thenRun(() -> {
+					listenerReceiveCount++;
+					websocket.sendAsync("hi").join();
+					websocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal closure from listener")).join();
+				});
+			});
+			
+			HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+			newClient.createConnectionAsync().thenAccept((socket) -> {
+				socket.sendAsync("hi").join();
+				socket.receiveMessageAsync().thenRun(() -> {
+					senderReceiveCount++;
+					if (senderReceiveCount >= numberOfSenders) {
+						senderReceiveTask.complete(null);
+					}
+				});
+			}).join();
+		}
+		
+		try {
+			senderReceiveTask.get(numberOfSenders * 5, TimeUnit.SECONDS);
+		} catch (InterruptedException | ExecutionException | TimeoutException e) {
+			fail("Send and receive from multiple senders did not completely correctly in given amount of time");
+		}
+		assertEquals("Listener did not receive expected number of messages.", numberOfSenders, listenerReceiveCount);
+		assertEquals("Sendner did not receive expected number of messages.", numberOfSenders, senderReceiveCount);
+		senderReceiveCount = 0;
+		listenerReceiveCount = 0;
+	}
+	
 	
 	@Test
 	public void httpGETAndSmallResponseTest() throws IOException, InterruptedException, ExecutionException {
@@ -116,9 +205,7 @@ public class SendReceiveTest {
         httpRequestSender("POST", largeStr, largeStr);
 	}
 	
-	
 	private static void websocketClient(String msgExpected, String msgToSend) throws URISyntaxException, InterruptedException, ExecutionException, IOException {
-		HybridConnectionClient client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
 		CompletableFuture<Boolean> receivedReply = new CompletableFuture<Boolean>();
 		
 		clientWebSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
@@ -127,8 +214,7 @@ public class SendReceiveTest {
 			assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
 		});
 		
-		client.createConnectionAsync(clientWebSocket).get();
-		clientWebSocket.sendAsync(msgToSend);
+		client.createConnectionAsync(clientWebSocket).thenRun(() -> clientWebSocket.sendAsync(msgToSend));
 		assertTrue("Did not receive message from websocket sender.", receivedReply.join());
 	}
 	
@@ -138,7 +224,8 @@ public class SendReceiveTest {
 		conn.thenAcceptAsync((websocket) -> {
 			ByteBuffer bytesReceived = websocket.receiveMessageAsync().join();
 			assertEquals("Websocket listener did not receive the expected message.", msgExpected, new String(bytesReceived.array()));
-			websocket.sendAsync(msgToSend);
+			websocket.sendAsync(msgToSend).join();
+			websocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
 		});
 	}
 	

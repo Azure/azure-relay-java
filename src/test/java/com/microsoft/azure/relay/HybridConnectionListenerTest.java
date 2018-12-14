@@ -40,15 +40,7 @@ public class HybridConnectionListenerTest {
 	
 	@Test
 	public void openAsyncTest() {
-		assertTrue(listener.isOnline());
-	}
-	
-	@Test
-	public void closeAsyncTest() throws URISyntaxException {
-		listener.closeAsync();
-		assertFalse(listener.isOnline());
-		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		listener.openAsync(Duration.ofSeconds(15)).join();
+		assertTrue("Listener faile to open.", listener.isOnline());
 	}
 	
 	@Test
@@ -59,20 +51,19 @@ public class HybridConnectionListenerTest {
 		conn.thenAccept((websocket) -> {
 			checkSocketConnectionTask.complete(websocket.isOpen());
 		});
-		assertTrue(checkSocketConnectionTask.join());
+		assertTrue("Listener failed to accept connections from sender in webSocket mode.", checkSocketConnectionTask.join());
 	}
 	
 	@Test
 	public void acceptHttpConnectionTest() throws URISyntaxException, IOException {
-		CompletableFuture<Boolean> receivedFuture = new CompletableFuture<Boolean>();
+		CompletableFuture<Boolean> checkHttpConnectionTask = new CompletableFuture<Boolean>();
 		int status = HttpStatus.ACCEPTED_202;
 
 		listener.setRequestHandler((context) -> {
-//			System.out.println("received request");
 			RelayedHttpListenerResponse response = context.getResponse();
             response.setStatusCode(status);
             
-			receivedFuture.complete(true);
+			checkHttpConnectionTask.complete(true);
 			try {
 				response.getOutputStream().write(0);
 			} catch (IOException e) {
@@ -87,11 +78,10 @@ public class HybridConnectionListenerTest {
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
 		
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-//		System.out.println("opened connection");
 		conn.setRequestMethod("GET");
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
 
 		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
-		assertTrue("HTTP request was not received by listener.", receivedFuture.join());	
+		assertTrue("Listener failed to accept connections from sender in http mode.", checkHttpConnectionTask.join());	
 	}
 }

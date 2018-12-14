@@ -52,7 +52,7 @@ public final class CompletableFutureUtil {
 					if (timeout != null) {
 						cancelTask = executor.schedule(() -> future.cancel(true), timeout.toMillis(), TimeUnit.MILLISECONDS);
 						result = (T) future.get();
-						cancelTask.cancel(false);
+						cancelTask.cancel(true);
 					}
 					else {
 						result = (T) future.get();
