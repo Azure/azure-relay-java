@@ -307,8 +307,8 @@ public class HybridHttpConnection {
 //    			return closeRendezvousTask;
 //    }
     
-    private void closeRendezvous() {
-    	this.rendezvousWebSocket.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"));
+    private CompletableFuture<Void> closeRendezvousAsync() {
+    	return this.rendezvousWebSocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"));
     }
 
     static ListenerCommand.ResponseCommand createResponseCommand(RelayedHttpListenerContext listenerContext) {
@@ -549,8 +549,7 @@ public class HybridHttpConnection {
             }
 //            return closeTask;
             return sendTask.thenCompose((result) -> {
-            	closeRendezvous();
-				return CompletableFuture.completedFuture(null);
+				return closeRendezvousAsync();
 			});
         }
 

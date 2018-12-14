@@ -86,16 +86,17 @@ public class Main {
 		webSocketServer(listener);
 		webSocketClient();
 
-//        for (int i = 0; i < 10; i++) {
-//            httpGETAndSmallResponse(listener);
-//            httpGETAndLargeResponse(listener);
-//            httpSmallPOSTAndSmallResponse(listener);
-//            httpSmallPOSTAndLargeResponse(listener);
-//            httpLargePOSTAndSmallResponse(listener);
-//            httpLargePOSTAndLargeResponse(listener);
-//        }
+        for (int i = 0; i < 1; i++) {
+            httpGETAndSmallResponse(listener);
+            httpGETAndLargeResponse(listener);
+            httpSmallPOSTAndSmallResponse(listener);
+            httpSmallPOSTAndLargeResponse(listener);
+            httpLargePOSTAndSmallResponse(listener);
+            httpLargePOSTAndLargeResponse(listener);
+        }
 
 		System.out.println("done");
+		listener.closeAsync().join();
 	}
 	
 	private static void httpGETAndSmallResponse(HybridConnectionListener listener) throws IOException, InterruptedException, ExecutionException {
@@ -216,7 +217,7 @@ public class Main {
 				String msg = new String(bytesReceived.array());
 				System.out.println("Listener Received: " + msg);
 				websocket.sendAsync(msg);
-				listener.closeAsync();
+//				listener.closeAsync();
 			}
 		});
 	} 

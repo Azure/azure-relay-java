@@ -53,8 +53,7 @@ public class SendReceiveTest {
 	
 	@AfterClass
 	public static void cleanup() {
-		listener.closeAsync();
-		client.close();
+		listener.closeAsync().join();
 	}
 	
 	@Test
@@ -113,7 +112,7 @@ public class SendReceiveTest {
 	
 	@Test
 	public void httpLargePOSTAndLargeResponseTest() throws IOException, InterruptedException, ExecutionException {
-        listener.setRequestHandler((context) -> httpRequestHandler(context, largeStr, largeStr));
+		listener.setRequestHandler((context) -> httpRequestHandler(context, largeStr, largeStr));
         httpRequestSender("POST", largeStr, largeStr);
 	}
 	
@@ -145,10 +144,10 @@ public class SendReceiveTest {
 	
 	private static void httpRequestHandler(RelayedHttpListenerContext context, String msgExpected, String msgToSend) {
         // Do something with context.Request.Url, HttpMethod, Headers, InputStream...
-        RelayedHttpListenerResponse response = context.getResponse();
+		RelayedHttpListenerResponse response = context.getResponse();
         response.setStatusCode(statusCode);
         response.setStatusDescription("OK");
-        
+
         String receivedText = (context.getRequest().getInputStream() != null) ? new String(context.getRequest().getInputStream().array()) : "";
         assertEquals("Listener did not received the expected message from http connection.", msgExpected, receivedText);
 
@@ -166,6 +165,7 @@ public class SendReceiveTest {
 		urlBuilder.replace(0, 5, "https://");
 		URL url = new URL(urlBuilder.toString());
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
+		
 		
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
 		conn.setRequestMethod(method);

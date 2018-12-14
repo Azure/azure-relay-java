@@ -30,23 +30,12 @@ public class HybridConnectionListenerTest {
 		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
 		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
 		clientWebSocket = new ClientWebSocket();
+		listener.openAsync(Duration.ofSeconds(15)).join();
 	}
 	
 	@AfterClass
 	public static void cleanup() {
-		listener.closeAsync();
-		client.close();
-	}
-	
-	@Before
-	public void connectListener() throws URISyntaxException {
-		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		listener.openAsync(Duration.ofSeconds(15)).join();
-	}
-	
-	@After
-	public void closeListener() {
-		listener.closeAsync();
+		listener.closeAsync().join();
 	}
 	
 	@Test
@@ -58,6 +47,8 @@ public class HybridConnectionListenerTest {
 	public void closeAsyncTest() throws URISyntaxException {
 		listener.closeAsync();
 		assertFalse(listener.isOnline());
+		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+		listener.openAsync(Duration.ofSeconds(15)).join();
 	}
 	
 	@Test
@@ -77,6 +68,7 @@ public class HybridConnectionListenerTest {
 		int status = HttpStatus.ACCEPTED_202;
 
 		listener.setRequestHandler((context) -> {
+//			System.out.println("received request");
 			RelayedHttpListenerResponse response = context.getResponse();
             response.setStatusCode(status);
             
@@ -95,6 +87,7 @@ public class HybridConnectionListenerTest {
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
 		
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+//		System.out.println("opened connection");
 		conn.setRequestMethod("GET");
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
 

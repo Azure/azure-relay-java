@@ -363,6 +363,8 @@ public class HybridConnectionListener {
 	// <param name="cancellationToken">A cancellation token to observe.</param>
 	// TODO: cancellationtoken param
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
+		CompletableFuture<Void> closeControlTask = new CompletableFuture<Void>();
+		CompletableFuture<Void> closeRendezvousTask = new CompletableFuture<Void>();
         try {
         	List<ClientWebSocket> clients;
             synchronized (this.thisLock) {
@@ -401,8 +403,8 @@ public class HybridConnectionListener {
                 
                 this.isOnline = false;
             }
-
-            clients.forEach(client -> client.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
+            
+            clients.forEach(client -> client.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
 
             // TODO: trace
 //            RelayEventSource.Log.ObjectClosed(this);
@@ -415,13 +417,15 @@ public class HybridConnectionListener {
         }
         finally {
             this.connectionInputQueue.dispose();
-            this.controlConnection.closeAsync(null);
+            closeControlTask = this.controlConnection.closeAsync(null);
             CompletableFutureUtil.cleanup();
             if (this.rendezvousConnection != null && this.rendezvousConnection.isOpen()) {
-            	this.rendezvousConnection.close(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing rendezvous normally."));
+            	closeRendezvousTask = this.rendezvousConnection.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing rendezvous normally."));
+            } else {
+            	closeRendezvousTask = CompletableFuture.completedFuture(null);
             }
         }
-        return CompletableFuture.completedFuture(null);
+        return CompletableFuture.allOf(closeControlTask, closeRendezvousTask);
     }
 
 	// <summary>
@@ -497,7 +501,6 @@ public class HybridConnectionListener {
 		ListenerCommand listenerCommand = new ListenerCommand(jsonObj);
 
         if (listenerCommand.getAccept() != null) {
-        	System.out.println("Listener received accept command.");
         	try {
 				this.onAcceptCommandAsync(listenerCommand.getAccept());
 			} catch (URISyntaxException e) {
@@ -506,7 +509,6 @@ public class HybridConnectionListener {
 			}      
         }
         else if (listenerCommand.getRequest() != null) {
-        	System.out.println("Listener received request command.");
         	HybridHttpConnection httpConnection = new HybridHttpConnection();
         	httpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
         }
@@ -729,15 +731,16 @@ public class HybridConnectionListener {
             // Start a clean close by first calling CloseOutputAsync. The finish (CloseAsync) happens when
             // the receive pump task finishes working.
             if (connectTask != null) {
-                this.sendAsyncLock.lockAsync(duration).thenRunAsync(() -> {
+                return this.sendAsyncLock.lockAsync(duration).thenCompose((lockRelease) -> {
                 	CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");
-                	this.webSocket.close(reason);
+                	lockRelease.release();
+                	return this.webSocket.closeAsync(reason);
                 });
             }
 
-            if (this.receiveTask != null) {
-                return this.receiveTask;
-            }
+//            if (this.receiveTask != null) {
+//                return this.receiveTask;
+//            }
             return CompletableFuture.completedFuture(null);
         }
 
@@ -842,7 +845,7 @@ public class HybridConnectionListener {
         }
 
 		// TODO: cancellationtoken param
-		private void closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
+		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
 			
 //			// TODO: fx
 ////            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
@@ -855,16 +858,16 @@ public class HybridConnectionListener {
             }
 
             try {
-                connectTask.thenRun(() -> this.webSocket.close(reason));
                 this.isOnline = false;
                 this.receiveTask.cancel(true);
+                return connectTask.thenRun(() -> this.webSocket.closeAsync(reason));
             }
             catch (Exception e)
 //            when (!Fx.IsFatal(e))
             {
             	// TODO: trace
 //                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
-                this.webSocket.close(null);
+                return this.webSocket.closeAsync(null);
             }
         }
 
@@ -910,7 +913,7 @@ public class HybridConnectionListener {
 //	                	CompletableFuture<String> receivedMessage = this.webSocket.receiveControlMessageAsync();
 	                	String receivedMessage = this.webSocket.receiveControlMessageAsync().get();
 	                    
-	                    if (this.webSocket.getCloseReason() != null) {
+	                    if (!this.webSocket.isOpen()) {
 	                        this.closeOrAbortWebSocketAsync(connectTask, this.webSocket.getCloseReason());
 	                        if (this.listener.closeCalled) {
 	                            // This is the cloud service responding to our clean shutdown.

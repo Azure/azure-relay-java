@@ -39,6 +39,7 @@ public class ClientWebSocket {
 	private CloseReason closeReason;
 	private InputQueue<MessageFragment> messageQueue;
 	private InputQueue<String> controlMessageQueue;
+	private CompletableFuture<Void> closeTask = new CompletableFuture<Void>();
 	
 	public Consumer<String> getOnMessage() {
 		return onMessage;
@@ -94,6 +95,7 @@ public class ClientWebSocket {
 			try {
 				this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 				this.session = this.container.connectToServer(this, uri);
+				this.closeTask = new CompletableFuture<Void>();
 			} catch (DeploymentException | IOException e) {
 				throw new RuntimeException("connection to the server failed.");
 			}
@@ -104,7 +106,6 @@ public class ClientWebSocket {
 	}
 	
 	public boolean isOpen() {
-		boolean isit = this.session.isOpen();
 		return ((LifeCycle)this.container).isRunning() && this.session != null && this.session.isOpen();
 	}
 	
@@ -183,9 +184,9 @@ public class ClientWebSocket {
 		});
 	}
 	
-	public void close(CloseReason reason) {
+	public CompletableFuture<Void> closeAsync(CloseReason reason) {
 		if (this.session == null || !this.session.isOpen()) {
-			return;
+			return this.closeTask;
 		}
 		try {
 			if (reason != null) {
@@ -195,7 +196,8 @@ public class ClientWebSocket {
 			}
 		} catch (Exception e) {
 			throw new RuntimeIOException("something went wrong when trying to close the websocket.");
-		}	
+		}
+		return this.closeTask;
 	}
 	
     @OnOpen
@@ -227,15 +229,15 @@ public class ClientWebSocket {
     @OnClose
     public void onWebSocketClose(CloseReason reason) {
     	try {
-	    	System.out.println("Close reason: " + reason.getReasonPhrase());
 	    	this.closeReason = reason;
+	    	this.closeTask.complete(null);
 	    	((LifeCycle) this.container).stop();
-	    	if (this.closeReason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
+	    	if (reason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
 	    		throw new RuntimeIOException("did not close properly");
 	    	}
     	}
     	catch (Exception e) {
-    		System.out.println(e.getMessage());
+//    		System.out.println("Error: " + reason.getCloseCode() + ", " + reason.getReasonPhrase());
     	}
     	if (this.onDisconnect != null) {
     		this.onDisconnect.accept(reason);
