@@ -76,10 +76,6 @@ public class Main {
 		
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
 		HybridConnectionListener listener = new HybridConnectionListener(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
-		
-		listener.setConnectingHandler((o, e) -> System.out.println("Connecting handler"));
-        listener.setOfflineHandler((o, e) -> System.out.println("Offline handler"));
-        listener.setOnlineHandler((o, e) -> System.out.println("Online handler"));
         
         listener.openAsync().get();
         

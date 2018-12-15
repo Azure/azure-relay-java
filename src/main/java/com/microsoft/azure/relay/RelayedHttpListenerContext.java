@@ -109,7 +109,7 @@ public class RelayedHttpListenerContext {
     	
         return CompletableFutureUtil.timedRunAsync(ACCEPT_TIMEOUT, () -> {
 			try {
-				webSocket.connectAsync(rejectURI);
+				webSocket.connectAsync(rejectURI).join();
 				// TODO: exception
 //	            WebException webException;
 //	            HttpWebResponse httpWebResponse;
@@ -124,14 +124,7 @@ public class RelayedHttpListenerContext {
 //	            RelayEventSource.Log.HandledExceptionAsWarning(this, e);
 			}
 	        finally {
-	            if (webSocket.getSession() != null) {
-	            	try {
-	            		webSocket.getSession().close();
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-	            };
+	           webSocket.closeAsync().join();
 	        }
         });
     }

@@ -39,27 +39,6 @@ public class ClientWebSocket {
 	private InputQueue<String> controlMessageQueue;
 	private CompletableFuture<Void> closeTask = new CompletableFuture<Void>();
 	
-	public Consumer<String> getOnMessage() {
-		return onMessage;
-	}
-	public void setOnMessage(Consumer<String> onMessage) {
-		this.onMessage = onMessage;
-	}
-	public Consumer<Session> getOnConnect() {
-		return onConnect;
-	}
-	public void setOnConnect(Consumer<Session> onConnect) {
-		this.onConnect = onConnect;
-	}
-	public Consumer<CloseReason> getOnDisconnect() {
-		return onDisconnect;
-	}
-	public void setOnDisconnect(Consumer<CloseReason> onDisconnect) {
-		this.onDisconnect = onDisconnect;
-	}
-	public Session getSession() {
-		return this.session;
-	}
 	public CloseReason getCloseReason() {
 		return this.closeReason;
 	}
@@ -180,6 +159,10 @@ public class ClientWebSocket {
 		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 			remote.sendText(command);
 		});
+	}
+	
+	public CompletableFuture<Void> closeAsync() {
+		return this.closeAsync(null);
 	}
 	
 	public CompletableFuture<Void> closeAsync(CloseReason reason) {

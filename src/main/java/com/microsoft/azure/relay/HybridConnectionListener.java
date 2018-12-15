@@ -86,21 +86,6 @@ public class HybridConnectionListener {
 	// implementation is used.
 	// </summary>
 	private boolean useBuiltInClientWebSocket;
-	
-	// <summary>
-	// Raised when the Listener is attempting to reconnect with ServiceBus after a connection loss.
-	// </summary>
-	private BiConsumer<Object, Object[]> onConnecting;
-
-	// <summary>
-	// Raised when the Listener has successfully connected with ServiceBus
-	// </summary>
-	private BiConsumer<Object, Object[]> onOnline;
-
-	// <summary>
-	// Raised when the Listener will no longer be attempting to (re)connect with ServiceBus.
-	// </summary>
-	private BiConsumer<Object, Object[]> onOffline;
 
 	public boolean isOnline() {
 		return this.isOnline;
@@ -165,30 +150,6 @@ public class HybridConnectionListener {
 
 	public void setMaxWebSocketBufferSize(int maxWebSocketBufferSize) {
 		this.maxWebSocketBufferSize = maxWebSocketBufferSize;
-	}
-
-	public BiConsumer<Object, Object[]> getConnectingHandler() {
-		return onConnecting;
-	}
-
-	public void setConnectingHandler(BiConsumer<Object, Object[]> onConnecting) {
-		this.onConnecting = onConnecting;
-	}
-
-	public BiConsumer<Object, Object[]> getOnlineHandler() {
-		return onOnline;
-	}
-
-	public void setOnlineHandler(BiConsumer<Object, Object[]> onOnline) {
-		this.onOnline = onOnline;
-	}
-
-	public BiConsumer<Object, Object[]> getOfflineHandler() {
-		return onOffline;
-	}
-
-	public void setOfflineHandler(BiConsumer<Object, Object[]> onOffline) {
-		this.onOffline = onOffline;
 	}
 	
 	// <summary>
@@ -318,11 +279,6 @@ public class HybridConnectionListener {
             this.throwIfReadOnly();
             this.openCalled = true;
         }
-
-        // Hookup IConnectionStatus events
-        this.controlConnection.setConnectingHandler((s, e) -> this.onConnectionStatus(this.onConnecting, s, e));
-        this.controlConnection.setOnlineHandler((s, e) -> this.onConnectionStatus(this.onOnline, s, e));
-        this.controlConnection.setOfflineHandler((s, e) -> this.onConnectionStatus(this.onOffline, s, e));
 
         return this.controlConnection.openAsync(timeout).thenRun(() -> this.isOnline = true);
     }
@@ -816,8 +772,7 @@ public class HybridConnectionListener {
 					throw new IllegalArgumentException("uri is invalid.");
 				}
 				
-				this.webSocket.setOnConnect((sess) -> this.onOnline());
-				return this.webSocket.connectAsync(websocketUri);
+				return this.webSocket.connectAsync(websocketUri).thenRun(() -> this.onOnline());
                 
 //                // TODO: trace
 ////                RelayEventSource.Log.ObjectConnected(this.listener);
