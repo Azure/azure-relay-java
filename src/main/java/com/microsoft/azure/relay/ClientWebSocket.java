@@ -5,7 +5,6 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,7 +33,6 @@ public class ClientWebSocket {
 	private Consumer<String> onMessage;
 	private Consumer<CloseReason> onDisconnect;
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
-	private Object thisLock = new Object();
 	private int maxMessageBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
 	private CloseReason closeReason;
 	private InputQueue<MessageFragment> messageQueue;

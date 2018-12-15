@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 public final class InputQueue<T extends Object> {
@@ -23,7 +22,6 @@ public final class InputQueue<T extends Object> {
 
     // Properties
     private int pendingCount;
-    private int readersQueueCount;
     // Users like ServiceModel can hook this abort ICommunicationObject or handle other non-IDisposable objects
     private Consumer<T> disposeItemCallback;
     
@@ -363,8 +361,7 @@ public final class InputQueue<T extends Object> {
         item.getDequeuedCallback().accept(item.getValue());
     }
 
-    @SuppressWarnings("unchecked")
-	void enqueueAndDispatch(Item item, boolean canDispatchOnThisThread) {
+    void enqueueAndDispatch(Item item, boolean canDispatchOnThisThread) {
         boolean disposeItem = false;
         CompletableFuture<T> reader = null;
         boolean dispatchLater = false;

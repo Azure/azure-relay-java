@@ -14,11 +14,7 @@ public class TimeoutHelper {
     	this(timeout, false);
     }
 
-    public TimeoutHelper(Duration timeout, boolean startTimeout)
-    {
-    	// TODO: assert
-//        Fx.Assert(timeout >= Duration.ZERO, "timeout must be non-negative");
-
+    public TimeoutHelper(Duration timeout, boolean startTimeout) {
         this.originalTimeout = timeout;
         this.deadline = LocalDateTime.MAX;
         this.deadlineSet = (timeout != null && !isMaxDuration(timeout));
@@ -32,11 +28,6 @@ public class TimeoutHelper {
     public Duration getOriginalTimeout() {
     	return this.originalTimeout;
     }
-    
-//    public static boolean IsTooLarge(Duration timeout)
-//    {
-//        return (timeout > TimeoutHelper.MAXWAIT) && (timeout != Duration.MaxValue);
-//    }
 
     public static Duration fromMillis(int milliseconds) {
         if (milliseconds >= Integer.MAX_VALUE) {
@@ -94,49 +85,31 @@ public class TimeoutHelper {
         return temp;
     }
 
-    	// TODO: no need for this, use divideBy
-//    public static Duration Divide(Duration timeout, int factor)
-//    {
-//        if (timeout == Duration.MaxValue)
-//        {
-//            return Duration.MaxValue;
-//        }
-//
-//        return new Duration((timeout.Ticks / factor) + 1);
-//    }
-
-    public Duration remainingTime()
-    {
-        if (!this.deadlineSet)
-        {
+    public Duration remainingTime() {
+        if (!this.deadlineSet) {
             this.setDeadline();
             return this.originalTimeout;
         }
-        else if (this.deadline == LocalDateTime.MAX)
-        {
+        else if (this.deadline == LocalDateTime.MAX) {
             return RelayConstants.MAX_DURATION;
         }
-        else
-        {
+        else {
             Duration remaining = Duration.between(LocalDateTime.now(), this.deadline);
             return (remaining.compareTo(Duration.ZERO) < 0) ? Duration.ZERO : remaining;
         }
     }
 
-    public Duration elapsedTime()
-    {
+    public Duration elapsedTime() {
         return this.originalTimeout.minus(this.remainingTime());
     }
 
-    private void setDeadline()
-    {
+    private void setDeadline() {
     	// TODO: assert
 //        Fx.Assert(!deadlineSet, "TimeoutHelper deadline set twice.");
         this.deadline = add(LocalDateTime.now(), this.originalTimeout);
         this.deadlineSet = true;
     }
 
-    // TODO: trace
     public static void throwIfNegativeArgument(Duration timeout) {
         throwIfNegativeArgument(timeout, "timeout");
     }

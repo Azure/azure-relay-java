@@ -1,11 +1,8 @@
 package com.microsoft.azure.relay;
 
-import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
-
-import javax.websocket.Session;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.RuntimeIOException;

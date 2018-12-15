@@ -5,8 +5,6 @@ package com.microsoft.azure.relay;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.io.IOException;
-import java.lang.reflect.Array;
 import java.net.Proxy;
 import java.time.Duration;
 import java.util.Arrays;
@@ -15,19 +13,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.CompletionException;
 
 import javax.websocket.CloseReason;
-import javax.websocket.ContainerProvider;
-import javax.websocket.DeploymentException;
-import javax.websocket.Session;
-import javax.websocket.WebSocketContainer;
 import javax.websocket.CloseReason.CloseCodes;
-
-import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
-import org.eclipse.jetty.websocket.client.WebSocketClient;
-import org.eclipse.jetty.websocket.common.WebSocketSession;
 
 
 public class HybridConnectionClient {

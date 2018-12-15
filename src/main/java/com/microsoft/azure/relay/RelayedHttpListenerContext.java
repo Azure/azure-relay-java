@@ -10,12 +10,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
-import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
-import javax.websocket.WebSocketContainer;
-
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.websocket.client.WebSocketClient;
 
 public class RelayedHttpListenerContext {
     private static final Duration ACCEPT_TIMEOUT = Duration.ofSeconds(20);
@@ -138,15 +134,6 @@ public class RelayedHttpListenerContext {
 	            };
 	        }
         });
-    }
-
-    private WebSocketContainer createWebSocket() {
-    	WebSocketContainer container = ContainerProvider.getWebSocketContainer();
-    	container.setDefaultMaxSessionIdleTimeout(HybridConnectionConstants.KEEP_ALIVE_INTERVAL.toMillis());
-    	return container;
-
-        // TODO: proxy
-//      clientWebSocket.Options.Proxy = this.Listener.Proxy;
     }
 
     private void FlowSubProtocol() {

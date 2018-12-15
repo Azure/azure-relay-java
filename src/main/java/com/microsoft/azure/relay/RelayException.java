@@ -1,5 +1,6 @@
 package com.microsoft.azure.relay;
 
+@SuppressWarnings("serial")
 public class RelayException extends Exception {
 	
     /// <summary>A value indicating whether the exception is transient. Check this property

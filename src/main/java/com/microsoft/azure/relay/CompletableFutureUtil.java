@@ -2,20 +2,13 @@ package com.microsoft.azure.relay;
 
 import java.time.Duration;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.CompletionException;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Supplier;
-
-import javax.websocket.Session;
 
 public final class CompletableFutureUtil {
 	protected static ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));

@@ -1,44 +1,32 @@
 package com.microsoft.azure.relay;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
-
-import javax.management.RuntimeErrorException;
 import javax.websocket.CloseReason;
-import javax.websocket.CloseReason.CloseCode;
 import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.json.JSONObject;
 
 import com.microsoft.azure.relay.AsyncLock.LockRelease;
-import com.microsoft.azure.relay.ListenerCommand.RequestCommand;
 
 public class HybridHttpConnection {
 	private static final int MAX_CONTROL_CONNECTION_BODY_SIZE = 64 * 1024;
-    private static final int BUFFER_SIZE = 8 * 1024;
     private final HybridConnectionListener listener;
     private final ClientWebSocket controlWebSocket;
     private final URI rendezvousAddress;
     private ClientWebSocket rendezvousWebSocket;
     private TrackingContext trackingContext;
-    private Duration operationTimeout;
     private ListenerCommand.RequestCommand requestCommand;
     
     private enum FlushReason { BUFFER_FULL, RENDEZVOUS_EXISTS, TIMER }
@@ -158,7 +146,6 @@ public class HybridHttpConnection {
     	}).thenCompose((commandJson) -> {
 			JSONObject jsonObj = new JSONObject(commandJson);
 			this.requestCommand = new ListenerCommand(jsonObj).getRequest();
-			ByteBuffer requestStream = null;
 			 
 			if (this.requestCommand != null && this.requestCommand.hasBody()) {
 	        	// TODO: trace
@@ -505,8 +492,7 @@ public class HybridHttpConnection {
             if (this.closed) {
                 return CompletableFuture.completedFuture(null);
             }
-            
-            CompletableFuture<Void> closeTask;
+
             CompletableFuture<Void> sendTask = null;
             try {
             	// TODO: trace

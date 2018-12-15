@@ -4,7 +4,6 @@ import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.ProtocolException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -12,9 +11,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.jetty.http.HttpStatus;
-import org.junit.After;
 import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -22,14 +19,12 @@ public class HybridConnectionListenerTest {
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
-	private static ClientWebSocket clientWebSocket;
 	
 	@BeforeClass
 	public static void init() throws URISyntaxException {
 		tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(TestUtil.KEY_NAME, TestUtil.KEY);
 		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
 		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		clientWebSocket = new ClientWebSocket();
 		listener.openAsync(Duration.ofSeconds(15)).join();
 	}
 	

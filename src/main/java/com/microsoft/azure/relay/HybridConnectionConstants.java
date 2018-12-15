@@ -19,14 +19,6 @@ public final class HybridConnectionConstants {
     public static final String SAS_KEY = QUERY_STRING_KEY_PREFIX + "sas-key"; // sb-hc-sas-key
 
     public static final Duration KEEP_ALIVE_INTERVAL = Duration.ofMinutes((long) 3.5);
-//    public static final String CLIENT_AGENT = "azure-relay-dotnet/" + LookupFileVersion();
-//
-//    static String LookupFileVersion()
-//    {
-//        var a = typeof(HybridConnectionConstants).GetTypeInfo().Assembly;
-//        var attribute = a.GetCustomAttribute<AssemblyFileVersionAttribute>();
-//        return attribute.Version;
-//    }
 
     public static class Actions
     {

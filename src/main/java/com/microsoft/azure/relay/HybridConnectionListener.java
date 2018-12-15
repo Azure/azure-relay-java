@@ -1,19 +1,14 @@
 package com.microsoft.azure.relay;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Field;
 import java.net.Proxy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -23,21 +18,10 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import javax.websocket.ClientEndpoint;
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
-import javax.websocket.ContainerProvider;
 import javax.websocket.DeploymentException;
-import javax.websocket.OnClose;
-import javax.websocket.OnError;
-import javax.websocket.OnMessage;
-import javax.websocket.OnOpen;
-import javax.websocket.Session;
-import javax.websocket.WebSocketContainer;
-
 import org.eclipse.jetty.io.RuntimeIOException;
-import org.eclipse.jetty.websocket.api.WebSocketAdapter;
-import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 import org.json.JSONObject;
 
 public class HybridConnectionListener {
@@ -102,11 +86,6 @@ public class HybridConnectionListener {
 	// implementation is used.
 	// </summary>
 	private boolean useBuiltInClientWebSocket;
-
-	// <summary>
-	// Gets or sets the connection buffer size. Default value is 64K.
-	// </summary>
-	private int connectionBufferSize;
 	
 	// <summary>
 	// Raised when the Listener is attempting to reconnect with ServiceBus after a connection loss.
@@ -633,7 +612,7 @@ public class HybridConnectionListener {
 //		private CancellationToken closeCancellationToken;
 		private final HybridConnectionListener listener;
 		private final URI address;
-		private final String path;
+		private String path;
 		private final TokenRenewer tokenRenewer;
 		private final AsyncLock sendAsyncLock;
 		private CompletableFuture<Void> connectAsyncTask;
@@ -956,7 +935,7 @@ public class HybridConnectionListener {
 
 			// TODO: trace
 //			RelayEventSource.Log.Info(this.listener,"Online");
-			if (this.onlineHandler != null ) {
+			if (this.onlineHandler != null) {
 				this.onlineHandler.accept(this, null);
 			}
 		}
