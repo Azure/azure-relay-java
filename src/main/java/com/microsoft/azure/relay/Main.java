@@ -81,18 +81,18 @@ public class Main {
         listener.openAsync().get();
         
 		webSocketServer(listener);
-//		webSocketClient();
-//
-//        for (int i = 0; i < 1; i++) {
-//            httpGETAndSmallResponse(listener);
-//            httpGETAndLargeResponse(listener);
-//            httpSmallPOSTAndSmallResponse(listener);
-//            httpSmallPOSTAndLargeResponse(listener);
-//            httpLargePOSTAndSmallResponse(listener);
-//            httpLargePOSTAndLargeResponse(listener);
-//        }
-//
-//		listener.closeAsync().join();
+		webSocketClient();
+
+        for (int i = 0; i < 1; i++) {
+            httpGETAndSmallResponse(listener);
+            httpGETAndLargeResponse(listener);
+            httpSmallPOSTAndSmallResponse(listener);
+            httpSmallPOSTAndLargeResponse(listener);
+            httpLargePOSTAndSmallResponse(listener);
+            httpLargePOSTAndLargeResponse(listener);
+        }
+
+		listener.closeAsync().join();
 		
 		long endTime = System.currentTimeMillis();
 		System.out.println("Execution used " + ((endTime - startTime)) + " ms.");

@@ -29,9 +29,6 @@ import org.eclipse.jetty.util.component.LifeCycle;
 @ClientEndpoint(configurator = HybridConnectionEndpointConfigurator.class)
 public class ClientWebSocket {
 	private Session session;
-	private Consumer<Session> onConnect;
-	private Consumer<String> onMessage;
-	private Consumer<CloseReason> onDisconnect;
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private int maxMessageBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
 	private CloseReason closeReason;
@@ -93,7 +90,7 @@ public class ClientWebSocket {
 			} catch (DeploymentException | IOException e) {
 				throw new RuntimeException("connection to the server failed.");
 			}
-			if (this.session == null) {
+			if (this.session == null || !this.session.isOpen()) {
 				throw new RuntimeException("connection to the server failed.");
 			}
 		});
@@ -231,9 +228,6 @@ public class ClientWebSocket {
     @OnOpen
     public void onWebSocketConnect(Session sess) {
         this.closeReason = null;
-        if (this.onConnect != null) {
-        	this.onConnect.accept(sess);
-        }
     }
     
     // Handles binary data sent to the listener
@@ -241,11 +235,6 @@ public class ClientWebSocket {
     public void onWebSocketBytes(byte[] inputBuffer, boolean isEnd) {
     	MessageFragment fragment = new MessageFragment(inputBuffer, isEnd);
         this.messageQueue.enqueueAndDispatch(fragment);
-    	
-		if (isEnd && this.onMessage != null) {
-			String msg = new String(inputBuffer);
-			this.onMessage.accept(msg);
-		}
     }
     
     // Handles text from control message
@@ -256,19 +245,13 @@ public class ClientWebSocket {
     
     @OnClose
     public void onWebSocketClose(CloseReason reason) {
+    	this.closeReason = reason;
+    	this.closeTask.complete(null);
     	try {
-	    	this.closeReason = reason;
-	    	this.closeTask.complete(null);
-	    	((LifeCycle) this.container).stop();
-	    	if (reason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
-	    		throw new RuntimeIOException("did not close properly");
-	    	}
-    	}
-    	catch (Exception e) {
-//    		System.out.println("Error: " + reason.getCloseCode() + ", " + reason.getReasonPhrase());
-    	}
-    	if (this.onDisconnect != null) {
-    		this.onDisconnect.accept(reason);
+			((LifeCycle) this.container).stop();
+		} catch (Exception e) { }
+    	if (reason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
+    		throw new RuntimeIOException("did not close properly");
     	}
     }
     
