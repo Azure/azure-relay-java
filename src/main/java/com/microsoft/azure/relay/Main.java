@@ -59,7 +59,7 @@ public class Main {
 	private static HybridConnectionListener listener;
 	
 	static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
-	static final Map<String, String> connectionParams = StringUtil.parseConnectionString(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
+	static final Map<String, String> connectionParams = HybridConnectionUtil.parseConnectionString(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
 	static final String RELAY_NAME_SPACE = connectionParams.get("Endpoint");
 	static final String CONNECTION_STRING = connectionParams.get("EntityPath");
 	static final String KEY_NAME = connectionParams.get("SharedAccessKeyName");

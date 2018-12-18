@@ -7,7 +7,7 @@ import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
 
-final class HybridConnectionUtil {
+public final class HybridConnectionUtil {
 	
 	// Equivalent of URI.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped)
     protected static String getAudience(URI uri) {
@@ -34,12 +34,12 @@ final class HybridConnectionUtil {
     	return audience.toString();
     }
     
-    protected static URI BuildUri(String host, int port, String path, String query, String action, String id) throws URISyntaxException {
+    public static URI BuildUri(String host, int port, String path, String query, String action, String id) throws URISyntaxException {
         if (path.charAt(0) != '/') {
             path = "/" + path;
         }
 
-        query = BuildQueryString(query, action, id);
+        query = buildQueryString(query, action, id);
         return new URI(
         	HybridConnectionConstants.SECURE_WEBSOCKET_SCHEME,
         	null,
@@ -51,8 +51,7 @@ final class HybridConnectionUtil {
         );
     }
     
-    protected static String BuildQueryString(String existingQueryString, String action, String id)
-    {
+    public static String buildQueryString(String existingQueryString, String action, String id) {
         StringBuilder buffer = new StringBuilder();
 
         if (!StringUtil.isNullOrEmpty(existingQueryString))
@@ -70,7 +69,7 @@ final class HybridConnectionUtil {
         return buffer.toString();
     }
     
-    protected static String filterQueryString(String queryString) {
+    public static String filterQueryString(String queryString) {
         
     	if (StringUtil.isNullOrEmpty(queryString)) {
             return "";
@@ -103,8 +102,20 @@ final class HybridConnectionUtil {
 
         return sb.toString();
     }
+
+    public static Map<String, String> parseConnectionString(String connectionString) {
+    	HashMap<String, String> map = new HashMap<String, String>();
+    	if (connectionString != null) {
+    		for (String pair : connectionString.split(";")) {
+    			// Not using split with "=" because the value may contain "="
+    			int index = pair.indexOf("=");
+    			map.put(pair.substring(0, index), pair.substring(index + 1));
+    		}
+    	}
+    	return map;
+    }
     
-    protected static Map<String, String> parseQueryString(String query) {
+    public static Map<String, String> parseQueryString(String query) {
     	Map<String, String> map = new HashMap<String, String>();
     	
     	if (StringUtil.isNullOrEmpty(query)) {

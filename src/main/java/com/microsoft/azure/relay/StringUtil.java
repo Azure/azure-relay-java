@@ -16,16 +16,4 @@ final class StringUtil {
     protected static boolean isNullOrEmpty(String s) {
     	return s == null || s.isEmpty();
     }
-
-    protected static Map<String, String> parseConnectionString(String connectionString) {
-    	HashMap<String, String> map = new HashMap<String, String>();
-    	if (connectionString != null) {
-    		for (String pair : connectionString.split(";")) {
-    			int index = pair.indexOf("=");
-    			map.put(pair.substring(0, index), pair.substring(index + 1));
-    		}
-    	}
-    	return map;
-    }
-    
 }

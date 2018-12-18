@@ -4,7 +4,7 @@ import java.util.Map;
 
 public class TestUtil {
 	public static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
-	static Map<String, String> connectionParams = StringUtil.parseConnectionString(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
+	static Map<String, String> connectionParams = HybridConnectionUtil.parseConnectionString(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
 	public static final String RELAY_NAME_SPACE = connectionParams.get("Endpoint");
 	public static final String CONNECTION_STRING = connectionParams.get("EntityPath");
 	public static final String KEY_NAME = connectionParams.get("SharedAccessKeyName");
