@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 import javax.websocket.ClientEndpointConfig;
 
-class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
+public class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
 	private static Map<String, List<String>> currentHeaders;
 	
 	protected static Map<String, List<String>> getHeaders() {
