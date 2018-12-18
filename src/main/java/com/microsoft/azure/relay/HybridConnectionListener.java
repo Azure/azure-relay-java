@@ -36,63 +36,47 @@ public class HybridConnectionListener {
 	private Object thisLock = new Object();
 	private boolean shouldAccept;
 
-	// <summary>Gets a value that determines whether the connection is
-	// online.</summary>
-	// <value>true if the connection is alive and online; false if there
-	// is no connectivity towards the Azure Service Bus from the current network
-	// location.</value>
+	/** 
+	 * Gets a value that determines whether the connection is online.
+	 * True if the connection is alive and online; False if there is no connectivity 
+	 * towards the Azure Service Bus from the current network location.
+	 */
 	private boolean isOnline;
 
-	// <summary>Retrieves the last error encountered when trying to reestablish the
-	// connection from the offline state.</summary>
-	// <value>Returns a <see cref="System.Exception" /> that contains the last
-	// error.</value>
-	private Exception lastError;
-
-	// <summary>
-	// Allows installing a custom handler which can inspect request headers,
-	// control response headers,
-	// decide whether to accept or reject a web-socket upgrade request, and control
-	// the status code/description if rejecting.
-	// The AcceptHandler should return true to accept a client request or false to
-	// reject.
-	// </summary>
+	/**
+	 * Allows installing a custom handler which can inspect request headers, control response headers,
+	 * decide whether to accept or reject a web-socket upgrade request, and control the status code/description if rejecting.
+	 * The AcceptHandler should return true to accept a client request or false to reject.
+	 */
 	private Function<RelayedHttpListenerContext, Boolean> acceptHandler;
 
-	// <summary>
-	// Installs a handler for Hybrid Http Requests.
-	// </summary>
+	/**
+	 * A handler to run upon receiving Hybrid Http Requests.
+	 */
 	private Consumer<RelayedHttpListenerContext> requestHandler;
 
-	// <summary>
-	// Gets the address on which to listen for HybridConnections. This address
-	// should be of the format
-	// "sb://contoso.servicebus.windows.net/yourhybridconnection".
-	// </summary>
+	/**
+	 * The address on which to listen for HybridConnections. This address should be of the format "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 */
 	private URI address;
 
-	// <summary>
-	// Gets the TrackingContext for this listener.
-	// </summary>
+	/**
+	 * The TrackingContext for this listener.
+	 */
 	private TrackingContext trackingContext;
 
-	// <summary>
-	// Gets the TokenProvider for authenticating this HybridConnection listener.
-	// </summary>
+	/**
+	 * The TokenProvider for authenticating this HybridConnection listener.
+	 */
 	private TokenProvider tokenProvider;
 
-	// <summary>
-	// Controls whether the ClientWebSocket from .NET Core or a custom
-	// implementation is used.
-	// </summary>
+	/**
+	 * Controls whether the ClientWebSocket from .NET Core or a custom implementation is used.
+	 */
 	private boolean useBuiltInClientWebSocket;
 
 	public boolean isOnline() {
 		return this.isOnline;
-	}
-
-	public Exception getLastError() {
-		return this.lastError;
 	}
 
 	public Function<RelayedHttpListenerContext, Boolean> getAcceptHandler() {
@@ -152,16 +136,12 @@ public class HybridConnectionListener {
 		this.maxWebSocketBufferSize = maxWebSocketBufferSize;
 	}
 	
-	// <summary>
-	// Create a new HybridConnectionListener instance for accepting
-	// HybridConnections.
-	// </summary>
-	// <param name="address">The address on which to listen for HybridConnections.
-	// This address should
-	// be of the format
-	// "sb://contoso.servicebus.windows.net/yourhybridconnection".</param>
-	// <param name="tokenProvider">The TokenProvider for connecting this listener
-	// to ServiceBus.</param>
+	/**
+	 * Create a new HybridConnectionListener instance for accepting HybridConnections.
+	 * @param address The address on which to listen for HybridConnections. This address should be of the format 
+	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 * @param tokenProvider The TokenProvider for connecting this listener to ServiceBus.
+	 */
 	public HybridConnectionListener(URI address, TokenProvider tokenProvider) {
 		
 		if (address == null || tokenProvider == null) {
@@ -190,35 +170,33 @@ public class HybridConnectionListener {
 		this.useBuiltInClientWebSocket = HybridConnectionConstants.DEFAULT_USE_BUILTIN_CLIENT_WEBSOCKET;
 	}
 
-	// <summary>Creates a new instance of <see cref="HybridConnectionListener" />
-	// using the specified connection String.</summary>
-	// <param name="connectionString">The connection String to use. This connection
-	// String must include the EntityPath property.</param>
-	// <returns>The newly created <see cref="HybridConnectionListener" />
-	// instance.</returns>
-	// <exception cref="System.ArgumentException">Thrown when the format of the
-	// <paramref name="connectionString" /> parameter is incorrect.</exception>
+	/**
+	 * Create a new HybridConnectionListener instance for accepting HybridConnections.
+	 * @param connectionString The connection string to use. This connection string must include the EntityPath property.
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is incorrect
+	 */
 	public HybridConnectionListener(String connectionString) throws URISyntaxException {
 		this(connectionString, null, true);
 	}
 
-	// <summary>Creates a new instance of <see cref="HybridConnectionListener" />
-	// from a connection String and
-	// the specified HybridConection path. Use this overload only when the
-	// connection String does not use the
-	// <see cref="RelayConnectionStringBuilder.EntityPath" /> property.</summary>
-	// <param name="connectionString">The connection String used. This connection
-	// String must not include the EntityPath property.</param>
-	// <param name="path">The path to the HybridConnection.</param>
-	// <returns>The created <see cref="HybridConnectionListener" />.</returns>
-	// <exception cref="System.ArgumentException">Thrown when the format of the
-	// <paramref name="connectionString" /> parameter is incorrect.</exception>
+	/**
+	 * Creates a new instance of HybridConnectionListener from a connection string and the specified HybridConection path. 
+	 * Use this overload only when the connection string does not use the RelayConnectionStringBuilder.EntityPath property.
+	 * @param connectionString The connection String used. This connection string must not include the EntityPath property.
+	 * @param path The path to the HybridConnection.
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is incorrect
+	 */
 	public HybridConnectionListener(String connectionString, String path) throws URISyntaxException {
 		this(connectionString, path, false);
 	}
 
-	// This private .ctor handles both of the public overloads which take
-	// connectionString
+	/**
+	 * This private .ctor handles both of the public overloads which take connectionString
+	 * @param connectionString The connection String used. This connection string must not include the EntityPath property.
+	 * @param path path The path to the HybridConnection.
+	 * @param pathFromConnectionString True if path is implicitly defined in the connection string
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is incorrect
+	 */
 	HybridConnectionListener(String connectionString, String path, boolean pathFromConnectionString) throws URISyntaxException {
 		if (StringUtil.isNullOrWhiteSpace(connectionString)) {
 			// TODO: trace
@@ -258,19 +236,19 @@ public class HybridConnectionListener {
 		this.useBuiltInClientWebSocket = HybridConnectionConstants.DEFAULT_USE_BUILTIN_CLIENT_WEBSOCKET;
 	}
 
-	// <summary>
-	// Opens the <see cref="HybridConnectionListener"/> and registers it as a
-	// listener in ServiceBus.
-	// </summary>
+	/**
+	 * Opens the HybridConnectionListener and registers it as a listener in ServiceBus.
+	 * @return A CompletableFuture which completes when the control connection is established with the cloud service
+	 */
 	public CompletableFuture<Void> openAsync() {
 		return this.openAsync(this.operationTimeout);
     }
 	
-	// <summary>
-	// Opens the <see cref="HybridConnectionListener"/> and registers it as a
-	// listener in ServiceBus.
-	// </summary>
-	// <param name="timeout">A timeout to observe.</param>
+	/**
+	 * Opens the HybridConnectionListener and registers it as a listener in ServiceBus.
+	 * @param timeout The timeout duration for this openAsync operation
+	 * @return A CompletableFuture which completes when the control connection is established with the cloud service
+	 */
 	public CompletableFuture<Void> openAsync(Duration timeout) {
         TimeoutHelper.throwIfNegativeArgument(timeout);
         
@@ -283,20 +261,19 @@ public class HybridConnectionListener {
         return this.controlConnection.openAsync(timeout).thenRun(() -> this.isOnline = true);
     }
 
-	// <summary>
-	// Closes the <see cref="HybridConnectionListener"/> using the default timeout.
-	// Unless specified in the connection String the default is 1 minute.
-	// </summary>
+	/**
+	 * Disconnects all connections from the cloud service
+	 * @return A CompletableFuture which completes when all connections are disconnected with the cloud service
+	 */
 	public CompletableFuture<Void> closeAsync() {
 		return this.closeAsync(this.operationTimeout);
 	}
 
-	// <summary>
-	// Closes the <see cref="HybridConnectionListener"/> using the provided
-	// CancellationToken.
-	// </summary>
-	// <param name="cancellationToken">A cancellation token to observe.</param>
-	// TODO: cancellationtoken param
+	/**
+	 * Disconnects all connections from the cloud service within the timeout
+	 * @param timeout The timeout duration for this openAsync operation
+	 * @return A CompletableFuture which completes when all connections are disconnected with the cloud service
+	 */
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
 		CompletableFuture<Void> closeControlTask = new CompletableFuture<Void>();
 		CompletableFuture<Void> closeRendezvousTask = new CompletableFuture<Void>();
@@ -344,7 +321,7 @@ public class HybridConnectionListener {
             // TODO: trace
 //            RelayEventSource.Log.ObjectClosed(this);
         }
-        // TODO: fx
+        // TODO: Logging
         catch (Exception e) // when (!Fx.IsFatal(e))
         {
 //            RelayEventSource.Log.ThrowingException(e, this);
@@ -363,10 +340,10 @@ public class HybridConnectionListener {
         return CompletableFuture.allOf(closeControlTask, closeRendezvousTask);
     }
 
-	// <summary>
-	// Accepts a new HybridConnection which was initiated by a remote client and
-	// returns the Stream.
-	// </summary>
+	/**
+	 * Asynchronously wait for a websocket connection from the sender to be connected
+	 * @return A CompletableFuture which completes when aa websocket connection from the sender is connected
+	 */
 	public CompletableFuture<ClientWebSocket> acceptConnectionAsync() {
         synchronized (this.thisLock) {
             if (!this.openCalled) {
@@ -556,16 +533,13 @@ public class HybridConnectionListener {
 			handler.accept(sender,args);
 	}
 
-	// Connects, maintains, and transparently reconnects this listener's control
-	// connection with the cloud service.
-	public final class ControlConnection {
+	/**
+	 * Connects, maintains, and transparently reconnects this listener's control connection with the cloud service.
+	 */
+	final class ControlConnection {
 		// Retries after 0, 1, 2, 5, 10, 30 seconds
 		final Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
 				Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30) };
-
-		// TODO: cancellationtoken
-//		private final CancellationTokenSource shutdownCancellationSource;
-//		private CancellationToken closeCancellationToken;
 		private final HybridConnectionListener listener;
 		private final URI address;
 		private String path;
@@ -582,7 +556,7 @@ public class HybridConnectionListener {
 		private ClientWebSocket webSocket;
 		private Object thisLock = new Object();
 		
-		public boolean isOnline() {
+		boolean isOnline() {
 			return isOnline;
 		}
 
@@ -614,18 +588,22 @@ public class HybridConnectionListener {
 			this.onlineHandler = onOnline;
 		}
 
-		public ControlConnection(HybridConnectionListener listener) {
+		ControlConnection(HybridConnectionListener listener) {
 			this.listener = listener;
 			this.address = listener.address;
 			String rawPath = this.address.getPath();
 			this.path = (rawPath.startsWith("/")) ? rawPath.substring(1) : rawPath;
-//			this.shutdownCancellationSource = new CancellationTokenSource();
 			this.sendAsyncLock = new AsyncLock();
 			this.tokenRenewer = new TokenRenewer(this.listener, this.address.toString(), TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 			this.webSocket = new ClientWebSocket();
 		}
 
-		// TODO: cancellationtoken
+		/**
+		 * Establish websocket connection between the control websocket and the cloud service, then start receiving command messages
+		 * @param timeout The timeout to connect to cloud service within
+		 * @return Returns a completableFuture which completes when websocket connection is 
+		 * 		established between the control websocket and the cloud service
+		 */
 		public CompletableFuture<Void> openAsync(Duration timeout) {
             // Esstablish a WebSocket connection right now so we can detect any fatal errors
             return CompletableFuture.runAsync(() -> {
@@ -651,17 +629,20 @@ public class HybridConnectionListener {
             });
         }
 
-		// TODO: cancellationtoken
-		public CompletableFuture<Void> closeAsync(Duration duration) {
+		/**
+		 * Ensures connection of the control websocket, then disconnects it from the cloud service
+		 * @param timeout The timeout to disconnect to cloud service within
+		 * @return Returns a completableFuture which completes when websocket connection is 
+		 * 		established between the control websocket and the cloud service
+		 */
+		private CompletableFuture<Void> closeAsync(Duration duration) {
             CompletableFuture<Void> connectTask;
             synchronized (this.thisLock) {
-//                this.closeCancellationToken = cancellationToken;
                 connectTask = this.connectAsyncTask;
                 this.connectAsyncTask = null;
             }
 
             this.tokenRenewer.close();
-//            this.shutdownCancellationSource.Cancel();
 
             // Start a clean close by first calling CloseOutputAsync. The finish (CloseAsync) happens when
             // the receive pump task finishes working.
@@ -672,21 +653,22 @@ public class HybridConnectionListener {
                 	return this.webSocket.closeAsync(reason);
                 });
             }
-
-//            if (this.receiveTask != null) {
-//                return this.receiveTask;
-//            }
             return CompletableFuture.completedFuture(null);
         }
 
-		// TODO: cancellationtoken param
+		/**
+		 * Sends the command through the control websocket, along with the message body if it exists
+		 * @param command The Listener command to be sent
+		 * @param stream The messge body to be sent, null if it doesn't exist
+		 * @param timeout The timeout to send within
+		 * @return Returns a completableFuture which completes when the command and stream are finished sending
+		 */
 		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer stream, Duration timeout) {
 
 			return this.sendAsyncLock.lockAsync(timeout).thenComposeAsync((lockRelease) -> {
 				try {
 					this.ensureConnectTask(timeout).join();
 				} catch (InterruptedException e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
 
@@ -695,7 +677,7 @@ public class HybridConnectionListener {
 				CompletableFuture<Void> future = new CompletableFuture<Void>();
 				// sends the command then send the actual message
 				try {
-					future = this.webSocket.sendCommandAsync(json, null).thenComposeAsync((sendCommandResult) -> {
+					future = this.webSocket.sendCommandAsync(json, timeout).thenComposeAsync((sendCommandResult) -> {
 						return (stream != null) ? webSocket.sendAsync(stream.array()) : CompletableFuture.completedFuture(null);
 					}).thenRun(() -> {
 						lockRelease.release();
@@ -707,16 +689,15 @@ public class HybridConnectionListener {
 			});
 		}
 
-		// <summary>
-		// Gets or potentially creates a viable Future<ServerWebSocket>. If the existing
-		// one is faulted or canceled a new one is created.
-		// </summary>
-		// TODO: cancellationtoken param
+		/**
+		 * Establish websocket connection between the control websocket and the cloud service if not already established.
+		 * @param timeout The timeout to connect to cloud service within
+		 * @return Returns a completableFuture which completes when websocket connection is 
+		 * 		established between the control websocket and the cloud service
+		 * @throws InterruptedException Throws when interrupted during the connection delay
+		 */
 		private CompletableFuture<Void> ensureConnectTask(Duration timeout) throws InterruptedException {
-			
 			synchronized (this.thisLock) {
-				// TODO: isFaulted, isCanceled
-//				if (this.connectAsyncTask == null || this.connectAsyncTask.IsFaulted||this.connectAsyncTask.IsCanceled) {
 				if (this.connectAsyncTask == null) {
 					this.connectAsyncTask = this.connectAsync(timeout);
 				}
@@ -724,66 +705,69 @@ public class HybridConnectionListener {
 			}
 		}
 
-		// TODO: cancellationtoken param
+		/**
+		 * Establish websocket connection between the control websocket and the cloud service.
+		 * @param timeout The timeout to connect to cloud service within
+		 * @return Returns a completableFuture which completes when websocket connection is 
+		 * 		established between the control websocket and the cloud service
+		 * @throws InterruptedException Throws when interrupted during the connection delay
+		 */
 		private CompletableFuture<Void> connectAsync(Duration timeout) throws InterruptedException {
             this.listener.throwIfDisposed();
             
             Map<String, List<String>> headers = new HashMap<String, List<String>>();
             CompletableFuture<SecurityToken> token = this.tokenRenewer.getTokenAsync();
             
-//            ServerWebSocket webSocket = ClientWebSocketFactory.Create(this.listener.UseBuiltInClientWebSocket);
-//            try {
-                Duration connectDelay = CONNECTION_DELAY_INTERVALS[this.connectDelayIndex];
-                if (connectDelay != Duration.ZERO) {
-					this.thisLock.wait(connectDelay.toMillis());
-                }
+            Duration connectDelay = CONNECTION_DELAY_INTERVALS[this.connectDelayIndex];
+            if (connectDelay != Duration.ZERO) {
+				this.thisLock.wait(connectDelay.toMillis());
+            }
 
-                // TODO: set options
+            // TODO: set options
 //                RelayEventSource.Log.ObjectConnecting(this.listener);
 //                webSocket.Options.SetBuffer(this.bufferSize, this.bufferSize);
 //                webSocket.Options.Proxy = this.listener.Proxy;
 //                webSocket.Options.KeepAliveInterval = HybridConnectionConstants.KeepAliveInterval;
 //                webSocket.Options.SetRequestHeader(HybridConnectionConstants.Headers.RelayUserAgent, HybridConnectionConstants.ClientAgent);
-                
-                // Set the authentication in request header
-                try {
-					headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.get().getToken()));
-				} catch (InterruptedException | ExecutionException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
-                HybridConnectionEndpointConfigurator.setHeaders(headers);
+            
+            // Set the authentication in request header
+            try {
+				headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.get().getToken()));
+			} catch (InterruptedException | ExecutionException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+            HybridConnectionEndpointConfigurator.setHeaders(headers);
 
-                // When we reconnect we need to remove the "_GXX" suffix otherwise trackingId gets longer after each reconnect
-                String trackingId = TrackingContext.removeSuffix(this.listener.trackingContext.getTrackingId());
+            // When we reconnect we need to remove the "_GXX" suffix otherwise trackingId gets longer after each reconnect
+            String trackingId = TrackingContext.removeSuffix(this.listener.trackingContext.getTrackingId());
 
-                // Build the websocket uri, e.g. "wss://contoso.servicebus.windows.net:443/$hc/endpoint1?sb-hc-action=listen&sb-hc-id=E2E_TRACKING_ID"
-				URI websocketUri;
-				try {
-					websocketUri = HybridConnectionUtil.BuildUri(
-						    this.address.getHost(),
-						    this.address.getPort(),
-						    this.address.getPath(),
-						    this.address.getQuery(),
-						    HybridConnectionConstants.Actions.LISTEN,
-						    trackingId
-					);
-				} catch (URISyntaxException e) {
-					throw new IllegalArgumentException("uri is invalid.");
-				}
-				
-				return this.webSocket.connectAsync(websocketUri).thenRun(() -> this.onOnline());
-                
-//                // TODO: trace
-////                RelayEventSource.Log.ObjectConnected(this.listener);
+            // Build the websocket uri, e.g. "wss://contoso.servicebus.windows.net:443/$hc/endpoint1?sb-hc-action=listen&sb-hc-id=E2E_TRACKING_ID"
+			URI websocketUri;
+			try {
+				websocketUri = HybridConnectionUtil.BuildUri(
+					    this.address.getHost(),
+					    this.address.getPort(),
+					    this.address.getPath(),
+					    this.address.getQuery(),
+					    HybridConnectionConstants.Actions.LISTEN,
+					    trackingId
+				);
+			} catch (URISyntaxException e) {
+				throw new IllegalArgumentException("uri is invalid.");
+			}
+			
+			return this.webSocket.connectAsync(websocketUri, timeout).thenRun(() -> this.onOnline());
+            
+            // TODO: trace
+//                RelayEventSource.Log.ObjectConnected(this.listener);
         }
 
-		// TODO: cancellationtoken param
 		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
 			
-//			// TODO: fx
-////            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
-////            Fx.Assert(connectTask.IsCompleted || !abort, "CloseOrAbortWebSocketAsync(abort=true) should only be called with a completed connectTask");
+			// TODO: fx
+//            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
+//            Fx.Assert(connectTask.IsCompleted || !abort, "CloseOrAbortWebSocketAsync(abort=true) should only be called with a completed connectTask");
             
 			synchronized (this.thisLock) {
                 if (connectTask == this.connectAsyncTask) {
@@ -805,6 +789,11 @@ public class HybridConnectionListener {
             }
         }
 
+		/**
+		 * Ensure we have a connected control webSocket, listens for command messages, and handles those messages.
+		 * @return A boolean indicating whether or not the receive pump should keep running.
+		 * @throws InterruptedException
+		 */
 		private CompletableFuture<Void> receivePumpAsync() {
             Exception exception = null;
             try {
@@ -828,15 +817,13 @@ public class HybridConnectionListener {
             return CompletableFuture.completedFuture(null);
         }
 
-		// <summary>
-		// Ensure we have a connected webSocket, listens for command messages, and
-		// handles those messages.
-		// </summary>
-		// <returns>A boolean indicating whether or not the receive pump should keep
-		// running.</returns>
+		/**
+		 * Ensure we have a connected control webSocket, listens for command messages, and handles those messages.
+		 * @return A CompletableFuture boolean which completes when the control websocket is disconnected and 
+		 * 		indicates whether or not the receive pump should keep running.
+		 * @throws InterruptedException
+		 */
 		private CompletableFuture<Boolean> receivePumpCoreAsync() throws InterruptedException {
-            
-//            CancellationToken shutdownToken = this.shutdownCancellationSource.Token;
             CompletableFuture<Void> connectTask = this.ensureConnectTask(null);
             
             return CompletableFuture.supplyAsync(() -> {
@@ -844,7 +831,6 @@ public class HybridConnectionListener {
             	try {
 	                do {
 	                	connectTask.get();
-//	                	CompletableFuture<String> receivedMessage = this.webSocket.receiveControlMessageAsync();
 	                	String receivedMessage = this.webSocket.receiveControlMessageAsync().get();
 	                    
 	                    if (!this.webSocket.isOpen()) {
@@ -870,7 +856,6 @@ public class HybridConnectionListener {
 	            	// TODO: trace
 	//                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, exception);
 	                this.closeOrAbortWebSocketAsync(connectTask, null);
-	//                keepGoing = this.onDisconnect(WebSocketExceptionHelper.ConvertToRelayContract(exception, this.listener.trackingContext));
 	                keepGoing = this.onDisconnect(exception);
 	            }
             	return keepGoing;

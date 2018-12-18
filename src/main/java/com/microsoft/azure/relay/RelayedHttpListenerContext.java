@@ -21,15 +21,23 @@ public class RelayedHttpListenerContext {
     private TrackingContext trackingContext;
     private HybridConnectionListener listener;
     
-    
+    /**
+     * @return Returns the request object that resembles the http request object in Hybridconnection
+     */
     public RelayedHttpListenerRequest getRequest() {
 		return request;
 	}
 
+    /**
+     * @return Returns the response object that resembles the http request object in Hybridconnection
+     */
 	public RelayedHttpListenerResponse getResponse() {
 		return response;
 	}
 
+    /**
+     * @return Returns the TrackingContext associated with this instance
+     */
 	public TrackingContext getTrackingContext() {
 		return trackingContext;
 	}
@@ -48,9 +56,9 @@ public class RelayedHttpListenerContext {
         this.FlowSubProtocol();
     }
 
-    /// <summary>
-    /// Returns a String that represents the current object. Includes a TrackingId for end to end correlation.
-    /// </summary>
+	/**
+	 * @return Returns a String that represents the current object. Includes a TrackingId for end to end correlation.
+	 */
 	@Override
     public String toString() {
 		if (this.cachedToString != null) {
@@ -67,12 +75,12 @@ public class RelayedHttpListenerContext {
         // connecting a new socket at exactly the same time there's a known race condition (insert link here) where ARP can only resolve one
         // address at a time, which causes the loser of the race to have to retry after 3000ms.  To avoid the 3000ms delay we just pause for
         // a few ms here instead.
-        try {
-			Thread.sleep(2);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//        try {
+//			Thread.sleep(2);
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
 
         // TODO: subprotocol
         // If we are accepting a sub-protocol handle that here
