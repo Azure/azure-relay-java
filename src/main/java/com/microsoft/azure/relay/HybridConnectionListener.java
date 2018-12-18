@@ -281,7 +281,7 @@ public class HybridConnectionListener {
         	List<ClientWebSocket> clients;
             synchronized (this.thisLock) {
                 if (this.closeCalled) {
-                    return null;
+                    return CompletableFuture.completedFuture(null);
                 }
 
                 // TODO: trace

@@ -30,7 +30,6 @@ public class SendReceiveTest {
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
-	private static ClientWebSocket clientWebSocket;
 	private static int statusCode = HttpStatus.ACCEPTED_202;
 	private static int listenerReceiveCount = 0;
 	private static int senderReceiveCount = 0;
@@ -65,9 +64,7 @@ public class SendReceiveTest {
 	
 	@Before
 	public void createClient() throws URISyntaxException {
-		
 		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
-		clientWebSocket = new ClientWebSocket();
 	}
 	
 	@Test
@@ -110,7 +107,7 @@ public class SendReceiveTest {
 			}
 		});
 		
-		client.createConnectionAsync(clientWebSocket).thenRun(() -> {
+		client.createConnectionAsync().thenAccept((clientWebSocket) -> {
 			clientWebSocket.sendAsync("hi");
 			for (int i = 1; i <= timesToRepeat; i++) {
 				clientWebSocket.receiveMessageAsync().join();
@@ -121,7 +118,7 @@ public class SendReceiveTest {
 					clientWebSocket.sendAsync("hi");
 				}
 			}
-		});
+		}).thenRun(() -> client.closeAsync().join());
 		
 		try {
 			assertEquals("Listener did not receive expected number of messages.", timesToRepeat, listenerReceiveCount.get(timesToRepeat * 5, TimeUnit.SECONDS).intValue());
@@ -208,13 +205,14 @@ public class SendReceiveTest {
 	private static void websocketClient(String msgExpected, String msgToSend) throws URISyntaxException, InterruptedException, ExecutionException, IOException {
 		CompletableFuture<Boolean> receivedReply = new CompletableFuture<Boolean>();
 		
-		clientWebSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
-			String msgReceived = new String(bytesReceived.array());
-			receivedReply.complete(true);
-			assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
+		client.createConnectionAsync().thenAccept((clientWebSocket) -> {
+			clientWebSocket.sendAsync(msgToSend);
+			clientWebSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
+				String msgReceived = new String(bytesReceived.array());
+				receivedReply.complete(true);
+				assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
+			});
 		});
-		
-		client.createConnectionAsync(clientWebSocket).thenRun(() -> clientWebSocket.sendAsync(msgToSend));
 		assertTrue("Did not receive message from websocket sender.", receivedReply.join());
 	}
 	
