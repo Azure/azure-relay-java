@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-public final class InputQueue<T extends Object> {
+final class InputQueue<T extends Object> {
 	// Fields
     private final ItemQueue itemQueue;
 // TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
@@ -25,26 +25,26 @@ public final class InputQueue<T extends Object> {
     // Users like ServiceModel can hook this abort ICommunicationObject or handle other non-IDisposable objects
     private Consumer<T> disposeItemCallback;
     
-    public int getPendingCount() {
+    protected int getPendingCount() {
     	synchronized(thisLock) {
         	return this.pendingCount;    		
     	}
     }
     
-    public int getReadersQueueCount() {
+    protected int getReadersQueueCount() {
     	synchronized(thisLock) {
     		return this.readerQueue.size();
     	}
     }
     
-    public Consumer<T> getDisposeItemCallback() {
+    protected Consumer<T> getDisposeItemCallback() {
     	return this.disposeItemCallback;
     }
-    public void setDisposeItemCallback(Consumer<T> callback) {
+    protected void setDisposeItemCallback(Consumer<T> callback) {
     	this.disposeItemCallback = callback;
     }
     
-    public InputQueue() {
+    protected InputQueue() {
         this.itemQueue = new ItemQueue();
         // TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
 //        this.readerQueue = new Queue<IQueueReader>();
@@ -55,12 +55,12 @@ public final class InputQueue<T extends Object> {
     }
 
     // TODO: cancellationtoken
-    public CompletableFuture<T> dequeueAsync() {
+    protected CompletableFuture<T> dequeueAsync() {
         return this.dequeueAsync(null);
     }
 
     // TODO: cancellationtoken
-    public CompletableFuture<T> dequeueAsync(Object state) {
+    protected CompletableFuture<T> dequeueAsync(Object state) {
         Item item = null;
         
         synchronized(thisLock) {
@@ -102,13 +102,13 @@ public final class InputQueue<T extends Object> {
     }
 
     // TODO: cancellationtoken
-    public CompletableFuture<Boolean> waitForItemAsync() {
+    protected CompletableFuture<Boolean> waitForItemAsync() {
         return this.waitForItemAsync(null);
     }
 
     // TODO: cancellationtoken
     @SuppressWarnings("unchecked")
-	public CompletableFuture<Boolean> waitForItemAsync(Object state) {
+	protected CompletableFuture<Boolean> waitForItemAsync(Object state) {
     	
         synchronized (thisLock) {
             if (queueState == QueueState.OPEN) {
@@ -138,12 +138,12 @@ public final class InputQueue<T extends Object> {
         return CompletableFuture.completedFuture(true);
     }
 
-    public void close() {
+    protected void close() {
         dispose();
     }
 
     @SuppressWarnings("unchecked")
-	public void dispatch() {
+	protected void dispatch() {
     	// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
 //        IQueueReader reader = null;
 //        IQueueReader[] outstandingReaders = null;
@@ -195,7 +195,7 @@ public final class InputQueue<T extends Object> {
         }
     }
 
-    public void enqueueAndDispatch(T item) {
+    protected void enqueueAndDispatch(T item) {
         enqueueAndDispatch(item, null);
     }
 
@@ -204,11 +204,11 @@ public final class InputQueue<T extends Object> {
     // not be notified of the item being available until the callback returns.  If you
     // are not sure if the callback will block for a long time, then first call 
     // ActionItem.Schedule to get to a "safe" thread.
-    public void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
+    protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
     	enqueueAndDispatch(item, dequeuedCallback, true);
     }
 
-    public void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
+    protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
     	// TODO: fx
 //    	if (item instanceof Exception)
 //      Fx.Assert(exception != null, "EnqueueAndDispatch: exception parameter should not be null");
@@ -217,26 +217,26 @@ public final class InputQueue<T extends Object> {
         enqueueAndDispatch(new Item(item, dequeuedCallback), canDispatchOnThisThread);
     }
 
-    public boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
+    protected boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
     	// TODO: fx
 //        Fx.Assert(item != null, "EnqueueWithoutDispatch: item parameter should not be null");
         return enqueueWithoutDispatch(new Item(item, dequeuedCallback));
     }
 
-    public boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
+    protected boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
     	// TODO: fx
 //        Fx.Assert(exception != null, "EnqueueWithoutDispatch: exception parameter should not be null");
         return enqueueWithoutDispatch(new Item(exception, dequeuedCallback));
     }
 
-    public void shutdown() {
+    protected void shutdown() {
         this.shutdown(null);
     }
 
     // Don't let any more items in. Differs from Close in that we keep around
     // existing items in our itemQueue for possible future calls to Dequeue
     @SuppressWarnings("unchecked")
-	public void shutdown(Supplier<Exception> pendingExceptionGenerator) {
+	protected void shutdown(Supplier<Exception> pendingExceptionGenerator) {
         CompletableFuture<T>[] outstandingReaders = null;
         
         synchronized (thisLock) {
@@ -267,7 +267,7 @@ public final class InputQueue<T extends Object> {
     }
 
     @SuppressWarnings("unchecked")
-	public void dispose() {
+	protected void dispose() {
         boolean dispose = false;
 
         synchronized (thisLock) {
@@ -509,15 +509,15 @@ public final class InputQueue<T extends Object> {
         T value;
         
         // Simulate empty struct constructor in C#
-        public Item() {
+        protected Item() {
         	this(null, null, null);
         }
 
-        public Item(T value, Consumer<T> dequeuedCallback) {
+        protected Item(T value, Consumer<T> dequeuedCallback) {
         	this(value, null, dequeuedCallback);
         }
 
-        public Item(Exception exception, Consumer<T> dequeuedCallback) {
+        protected Item(Exception exception, Consumer<T> dequeuedCallback) {
         	this(null, exception, dequeuedCallback);
         }
 
@@ -527,19 +527,19 @@ public final class InputQueue<T extends Object> {
             this.dequeuedCallback = dequeuedCallback;
         }
 
-        public Consumer<T> getDequeuedCallback() {
+        protected Consumer<T> getDequeuedCallback() {
             return this.dequeuedCallback;
         }
 
-        public Exception getException() {
+        protected Exception getException() {
             return this.exception;
         }
 
-        public T getValue() {
+        protected T getValue() {
             return this.value;
         }
         
-        public T getValueWithException() {
+        protected T getValueWithException() {
             if (this.exception != null)
             {
             	 // TODO: trace
@@ -557,14 +557,14 @@ public final class InputQueue<T extends Object> {
 //        readonly CancellationTokenRegistration cancelRegistration;
 //
 //        // TODO: cancellationToken
-//        public AsyncQueueReader(InputQueue<T> inputQueue, object state)
+//        protected AsyncQueueReader(InputQueue<T> inputQueue, object state)
 //            : base(state)
 //        {
 //            this.inputQueue = inputQueue;
 //            this.cancelRegistration = cancellationToken.Register(s => CancelCallback(s), this);
 //        }
 //
-//        public void Set(Item inputItem)
+//        protected void Set(Item inputItem)
 //        {
 //            this.cancelRegistration.Dispose();
 //
@@ -594,13 +594,13 @@ public final class InputQueue<T extends Object> {
 //        readonly CancellationTokenRegistration cancelRegistration;
 //
 //        // TODO: cancellationtoken
-//        public AsyncQueueWaiter(Object state)
+//        protected AsyncQueueWaiter(Object state)
 //            : base(state)
 //        {
 //            this.cancelRegistration = cancellationToken.Register(s => cancelCallback(s), this);
 //        }
 //
-//        public void Set(bool currentItemAvailable)
+//        protected void Set(bool currentItemAvailable)
 //        {
 //            this.cancelRegistration.Dispose();
 //            this.TrySetResult(currentItemAvailable);
@@ -621,25 +621,25 @@ public final class InputQueue<T extends Object> {
         int totalCount;
         
         @SuppressWarnings("unchecked")
-		public ItemQueue()
+		protected ItemQueue()
         {
             this.items = (Item[]) Array.newInstance(Item.class, 1);
         }
         
         // same as ItemCount
-        public int getTotalCount() {
+        protected int getTotalCount() {
         	return this.totalCount;
         }
         
-        public boolean hasAnyItem() {
+        protected boolean hasAnyItem() {
         	return this.totalCount > 0;
         }
         
-        public boolean hasAvailableItem() {
+        protected boolean hasAvailableItem() {
         	return this.totalCount > this.pendingCount;
         }
 
-        public Item dequeueAnyItem()
+        protected Item dequeueAnyItem()
         {
             if (this.pendingCount == this.totalCount) {
                 this.pendingCount--;
@@ -647,7 +647,7 @@ public final class InputQueue<T extends Object> {
             return dequeueItemCore();
         }
 
-        public Item dequeueAvailableItem()
+        protected Item dequeueAvailableItem()
         {
             if (this.totalCount == this.pendingCount)
             {
@@ -661,18 +661,18 @@ public final class InputQueue<T extends Object> {
             return dequeueItemCore();
         }
 
-        public void enqueueAvailableItem(Item item)
+        protected void enqueueAvailableItem(Item item)
         {
             enqueueItemCore(item);
         }
 
-        public void enqueuePendingItem(Item item)
+        protected void enqueuePendingItem(Item item)
         {
             enqueueItemCore(item);
             this.pendingCount++;
         }
 
-        public void makePendingItemAvailable()
+        protected void makePendingItemAvailable()
         {
             if (pendingCount == 0)
             {

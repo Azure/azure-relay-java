@@ -12,13 +12,13 @@ import java.util.Set;
 
 import org.json.JSONObject;
 
-public class ListenerCommand {
+class ListenerCommand {
 	private final static String ACCEPT = "accept";
 	private final static String RENEW_TOKEN = "renewToken";
 	private final static String REQUEST = "request";
 	private final static String RESPONSE = "response";
 	private final static String INJECT_FAULT = "injectFault";
-	public final static Set<String> COMMANDS = new HashSet<String>(Arrays.asList(ACCEPT, RENEW_TOKEN,REQUEST, RESPONSE, INJECT_FAULT));
+	protected final static Set<String> COMMANDS = new HashSet<String>(Arrays.asList(ACCEPT, RENEW_TOKEN,REQUEST, RESPONSE, INJECT_FAULT));
 	
 	private AcceptCommand accept;
 	private RenewTokenCommand renewToken;
@@ -26,38 +26,38 @@ public class ListenerCommand {
 	private ResponseCommand response;
 	private InjectFaultCommand injectFault;
 
-	public AcceptCommand getAccept() {
+	protected AcceptCommand getAccept() {
 		return accept;
 	}
-	public void setAccept(AcceptCommand accept) {
+	protected void setAccept(AcceptCommand accept) {
 		this.accept = accept;
 	}
-	public RenewTokenCommand getRenewToken() {
+	protected RenewTokenCommand getRenewToken() {
 		return renewToken;
 	}
-	public void setRenewToken(RenewTokenCommand renewToken) {
+	protected void setRenewToken(RenewTokenCommand renewToken) {
 		this.renewToken = renewToken;
 	}
-	public RequestCommand getRequest() {
+	protected RequestCommand getRequest() {
 		return request;
 	}
-	public void setRequest(RequestCommand request) {
+	protected void setRequest(RequestCommand request) {
 		this.request = request;
 	}
-	public ResponseCommand getResponse() {
+	protected ResponseCommand getResponse() {
 		return response;
 	}
-	public void setResponse(ResponseCommand response) {
+	protected void setResponse(ResponseCommand response) {
 		this.response = response;
 	}
-	public InjectFaultCommand getInjectFault() {
+	protected InjectFaultCommand getInjectFault() {
 		return injectFault;
 	}
-	public void setInjectFault(InjectFaultCommand injectFault) {
+	protected void setInjectFault(InjectFaultCommand injectFault) {
 		this.injectFault = injectFault;
 	}
 	
-	public ListenerCommand (JSONObject json) {
+	protected ListenerCommand (JSONObject json) {
 		if (json == null || json.isEmpty()) {
 			return;
 		}
@@ -88,38 +88,38 @@ public class ListenerCommand {
 		}
 	}
 	
-	public class AcceptCommand {
+	protected class AcceptCommand {
 		private String address;
 		private String id;
 		private Map<String, String> connectHeaders;
 		private Endpoint remoteEndpoint;
 		
-		public String getAddress() {
+		protected String getAddress() {
 			return address;
 		}
-		public void setAddress(String address) {
+		protected void setAddress(String address) {
 			this.address = address;
 		}
-		public String getId() {
+		protected String getId() {
 			return id;
 		}
-		public void setId(String id) {
+		protected void setId(String id) {
 			this.id = id;
 		}
-		public Map<String, String> getConnectHeaders() {
+		protected Map<String, String> getConnectHeaders() {
 			return (this.connectHeaders == null) ? new HashMap<String, String>() : this.connectHeaders;
 		}
-		public void setConnectHeaders(Map<String, String> connectHeaders) {
+		protected void setConnectHeaders(Map<String, String> connectHeaders) {
 			this.connectHeaders = connectHeaders;
 		}
-		public Endpoint getRemoteEndpoint() {
+		protected Endpoint getRemoteEndpoint() {
 			return (this.remoteEndpoint == null) ? new Endpoint() : this.remoteEndpoint;
 		}
-		public void setRemoteEndpoint(Endpoint remoteEndpoint) {
+		protected void setRemoteEndpoint(Endpoint remoteEndpoint) {
 			this.remoteEndpoint = remoteEndpoint;
 		}
 		
-		public AcceptCommand(JSONObject json) {
+		protected AcceptCommand(JSONObject json) {
 			this.address = json.optString("address");
 			this.id = json.optString("id");
 			this.remoteEndpoint = new Endpoint(json.getJSONObject("remoteEndpoint"));
@@ -129,7 +129,7 @@ public class ListenerCommand {
 		}
 	}
 	
-	public class RequestCommand {
+	protected class RequestCommand {
 		private String address;
 		private String id;
 		private String requestTarget;
@@ -138,50 +138,50 @@ public class ListenerCommand {
 		private Map<String, String> requestHeaders;
 		private Boolean body;
 		
-		public String getAddress() {
+		protected String getAddress() {
 			return address;
 		}
-		public void setAddress(String address) {
+		protected void setAddress(String address) {
 			this.address = address;
 		}
-		public String getId() {
+		protected String getId() {
 			return id;
 		}
-		public void setId(String id) {
+		protected void setId(String id) {
 			this.id = id;
 		}
-		public String getRequestTarget() {
+		protected String getRequestTarget() {
 			return requestTarget;
 		}
-		public void setRequestTarget(String requestTarget) {
+		protected void setRequestTarget(String requestTarget) {
 			this.requestTarget = requestTarget;
 		}
-		public String getMethod() {
+		protected String getMethod() {
 			return method;
 		}
-		public void setMethod(String method) {
+		protected void setMethod(String method) {
 			this.method = method;
 		}
-		public Endpoint getRemoteEndpoint() {
+		protected Endpoint getRemoteEndpoint() {
 			return (this.remoteEndpoint == null) ? new Endpoint() : remoteEndpoint;
 		}
-		public void setRemoteEndpoint(Endpoint remoteEndpoint) {
+		protected void setRemoteEndpoint(Endpoint remoteEndpoint) {
 			this.remoteEndpoint = remoteEndpoint;
 		}
-		public Map<String, String> getRequestHeaders() {
+		protected Map<String, String> getRequestHeaders() {
 			return (this.requestHeaders == null) ? new HashMap<String, String>() : this.requestHeaders;
 		}
-		public void setRequestHeaders(Map<String, String> requestHeaders) {
+		protected void setRequestHeaders(Map<String, String> requestHeaders) {
 			this.requestHeaders = requestHeaders;
 		}
-		public Boolean hasBody() {
+		protected Boolean hasBody() {
 			return body;
 		}
-		public void setBody(Boolean body) {
+		protected void setBody(Boolean body) {
 			this.body = body;
 		}
 		
-		public RequestCommand(JSONObject json) {
+		protected RequestCommand(JSONObject json) {
 			this.address = json.optString("address");
 			this.id = json.optString("id");
 			this.requestTarget = json.optString("requestTarget");
@@ -196,64 +196,64 @@ public class ListenerCommand {
 		}
 	}
 	
-	public class RenewTokenCommand {
+	protected class RenewTokenCommand {
 		private String token;
 
-		public String getToken() {
+		protected String getToken() {
 			return token;
 		}
-		public void setToken(String token) {
+		protected void setToken(String token) {
 			this.token = token;
 		}
 		
-		public RenewTokenCommand(JSONObject json) {
+		protected RenewTokenCommand(JSONObject json) {
 			if (json != null) {
 				this.token = json.optString("token");
 			}
 		}
 	}
 	
-	public class ResponseCommand {
+	protected class ResponseCommand {
 		private String requestId;
 		private int statusCode;
 		private String statusDescription;
 		private Map<String, String> responseHeaders;
 		private Boolean body;
 		
-		public String getRequestId() {
+		protected String getRequestId() {
 			return requestId;
 		}
-		public void setRequestId(String requestId) {
+		protected void setRequestId(String requestId) {
 			this.requestId = requestId;
 		}
-		public int getStatusCode() {
+		protected int getStatusCode() {
 			return statusCode;
 		}
-		public void setStatusCode(int statusCode) {
+		protected void setStatusCode(int statusCode) {
 			this.statusCode = statusCode;
 		}
-		public String getStatusDescription() {
+		protected String getStatusDescription() {
 			return statusDescription;
 		}
-		public void setStatusDescription(String statusDescription) {
+		protected void setStatusDescription(String statusDescription) {
 			this.statusDescription = statusDescription;
 		}
-		public Map<String, String> getResponseHeaders() {
+		protected Map<String, String> getResponseHeaders() {
 			return (this.responseHeaders == null) ? new HashMap<String, String>() : responseHeaders;
 		}
-		public void setResponseHeaders(Map<String, String> responseHeaders) {
+		protected void setResponseHeaders(Map<String, String> responseHeaders) {
 			this.responseHeaders = responseHeaders;
 		}
-		public Boolean hasBody() {
+		protected Boolean hasBody() {
 			return body;
 		}
-		public void setBody(Boolean body) {
+		protected void setBody(Boolean body) {
 			this.body = body;
 		}
 		
-		public ResponseCommand() { }
+		protected ResponseCommand() { }
 		
-		public ResponseCommand(JSONObject json) {
+		protected ResponseCommand(JSONObject json) {
 			this.requestId = json.optString("id");
 			this.statusCode = json.optInt("statusCode");
 			this.statusDescription = json.optString("statusDescription");
@@ -263,7 +263,7 @@ public class ListenerCommand {
 			headers.forEach((k, v) -> this.responseHeaders.put(k, (String)v));
 		}
 		
-		public String toJsonString() {
+		protected String toJsonString() {
 			StringBuilder builder = new StringBuilder("{\"response\":{");
 			List<String> fields = new ArrayList<String>();
 			
@@ -292,37 +292,37 @@ public class ListenerCommand {
 		}
 	}
 	
-    public class InjectFaultCommand {
+    protected class InjectFaultCommand {
     	private Duration delay;
 
-		public Duration getDelay() {
+		protected Duration getDelay() {
 			return delay;
 		}
-		public void setDelay(Duration delay) {
+		protected void setDelay(Duration delay) {
 			this.delay = delay;
 		}
     }
     
-	public class Endpoint {
+	protected class Endpoint {
 		private String address;
 		private int port;
 		
-		public String getAddress() {
+		protected String getAddress() {
 			return address;
 		}
-		public void setAddress(String address) {
+		protected void setAddress(String address) {
 			this.address = address;
 		}
-		public int getPort() {
+		protected int getPort() {
 			return port;
 		}
-		public void setPort(int port) {
+		protected void setPort(int port) {
 			this.port = port;
 		}
 		
-		public Endpoint() {}
+		protected Endpoint() {}
 		
-		public Endpoint(JSONObject json) {
+		protected Endpoint(JSONObject json) {
 			this.port = json.optInt("port");
 			this.address = json.optString("address");
 		}

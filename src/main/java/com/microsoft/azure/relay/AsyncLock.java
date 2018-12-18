@@ -5,21 +5,21 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-public class AsyncLock {
+class AsyncLock {
     final Semaphore asyncSemaphore;
     final CompletableFuture<LockRelease> lockRelease;
     boolean disposed;
 
-    public AsyncLock() {
+    protected AsyncLock() {
         this.asyncSemaphore = new Semaphore(1);
         this.lockRelease = CompletableFuture.completedFuture(new LockRelease(this));
     }
 
-    public CompletableFuture<LockRelease> lockAsync() {
+    protected CompletableFuture<LockRelease> lockAsync() {
     	return this.lockAsync(null);
     }
 
-    public CompletableFuture<LockRelease> lockAsync(Duration duration) {
+    protected CompletableFuture<LockRelease> lockAsync(Duration duration) {
     	
     	CompletableFuture<AsyncLock> wait = CompletableFuture.supplyAsync(() -> {
     		try {

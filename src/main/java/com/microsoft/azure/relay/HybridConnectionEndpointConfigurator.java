@@ -4,14 +4,14 @@ import java.util.List;
 import java.util.Map;
 import javax.websocket.ClientEndpointConfig;
 
-public class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
+class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
 	private static Map<String, List<String>> currentHeaders;
 	
-	public static Map<String, List<String>> getHeaders() {
+	protected static Map<String, List<String>> getHeaders() {
 		return currentHeaders;
 	}
 
-	public static void setHeaders(Map<String, List<String>> headers) {
+	protected static void setHeaders(Map<String, List<String>> headers) {
 		currentHeaders = headers;
 	}
 	

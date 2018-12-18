@@ -4,17 +4,17 @@ import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
-public class TimeoutHelper {
+class TimeoutHelper {
     private LocalDateTime deadline;
     private boolean deadlineSet;
     private Duration originalTimeout;
-//    public static final Duration MAXWAIT = RelayConstants.MAX_DURATION;
+//    protected static final Duration MAXWAIT = RelayConstants.MAX_DURATION;
 
-    public TimeoutHelper(Duration timeout) {
+    protected TimeoutHelper(Duration timeout) {
     	this(timeout, false);
     }
 
-    public TimeoutHelper(Duration timeout, boolean startTimeout) {
+    protected TimeoutHelper(Duration timeout, boolean startTimeout) {
         this.originalTimeout = timeout;
         this.deadline = LocalDateTime.MAX;
         this.deadlineSet = (timeout != null && !isMaxDuration(timeout));
@@ -25,11 +25,11 @@ public class TimeoutHelper {
         }
     }
 
-    public Duration getOriginalTimeout() {
+    protected Duration getOriginalTimeout() {
     	return this.originalTimeout;
     }
 
-    public static Duration fromMillis(int milliseconds) {
+    protected static Duration fromMillis(int milliseconds) {
         if (milliseconds >= Integer.MAX_VALUE) {
             return RelayConstants.MAX_DURATION;
         }
@@ -38,20 +38,20 @@ public class TimeoutHelper {
         }
     }
 
-    public static int toMillis(Duration timeout) {
+    protected static int toMillis(Duration timeout) {
     	long millis = timeout.toMillis();
         return millis > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) millis;
     }
 
-    public static Duration min(Duration val1, Duration val2) {
+    protected static Duration min(Duration val1, Duration val2) {
         return (val1.compareTo(val2) < 0) ? val1 : val2;
     }
 
-    public static LocalDateTime min(LocalDateTime val1, LocalDateTime val2) {
+    protected static LocalDateTime min(LocalDateTime val1, LocalDateTime val2) {
     	return (val1.compareTo(val2) < 0) ? val1 : val2;
     }
 
-    public static LocalDateTime add(LocalDateTime time, Duration timeout) {
+    protected static LocalDateTime add(LocalDateTime time, Duration timeout) {
     	LocalDateTime temp = LocalDateTime.of(time.toLocalDate(), time.toLocalTime());
     	try {
     		temp = temp.plusNanos(timeout.toNanos());
@@ -68,7 +68,7 @@ public class TimeoutHelper {
         return temp;
     }
 
-    public static LocalDateTime subtract(LocalDateTime time, Duration timeout) {
+    protected static LocalDateTime subtract(LocalDateTime time, Duration timeout) {
     	LocalDateTime temp = LocalDateTime.of(time.toLocalDate(), time.toLocalTime());
     	try {
     		temp = temp.minusNanos(timeout.toNanos());
@@ -85,7 +85,7 @@ public class TimeoutHelper {
         return temp;
     }
 
-    public Duration remainingTime() {
+    protected Duration remainingTime() {
         if (!this.deadlineSet) {
             this.setDeadline();
             return this.originalTimeout;
@@ -99,7 +99,7 @@ public class TimeoutHelper {
         }
     }
 
-    public Duration elapsedTime() {
+    protected Duration elapsedTime() {
         return this.originalTimeout.minus(this.remainingTime());
     }
 
@@ -110,11 +110,11 @@ public class TimeoutHelper {
         this.deadlineSet = true;
     }
 
-    public static void throwIfNegativeArgument(Duration timeout) {
+    protected static void throwIfNegativeArgument(Duration timeout) {
         throwIfNegativeArgument(timeout, "timeout");
     }
 
-    public static void throwIfNegativeArgument(Duration timeout, String argumentName) {
+    protected static void throwIfNegativeArgument(Duration timeout, String argumentName) {
         if (timeout != null && timeout.isNegative()) {
         	throw new IllegalArgumentException("timeout interval cannot be negative.");
 //            throw RelayEventSource.Log.ArgumentOutOfRange(argumentName, timeout, SR.GetString(SR.TimeoutMustBeNonNegative, argumentName, timeout));

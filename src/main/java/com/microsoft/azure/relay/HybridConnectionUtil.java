@@ -7,10 +7,10 @@ import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
 
-public final class HybridConnectionUtil {
+final class HybridConnectionUtil {
 	
 	// Equivalent of URI.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped)
-    public static String getAudience(URI uri) {
+    protected static String getAudience(URI uri) {
     	StringBuilder audience = new StringBuilder();
     	String scheme = uri.getScheme();
     	String host = uri.getHost();
@@ -34,7 +34,7 @@ public final class HybridConnectionUtil {
     	return audience.toString();
     }
     
-    public static URI BuildUri(String host, int port, String path, String query, String action, String id) throws URISyntaxException {
+    protected static URI BuildUri(String host, int port, String path, String query, String action, String id) throws URISyntaxException {
         if (path.charAt(0) != '/') {
             path = "/" + path;
         }
@@ -51,7 +51,7 @@ public final class HybridConnectionUtil {
         );
     }
     
-    static String BuildQueryString(String existingQueryString, String action, String id)
+    protected static String BuildQueryString(String existingQueryString, String action, String id)
     {
         StringBuilder buffer = new StringBuilder();
 
@@ -70,7 +70,7 @@ public final class HybridConnectionUtil {
         return buffer.toString();
     }
     
-    public static String filterQueryString(String queryString) {
+    protected static String filterQueryString(String queryString) {
         
     	if (StringUtil.isNullOrEmpty(queryString)) {
             return "";
@@ -104,7 +104,7 @@ public final class HybridConnectionUtil {
         return sb.toString();
     }
     
-    public static Map<String, String> parseQueryString(String query) {
+    protected static Map<String, String> parseQueryString(String query) {
     	Map<String, String> map = new HashMap<String, String>();
     	
     	if (StringUtil.isNullOrEmpty(query)) {

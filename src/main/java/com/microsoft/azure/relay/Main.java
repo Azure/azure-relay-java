@@ -67,13 +67,14 @@ public class Main {
 	static int bytes = 0;
 	
 	public static void main(String[] args) throws Exception {
+		long startTime = System.currentTimeMillis();
 		StringBuilder builder = new StringBuilder();
 		String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 		for (int i = 0; i < 2000; i++) {
 			builder.append(alphabet);
 		}
 		largeStr = builder.toString();
-		
+
 		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
 		HybridConnectionListener listener = new HybridConnectionListener(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
         
@@ -91,8 +92,10 @@ public class Main {
             httpLargePOSTAndLargeResponse(listener);
         }
 
-		System.out.println("done");
 		listener.closeAsync().join();
+		
+		long endTime = System.currentTimeMillis();
+		System.out.println("Execution used " + ((endTime - startTime)) + " ms.");
 	}
 	
 	private static void httpGETAndSmallResponse(HybridConnectionListener listener) throws IOException, InterruptedException, ExecutionException {
@@ -199,6 +202,7 @@ public class Main {
 		webSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
 			bytes += bytesReceived.array().length;
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + new String(bytesReceived.array()));
+			client.closeAsync();
 		});
 		
 		client.createConnectionAsync(webSocket).get();

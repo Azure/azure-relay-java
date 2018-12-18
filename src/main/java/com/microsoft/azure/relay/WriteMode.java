@@ -1,6 +1,6 @@
 package com.microsoft.azure.relay;
 
-public enum WriteMode {
+enum WriteMode {
 	
 	// Write Text Frames on the WebSocket
 	TEXT,

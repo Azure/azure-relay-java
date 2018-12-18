@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
-public class SecurityToken {
+class SecurityToken {
     private final String token;
     private LocalDateTime expiresAtUtc;
     private String audience;
@@ -19,15 +19,15 @@ public class SecurityToken {
     private final String keyValueSeparator;
     private final String pairSeparator;
 
-    public String getToken() {
+    protected String getToken() {
 		return token;
 	}
 
-	public LocalDateTime getExpiresAtUtc() {
+	protected LocalDateTime getExpiresAtUtc() {
 		return expiresAtUtc;
 	}
 
-	public String getAudience() {
+	protected String getAudience() {
 		return audience;
 	}
 	

@@ -10,7 +10,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-public final class CompletableFutureUtil {
+final class CompletableFutureUtil {
 	protected static ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));
 
 	protected static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable) throws CompletionException {

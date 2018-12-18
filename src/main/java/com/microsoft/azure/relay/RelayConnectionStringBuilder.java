@@ -5,7 +5,7 @@ import java.net.URISyntaxException;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
 
-public class RelayConnectionStringBuilder {
+class RelayConnectionStringBuilder {
     static final String ENDPOINT_CONFIG_NAME = "Endpoint";
     static final String ENTITY_PATH_CONFIG_NAME = "EntityPath";
     static final String OPERATION_TIMEOUT_CONFIG_NAME = "OperationTimeout";
@@ -29,7 +29,7 @@ public class RelayConnectionStringBuilder {
     private String sharedAccessSignature;
 
 	// Initializes a new instance of the <see cref="RelayConnectionStringBuilder" /> class.</summary>
-    public RelayConnectionStringBuilder()
+    protected RelayConnectionStringBuilder()
     {
         this.operationTimeout = RelayConstants.DEFAULT_OPERATION_TIMEOUT;
     }
@@ -48,7 +48,7 @@ public class RelayConnectionStringBuilder {
     /// Thrown if <see cref="RelayConnectionStringBuilder.OperationTimeout"/> is specified but is not a valid <see cref="TimeSpan"/> format.
     /// Thrown if an unsupported key name is specified.
     /// </exception>
-    public RelayConnectionStringBuilder(String connectionString) {
+    protected RelayConnectionStringBuilder(String connectionString) {
     	this();
         if (StringUtil.isNullOrEmpty(connectionString))
         {
@@ -58,11 +58,11 @@ public class RelayConnectionStringBuilder {
         this.parseConnectionString(connectionString);
     }
 
-    public URI getEndpoint() {
+    protected URI getEndpoint() {
 		return endpoint;
 	}
 
-	public void setEndpoint(URI value) {
+	protected void setEndpoint(URI value) {
         if (value == null)
         {
         	throw new IllegalArgumentException("the supplied endpoint endpoint cannot be null");
@@ -74,51 +74,51 @@ public class RelayConnectionStringBuilder {
         this.endpoint = value;
 	}
 
-	public Duration getOperationTimeout() {
+	protected Duration getOperationTimeout() {
 		return operationTimeout;
 	}
 
-	public void setOperationTimeout(Duration value) {
+	protected void setOperationTimeout(Duration value) {
 		if (value.isNegative())
 			throw new IllegalArgumentException("the timeout duration cannot be negative");
         this.operationTimeout = value;
 	}
 
-	public String getEntityPath() {
+	protected String getEntityPath() {
 		return entityPath;
 	}
 
-	public void setEntityPath(String entityPath) {
+	protected void setEntityPath(String entityPath) {
 		this.entityPath = entityPath;
 	}
 
-	public String getSharedAccessKeyName() {
+	protected String getSharedAccessKeyName() {
 		return sharedAccessKeyName;
 	}
 
-	public void setSharedAccessKeyName(String sharedAccessKeyName) {
+	protected void setSharedAccessKeyName(String sharedAccessKeyName) {
 		this.sharedAccessKeyName = sharedAccessKeyName;
 	}
 
-	public String getSharedAccessKey() {
+	protected String getSharedAccessKey() {
 		return sharedAccessKey;
 	}
 
-	public void setSharedAccessKey(String sharedAccessKey) {
+	protected void setSharedAccessKey(String sharedAccessKey) {
 		this.sharedAccessKey = sharedAccessKey;
 	}
 
-	public String getSharedAccessSignature() {
+	protected String getSharedAccessSignature() {
 		return sharedAccessSignature;
 	}
 
-	public void setSharedAccessSignature(String sharedAccessSignature) {
+	protected void setSharedAccessSignature(String sharedAccessSignature) {
 		this.sharedAccessSignature = sharedAccessSignature;
 	}
 
     // Creates a connectionString that represents the current object
 	@Override
-    public String toString() {
+	public String toString() {
         this.validate();
         StringBuilder connectionStringBuilder = new StringBuilder(200);
 
@@ -151,7 +151,7 @@ public class RelayConnectionStringBuilder {
         return connectionStringBuilder.toString();
     }
 
-    public TokenProvider createTokenProvider() {
+    protected TokenProvider createTokenProvider() {
         TokenProvider tokenProvider = null;
         
         if (!StringUtil.isNullOrEmpty(this.sharedAccessSignature)) {

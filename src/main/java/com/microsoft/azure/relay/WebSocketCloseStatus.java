@@ -1,6 +1,6 @@
 package com.microsoft.azure.relay;
 
-public enum WebSocketCloseStatus {
+enum WebSocketCloseStatus {
     NORMAL_CLOSURE,
     ENDPOINT_UNAVAILABLE,
     PROTOCOL_ERROR,

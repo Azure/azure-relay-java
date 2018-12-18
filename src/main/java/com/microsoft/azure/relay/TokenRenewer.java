@@ -7,16 +7,16 @@ import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-public class TokenRenewer {
+class TokenRenewer {
     private final HybridConnectionListener listener;
     private final String appliesTo;
     private final Duration tokenValidFor;
     private Timer renewTimer;
     private Object thisPtr = this;
-    public Consumer<SecurityToken> onTokenRenewed;
-	public Consumer<Exception> onTokenRenewException;
+    protected Consumer<SecurityToken> onTokenRenewed;
+	protected Consumer<Exception> onTokenRenewException;
 	
-    public TokenRenewer(HybridConnectionListener listener, String appliesTo, Duration tokenValidFor)
+    protected TokenRenewer(HybridConnectionListener listener, String appliesTo, Duration tokenValidFor)
     {
     	// TODO: fx
 //        Fx.Assert(listener != null, "listener is required");
@@ -36,15 +36,15 @@ public class TokenRenewer {
 		}, Long.MAX_VALUE - System.currentTimeMillis(), Long.MAX_VALUE - System.currentTimeMillis());
     }
 	
-    public void setOnTokenRenewed(Consumer<SecurityToken> onTokenRenewed) {
+    protected void setOnTokenRenewed(Consumer<SecurityToken> onTokenRenewed) {
 		this.onTokenRenewed = onTokenRenewed;
 	}
 
-	public void setOnTokenRenewException(Consumer<Exception> onTokenRenewException) {
+	protected void setOnTokenRenewException(Consumer<Exception> onTokenRenewException) {
 		this.onTokenRenewException = onTokenRenewException;
 	}
 
-    public CompletableFuture<SecurityToken> getTokenAsync()
+    protected CompletableFuture<SecurityToken> getTokenAsync()
     {
         return this.getTokenAsync(false);
     }
@@ -71,7 +71,7 @@ public class TokenRenewer {
         }
     }
 
-    public void close() {
+    protected void close() {
     	this.renewTimer.cancel();
     }
     
@@ -79,12 +79,7 @@ public class TokenRenewer {
     {
     	TokenRenewer thisPtr = (TokenRenewer)state;
         try {
-            CompletableFuture.runAsync(new Runnable() {
-				@Override
-				public void run() {
-					thisPtr.getTokenAsync(true);
-				}
-			});
+            CompletableFuture.runAsync(() -> thisPtr.getTokenAsync(true));
         }
         // TODO: fx isfatal
         catch (Exception exception) {
