@@ -330,7 +330,6 @@ public class HybridConnectionListener {
         finally {
             this.connectionInputQueue.dispose();
             closeControlTask = this.controlConnection.closeAsync(null);
-            CompletableFutureUtil.cleanup();
             if (this.rendezvousConnection != null && this.rendezvousConnection.isOpen()) {
             	closeRendezvousTask = this.rendezvousConnection.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing rendezvous normally."));
             } else {

@@ -54,8 +54,7 @@ public final class HybridConnectionUtil {
     public static String buildQueryString(String existingQueryString, String action, String id) {
         StringBuilder buffer = new StringBuilder();
 
-        if (!StringUtil.isNullOrEmpty(existingQueryString))
-        {
+        if (!StringUtil.isNullOrEmpty(existingQueryString)) {
         	buffer.append(existingQueryString);
         	if (buffer.charAt(0) == '?' ) {
         		buffer.deleteCharAt(0);
@@ -101,18 +100,6 @@ public final class HybridConnectionUtil {
         }
 
         return sb.toString();
-    }
-
-    public static Map<String, String> parseConnectionString(String connectionString) {
-    	HashMap<String, String> map = new HashMap<String, String>();
-    	if (connectionString != null) {
-    		for (String pair : connectionString.split(";")) {
-    			// Not using split with "=" because the value may contain "="
-    			int index = pair.indexOf("=");
-    			map.put(pair.substring(0, index), pair.substring(index + 1));
-    		}
-    	}
-    	return map;
     }
     
     public static Map<String, String> parseQueryString(String query) {

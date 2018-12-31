@@ -80,4 +80,24 @@ public class InputQueueTest {
 		assertEquals(num2, numRes2.join());
 		assertEquals(num3, numRes3.join());
 	}
+	
+	@Test
+	public void shutdownTest() {
+		CompletableFuture<Integer> num1 = queue.dequeueAsync();
+		CompletableFuture<Integer> num2 = queue.dequeueAsync();
+		queue.shutdown();
+		assertNull(num1.join());
+		assertNull(num2.join());
+	}
+	
+	@Test 
+	public void shutdownWithExceptionTest() {
+		CompletableFuture<Integer> num1 = queue.dequeueAsync();
+		queue.shutdown(() -> new RuntimeException());
+		try {
+			assertNull(num1.join());
+		} catch (Exception e) {
+			assertTrue("The exception supposed to be thrown from InputQueue.shutdown() did not work properly", e instanceof RuntimeException);
+		}
+	}
 }

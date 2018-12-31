@@ -1,52 +1,18 @@
 package com.microsoft.azure.relay;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
-import java.net.ProxySelector;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.URLConnection;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
-import java.util.*;
-
-import javax.websocket.ClientEndpoint;
-import javax.websocket.ClientEndpointConfig;
-import javax.websocket.CloseReason;
-import javax.websocket.CloseReason.CloseCode;
-import javax.websocket.CloseReason.CloseCodes;
-import javax.websocket.ContainerProvider;
-import javax.websocket.DeploymentException;
-import javax.websocket.EncodeException;
-import javax.websocket.Endpoint;
-import javax.websocket.Session;
-import javax.websocket.WebSocketContainer;
-
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.websocket.api.StatusCode;
-import org.eclipse.jetty.websocket.api.WebSocketAdapter;
-import org.eclipse.jetty.websocket.client.WebSocketClient;
-import org.json.JSONObject;
 
 public class Main {
 
@@ -56,14 +22,10 @@ public class Main {
 	private static String smallStr = "smallStr";
 	// large test string that's over 64kb
 	private static String largeStr;
-	private static HybridConnectionListener listener;
 	
 	static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
-	static final Map<String, String> connectionParams = HybridConnectionUtil.parseConnectionString(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
-	static final String RELAY_NAME_SPACE = connectionParams.get("Endpoint");
-	static final String CONNECTION_STRING = connectionParams.get("EntityPath");
-	static final String KEY_NAME = connectionParams.get("SharedAccessKeyName");
-	static final String KEY = connectionParams.get("SharedAccessKey");
+	static final RelayConnectionStringBuilder connectionParams = new RelayConnectionStringBuilder(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
+	static final TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(connectionParams.getSharedAccessKeyName(), connectionParams.getSharedAccessKey());
 	static int bytes = 0;
 	
 	public static void main(String[] args) throws Exception {
@@ -75,8 +37,7 @@ public class Main {
 		}
 		largeStr = builder.toString();
 
-		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
-		HybridConnectionListener listener = new HybridConnectionListener(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
+		HybridConnectionListener listener = new HybridConnectionListener(new URI(connectionParams.getEndpoint()+ connectionParams.getEntityPath()), tokenProvider);
         
         listener.openAsync().get();
         
@@ -160,10 +121,7 @@ public class Main {
 	}
 	
 	private static void requestSender(String method, String msgExpected, String msgToSend) throws IOException, InterruptedException, ExecutionException {
-		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
-		StringBuilder urlBuilder = new StringBuilder(RELAY_NAME_SPACE + CONNECTION_STRING);
-		urlBuilder.replace(0, 5, "https://");
-		URL url = new URL(urlBuilder.toString());
+		URL url = new URL(connectionParams.getHttpUrlString());
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
 		
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
@@ -196,13 +154,12 @@ public class Main {
 	
 	// sends a message to the server through websocket
 	private static void webSocketClient() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
-		TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(KEY_NAME, KEY);
-		HybridConnectionClient client = new HybridConnectionClient(new URI(RELAY_NAME_SPACE + CONNECTION_STRING), tokenProvider);
+		HybridConnectionClient client = new HybridConnectionClient(new URI(connectionParams.getEndpoint()+ connectionParams.getEntityPath()), tokenProvider);
 		ClientWebSocket webSocket = new ClientWebSocket();
 		webSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
 			bytes += bytesReceived.array().length;
 			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + new String(bytesReceived.array()));
-			client.closeAsync();
+			webSocket.closeAsync().join();
 		});
 		
 		client.createConnectionAsync(webSocket).get();

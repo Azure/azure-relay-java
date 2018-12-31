@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 
-class SecurityToken {
+public class SecurityToken {
     private final String token;
     private LocalDateTime expiresAtUtc;
     private String audience;
@@ -19,28 +19,36 @@ class SecurityToken {
     private final String keyValueSeparator;
     private final String pairSeparator;
 
-    protected String getToken() {
+    /**
+     * @return Returns the token string from this token
+     */
+    public String getToken() {
 		return token;
 	}
 
-	protected LocalDateTime getExpiresAtUtc() {
+    /**
+     * @return Returns the expiry time for this token
+     */
+	public LocalDateTime getExpiresAtUtc() {
 		return expiresAtUtc;
 	}
 
-	protected String getAudience() {
+    /**
+     * @return Returns the audience URL string for this token
+     */
+	public String getAudience() {
 		return audience;
 	}
 	
-    /// <summary>
-    /// Creates a new instance of the <see cref="SecurityToken"/> class.
-    /// </summary>
-    /// <param name="tokenString">A token in String format.</param>
-    /// <param name="audienceFieldName">The key name for the audience field.</param>
-    /// <param name="expiresOnFieldName">The key name for the expires on field.</param>
-    /// <param name="keyValueSeparator">The separator between keys and values.</param>
-    /// <param name="pairSeparator">The separator between different key/value pairs.</param>
-    protected SecurityToken(String tokenString, String audienceFieldName, String expiresOnFieldName, String keyValueSeparator, String pairSeparator)
-    {
+	/**
+	 * Creates a new instance of the SecurityToken class.
+	 * @param tokenString A token in String format.
+	 * @param audienceFieldName The key name for the audience field.
+	 * @param expiresOnFieldName The key name for the expires on field.
+	 * @param keyValueSeparator The separator between keys and values.
+	 * @param pairSeparator The separator between different key/value pairs.
+	 */
+    protected SecurityToken(String tokenString, String audienceFieldName, String expiresOnFieldName, String keyValueSeparator, String pairSeparator) {
     	// TODO: fx
 //        Fx.Assert(
 //            audienceFieldName != null && expiresOnFieldName != null && keyValueSeparator != null && pairSeparator != null,
@@ -56,11 +64,10 @@ class SecurityToken {
         this.expiresOnFieldName = expiresOnFieldName;
         this.keyValueSeparator = keyValueSeparator;
         this.pairSeparator = pairSeparator;
-        GetExpirationDateAndAudienceFromToken(tokenString);
+        getExpirationDateAndAudienceFromToken(tokenString);
     }
 
-    private void GetExpirationDateAndAudienceFromToken(String tokenString)
-    {
+    private void getExpirationDateAndAudienceFromToken(String tokenString) {
         HashMap<String, String> decodedToken = getDecodedTokenMap(tokenString, StandardCharsets.UTF_8.name(), StandardCharsets.UTF_8.name(), this.keyValueSeparator, this.pairSeparator);
         String expiresOn = decodedToken.get(this.expiresOnFieldName);
         if (expiresOn == null)
@@ -76,8 +83,7 @@ class SecurityToken {
         this.expiresAtUtc = LocalDateTime.ofEpochSecond(Long.parseLong(expiresOn), 0, ZoneOffset.UTC);
     }
 
-    static HashMap<String, String> getDecodedTokenMap(String tokenString, String keyEncodingScheme, String valueEncodingScheme, String keyValueSeparator, String pairSeparator)
-    {
+    static HashMap<String, String> getDecodedTokenMap(String tokenString, String keyEncodingScheme, String valueEncodingScheme, String keyValueSeparator, String pairSeparator) {
     	HashMap<String, String> map = new HashMap<String, String>();
         String[] valueEncodedPairs = tokenString.split(pairSeparator);
         for (String valueEncodedPair : valueEncodedPairs)

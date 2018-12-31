@@ -4,8 +4,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
+import java.util.Map;
 
-class RelayConnectionStringBuilder {
+public class RelayConnectionStringBuilder {
     static final String ENDPOINT_CONFIG_NAME = "Endpoint";
     static final String ENTITY_PATH_CONFIG_NAME = "EntityPath";
     static final String OPERATION_TIMEOUT_CONFIG_NAME = "OperationTimeout";
@@ -28,41 +29,33 @@ class RelayConnectionStringBuilder {
     // Returns the configured SAS token
     private String sharedAccessSignature;
 
-	// Initializes a new instance of the <see cref="RelayConnectionStringBuilder" /> class.</summary>
-    protected RelayConnectionStringBuilder()
-    {
+    /**
+     * Initializes a new instance of a RelayConnectionStringBuilder.
+     */
+    public RelayConnectionStringBuilder() {
         this.operationTimeout = RelayConstants.DEFAULT_OPERATION_TIMEOUT;
     }
     
-    /// <summary>
-    /// Initializes a new instance of a <see cref="RelayConnectionStringBuilder" /> with a specified existing connection String.
-    /// </summary> 
-    /// <param name="connectionString">The connection String, which can be obtained from the Azure Management Portal.</param>
-    /// <exception cref="ArgumentNullException">Thrown if connectionString is null or empty.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown if <see cref="RelayConnectionStringBuilder.OperationTimeout"/> is a non-positive <see cref="TimeSpan"/>.
-    /// </exception>
-    /// <exception cref="System.ArgumentException">
-    /// Thrown if a key value pair is missing either a key or a value.
-    /// Thrown if <see cref="RelayConnectionStringBuilder.Endpoint"/> is specified but is not a valid absolute <see cref="Uri"/>.
-    /// Thrown if <see cref="RelayConnectionStringBuilder.OperationTimeout"/> is specified but is not a valid <see cref="TimeSpan"/> format.
-    /// Thrown if an unsupported key name is specified.
-    /// </exception>
-    protected RelayConnectionStringBuilder(String connectionString) {
+    /**
+     * Initializes a new instance of a RelayConnectionStringBuilder with a specified existing connection String.
+     * @param connectionString The connection String, which can be obtained from the Azure Management Portal.
+     * @exception IllegalArgumentException Thrown if connection string is null or empty, or if the key value pairs within the connection string is invalid.
+     * @exception DateTimeParseException Thrown if the connection string contains an invalid operation timeout.
+     */
+    public RelayConnectionStringBuilder(String connectionString) {
     	this();
-        if (StringUtil.isNullOrEmpty(connectionString))
-        {
+        if (StringUtil.isNullOrEmpty(connectionString)) {
         	throw new IllegalArgumentException("connection cannot be null or empty");
         }
 
         this.parseConnectionString(connectionString);
     }
 
-    protected URI getEndpoint() {
+    public URI getEndpoint() {
 		return endpoint;
 	}
 
-	protected void setEndpoint(URI value) {
+    public void setEndpoint(URI value) {
         if (value == null)
         {
         	throw new IllegalArgumentException("the supplied endpoint endpoint cannot be null");
@@ -74,45 +67,45 @@ class RelayConnectionStringBuilder {
         this.endpoint = value;
 	}
 
-	protected Duration getOperationTimeout() {
+    public Duration getOperationTimeout() {
 		return operationTimeout;
 	}
 
-	protected void setOperationTimeout(Duration value) {
+    public void setOperationTimeout(Duration value) {
 		if (value.isNegative())
 			throw new IllegalArgumentException("the timeout duration cannot be negative");
         this.operationTimeout = value;
 	}
 
-	protected String getEntityPath() {
+    public String getEntityPath() {
 		return entityPath;
 	}
 
-	protected void setEntityPath(String entityPath) {
+    public void setEntityPath(String entityPath) {
 		this.entityPath = entityPath;
 	}
 
-	protected String getSharedAccessKeyName() {
+    public String getSharedAccessKeyName() {
 		return sharedAccessKeyName;
 	}
 
-	protected void setSharedAccessKeyName(String sharedAccessKeyName) {
+    public void setSharedAccessKeyName(String sharedAccessKeyName) {
 		this.sharedAccessKeyName = sharedAccessKeyName;
 	}
 
-	protected String getSharedAccessKey() {
+    public String getSharedAccessKey() {
 		return sharedAccessKey;
 	}
 
-	protected void setSharedAccessKey(String sharedAccessKey) {
+    public void setSharedAccessKey(String sharedAccessKey) {
 		this.sharedAccessKey = sharedAccessKey;
 	}
 
-	protected String getSharedAccessSignature() {
+    public String getSharedAccessSignature() {
 		return sharedAccessSignature;
 	}
 
-	protected void setSharedAccessSignature(String sharedAccessSignature) {
+    public void setSharedAccessSignature(String sharedAccessSignature) {
 		this.sharedAccessSignature = sharedAccessSignature;
 	}
 
@@ -196,11 +189,17 @@ class RelayConnectionStringBuilder {
         }
     }
 
-    private void parseConnectionString(String connectionString) {
+    /**
+     * Reads the different parameters and their values from the given connection string
+     * @param connectionString The connection String, which can be obtained from the Azure Management Portal.
+     * @exception IllegalArgumentException Thrown if the key value pairs within the connection string is invalid.
+     * @exception DateTimeParseException Thrown if the connection string contains an invalid operation timeout.
+     */
+    public void parseConnectionString(String connectionString) {
         // First split into strings based on ';'
         String[] keyValuePairs = connectionString.split(String.valueOf(KEY_VALUE_PAIR_DELIMITER));
-        for (String keyValuePair : keyValuePairs)
-        {
+        
+        for (String keyValuePair : keyValuePairs) {
         	if (StringUtil.isNullOrEmpty(keyValuePair))
         		continue;
         	
@@ -251,6 +250,26 @@ class RelayConnectionStringBuilder {
                 throw new IllegalArgumentException("the following is not a valid field for connection string: " + key);
             }
         }
+    }
+    
+    /**
+     * Get an URL as a string from the connection string, which can be used as the HTTP endpoint for the Hybrid Connection.
+     * @return A formatted URL as a string.
+     */
+    public String getHttpUrlString() {
+    	if (this.endpoint == null || this.entityPath == null) {
+    		throw new IllegalArgumentException("The endpoint or entityPath of the URL is undefined.");
+    	}
+    	
+    	String urlString = this.endpoint.toString() + entityPath;
+    	if (!urlString.startsWith("https://")) {
+    		StringBuilder builder = new StringBuilder(urlString);
+        	int schemeIndex = urlString.indexOf("://");
+
+        	builder.replace(0, schemeIndex, "https");
+        	return builder.toString();
+        }
+    	return urlString;
     }
 }
 

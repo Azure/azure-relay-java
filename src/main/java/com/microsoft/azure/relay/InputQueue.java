@@ -47,8 +47,6 @@ final class InputQueue<T extends Object> {
     protected InputQueue() {
         this.itemQueue = new ItemQueue();
         // TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//        this.readerQueue = new Queue<IQueueReader>();
-//        this.waiterList = new List<IQueueWaiter>();
         this.readerQueue = new LinkedList<CompletableFuture<T>>();
         this.waiterList = new LinkedList<CompletableFuture<T>>();
         this.queueState = QueueState.OPEN;
@@ -261,7 +259,11 @@ final class InputQueue<T extends Object> {
         if (outstandingReaders != null) {
             for (int i = 0; i < outstandingReaders.length; i++) {
                 Exception exception = (pendingExceptionGenerator != null) ? pendingExceptionGenerator.get() : null;
-                outstandingReaders[i].complete((T) new Item(exception, null));
+                if (exception == null) {
+                	outstandingReaders[i].complete(null);
+                } else {
+                	outstandingReaders[i].completeExceptionally(exception);
+                }
             }
         }
     }
@@ -421,19 +423,16 @@ final class InputQueue<T extends Object> {
 
     // This will not block, however, Dispatch() must be called later if this function
     // returns true.
-    boolean enqueueWithoutDispatch(Item item)
-    {
+    boolean enqueueWithoutDispatch(Item item) {
+    	
         synchronized (thisLock) {
-            // Open
-            if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN)
-            {
-                if (readerQueue.size() == 0 && waiterList.size() == 0)
-                {
+            if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN) {
+            	
+                if (readerQueue.size() == 0 && waiterList.size() == 0) {
                     itemQueue.enqueueAvailableItem(item);
                     return false;
                 }
-                else
-                {
+                else {
                     itemQueue.enqueuePendingItem(item);
                     return true;
                 }
@@ -661,21 +660,17 @@ final class InputQueue<T extends Object> {
             return dequeueItemCore();
         }
 
-        protected void enqueueAvailableItem(Item item)
-        {
+        protected void enqueueAvailableItem(Item item) {
             enqueueItemCore(item);
         }
 
-        protected void enqueuePendingItem(Item item)
-        {
+        protected void enqueuePendingItem(Item item) {
             enqueueItemCore(item);
             this.pendingCount++;
         }
 
-        protected void makePendingItemAvailable()
-        {
-            if (pendingCount == 0)
-            {
+        protected void makePendingItemAvailable() {
+            if (pendingCount == 0) {
             	// TODO: fx
 //                Fx.Assert(this.pendingCount != 0, "ItemQueue does not contain any pending items");
                 // TODO: trace
@@ -685,10 +680,8 @@ final class InputQueue<T extends Object> {
             this.pendingCount--;
         }
 
-        Item dequeueItemCore()
-        {
-            if (totalCount == 0)
-            {
+        Item dequeueItemCore() {
+            if (totalCount == 0) {
             	throw new IllegalArgumentException("Item queue is empty, cannot dequeue.");
             	// TODO: trace
 //                Fx.Assert(totalCount != 0, "ItemQueue does not contain any items");
@@ -703,10 +696,9 @@ final class InputQueue<T extends Object> {
         }
 
         @SuppressWarnings("unchecked")
-		void enqueueItemCore(Item item)
-        {
-            if (this.totalCount == this.items.length)
-            {
+		void enqueueItemCore(Item item) {
+        	
+            if (this.totalCount == this.items.length) {
                 Item[] newItems = (Item[]) Array.newInstance(Item.class, this.items.length * 2);
                 for (int i = 0; i < this.totalCount; i++)
                 {
@@ -715,6 +707,7 @@ final class InputQueue<T extends Object> {
                 this.head = 0;
                 this.items = newItems;
             }
+            
             int tail = (this.head + this.totalCount) % this.items.length;
             this.items[tail] = item;
             this.totalCount++;
