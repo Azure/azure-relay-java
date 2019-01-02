@@ -12,7 +12,7 @@ public class EndpointNotFoundException extends RelayException {
     }
 
     /**
-     * Creates a new instance of the <see cref="EndpointNotFoundException"/> class with a specified error message.
+     * Creates a new instance of the EndpointNotFoundException class with a specified error message.
      * @param message The message that describes the error.
      */
     public EndpointNotFoundException(String message) {

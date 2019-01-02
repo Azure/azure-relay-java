@@ -14,10 +14,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletionException;
 
-import javax.websocket.CloseReason;
-import javax.websocket.CloseReason.CloseCodes;
-
-
 public class HybridConnectionClient {
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
 	static final boolean IS_DEBUG = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().indexOf("-agentlib:jdwp") > 0;
@@ -209,22 +205,6 @@ public class HybridConnectionClient {
 		} else {
 			throw new IllegalArgumentException("tokenProvider cannot be null.");
 		}
-	}
-
-	/**
-	 * Disconnects all connections from the cloud service within the timeout
-	 * @return A CompletableFuture which completes when all connections are disconnected with the cloud service
-	 */
-	public CompletableFuture<Void> closeAsync() {
-		CompletableFutureUtil.cleanup();
-		if (this.connectionTask != null) {
-			ClientWebSocket socket = this.connectionTask.join();
-			this.connectionTask = null;
-			if (socket.isOpen()) {
-				return socket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Sender is closing normlly"));
-			}
-		}
-		return CompletableFuture.completedFuture(null);
 	}
 	
 	/// <summary>

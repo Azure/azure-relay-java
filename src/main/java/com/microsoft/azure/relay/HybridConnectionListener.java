@@ -20,7 +20,6 @@ import java.util.function.Function;
 
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
-import javax.websocket.DeploymentException;
 import org.eclipse.jetty.io.RuntimeIOException;
 import org.json.JSONObject;
 
@@ -340,7 +339,7 @@ public class HybridConnectionListener {
             if (!this.openCalled) {
             	// TODO: trace
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.ObjectNotOpened), this);
-            	throw new RuntimeException("cannot accept connection because listener is not open.");
+            	throw new InvalidRelayOperationException("cannot accept connection because listener is not open.");
             }
         }
         return this.connectionInputQueue.dequeueAsync();
@@ -386,14 +385,14 @@ public class HybridConnectionListener {
 			// TODO: trace
 //			throw RelayEventSource.Log
 //					.ThrowingException(new ObjectDisposedException(this.toString(), SR.EntityClosedOrAborted), this);
-			throw new RuntimeException("Invalid operation. Cannot call open when it's already closed.");
+			throw new InvalidRelayOperationException("Invalid operation. Cannot call open when it's already closed.");
 		}
 	}
 
 	void throwIfReadOnly() {
 		synchronized (this.thisLock) {
 			if (this.openCalled) {
-				throw new RuntimeException("Invalid operation. Cannot call open when it's already open.");
+				throw new InvalidRelayOperationException("Invalid operation. Cannot call open when it's already open.");
 //				throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.ObjectIsReadOnly),this);
 			}
 		}
@@ -444,8 +443,10 @@ public class HybridConnectionListener {
 //                        RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, description + " " + userException);
 //                        listenerContext.Response.StatusCode = HttpStatusCode.BadGateway;
 //                        listenerContext.Response.StatusDescription = description;
+            		throw new RuntimeException("An exception has occured within the handler provided.");
             	}
             }
+            
             // Don't block the pump waiting for the rendezvous
     		return this.completeAcceptAsync(listenerContext, rendezvousUri);
     	}
@@ -495,7 +496,7 @@ public class HybridConnectionListener {
 					try {
 						return listenerContext.rejectAsync(rendezvousUri);
 					} 
-					catch (UnsupportedEncodingException | URISyntaxException | DeploymentException | CompletionException e) {
+					catch (UnsupportedEncodingException | URISyntaxException | CompletionException e) {
 						// TODO Auto-generated catch block
 						throw new RuntimeException(e.getMessage());
 					}

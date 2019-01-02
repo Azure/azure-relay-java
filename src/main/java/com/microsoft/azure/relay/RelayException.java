@@ -25,7 +25,7 @@ class RelayException extends Exception {
     }
 
     /**
-     * Creates a new instance of the <see cref="RelayException"/> class with a specified error message.
+     * Creates a new instance of the RelayException class with a specified error message.
      * @param message The message that describes the error.
      */
     public RelayException(String message) {

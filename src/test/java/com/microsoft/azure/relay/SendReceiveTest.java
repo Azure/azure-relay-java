@@ -118,7 +118,8 @@ public class SendReceiveTest {
 					clientWebSocket.sendAsync("hi");
 				}
 			}
-		}).thenRun(() -> client.closeAsync().join());
+			clientWebSocket.closeAsync().join();
+		});
 		
 		try {
 			assertEquals("Listener did not receive expected number of messages.", timesToRepeat, listenerReceiveCount.get(timesToRepeat * 5, TimeUnit.SECONDS).intValue());

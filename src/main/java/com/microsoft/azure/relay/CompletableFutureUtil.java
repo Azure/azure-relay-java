@@ -51,7 +51,7 @@ final class CompletableFutureUtil {
 						result = (T) future.get();
 					}
 				} catch (Exception e) {
-					throw (CompletionException) e;
+					throw (e instanceof RuntimeException) ? new RuntimeException(e) : new CompletionException(e);
 				}
 				return result;
 			}));

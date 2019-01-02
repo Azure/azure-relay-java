@@ -81,7 +81,7 @@ public class RelayedHttpListenerContext {
 		});
     }
 
-    protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException, DeploymentException, CompletionException {
+    protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException, CompletionException {
     	if (this.response.getStatusCode() == HttpStatus.CONTINUE_100) {
     		this.response.setStatusCode(HttpStatus.BAD_REQUEST_400);
     		this.response.setStatusDescription("Rejected by user code");

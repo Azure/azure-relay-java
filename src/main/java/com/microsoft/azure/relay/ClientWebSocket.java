@@ -23,6 +23,7 @@ import javax.websocket.WebSocketContainer;
 
 import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.util.component.LifeCycle;
+import org.eclipse.jetty.websocket.api.UpgradeException;
 
 @ClientEndpoint(configurator = HybridConnectionEndpointConfigurator.class)
 public class ClientWebSocket {
@@ -86,6 +87,9 @@ public class ClientWebSocket {
 				this.session = this.container.connectToServer(this, uri);
 				this.closeTask = new CompletableFuture<Void>();
 			} catch (DeploymentException | IOException e) {
+				if (e.getCause() instanceof UpgradeException) {
+					throw new InvalidRelayOperationException(e.getCause().getMessage());
+				}
 				throw new RuntimeIOException("connection to the server failed.");
 			}
 			if (this.session == null || !this.session.isOpen()) {
