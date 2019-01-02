@@ -9,20 +9,14 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 final class InputQueue<T extends Object> {
-	// Fields
     private final ItemQueue itemQueue;
-// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//  private final Queue<IQueueReader> readerQueue;
-//  private final List<IQueueWaiter> waiterList;
     private final Queue<CompletableFuture<T>> readerQueue;
     private final List<CompletableFuture<T>> waiterList;
 
     private QueueState queueState;
     private Object thisLock = new Object();
 
-    // Properties
     private int pendingCount;
-    // Users like ServiceModel can hook this abort ICommunicationObject or handle other non-IDisposable objects
     private Consumer<T> disposeItemCallback;
     
     protected int getPendingCount() {
@@ -46,18 +40,15 @@ final class InputQueue<T extends Object> {
     
     protected InputQueue() {
         this.itemQueue = new ItemQueue();
-        // TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
         this.readerQueue = new LinkedList<CompletableFuture<T>>();
         this.waiterList = new LinkedList<CompletableFuture<T>>();
         this.queueState = QueueState.OPEN;
     }
 
-    // TODO: cancellationtoken
     protected CompletableFuture<T> dequeueAsync() {
         return this.dequeueAsync(null);
     }
 
-    // TODO: cancellationtoken
     protected CompletableFuture<T> dequeueAsync(Object state) {
         Item item = null;
         
@@ -69,10 +60,6 @@ final class InputQueue<T extends Object> {
                     item = itemQueue.dequeueAvailableItem();
                 }
                 else {
-                	// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//                	AsyncQueueReader reader = new AsyncQueueReader(this, state);
-//                    this.readerQueue.Enqueue(reader);
-//                    return reader.Task;
                 	CompletableFuture<T> reader = new CompletableFuture<T>();
                 	this.readerQueue.add(reader);
                 	return reader;
@@ -84,10 +71,6 @@ final class InputQueue<T extends Object> {
                     item = itemQueue.dequeueAvailableItem();
                 }
                 else if (itemQueue.hasAnyItem()) {
-                	// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//                    AsyncQueueReader reader = new AsyncQueueReader(this, state);
-//                    this.readerQueue.Enqueue(reader);
-//                    return reader.Task;
                 	CompletableFuture<T> reader = new CompletableFuture<T>();
                 	this.readerQueue.add(reader);
                 	return reader;
@@ -99,22 +82,16 @@ final class InputQueue<T extends Object> {
         return (item != null) ? CompletableFuture.completedFuture(item.getValue()) : CompletableFuture.completedFuture(null);
     }
 
-    // TODO: cancellationtoken
     protected CompletableFuture<Boolean> waitForItemAsync() {
         return this.waitForItemAsync(null);
     }
 
-    // TODO: cancellationtoken
     @SuppressWarnings("unchecked")
 	protected CompletableFuture<Boolean> waitForItemAsync(Object state) {
     	
         synchronized (thisLock) {
             if (queueState == QueueState.OPEN) {
                 if (!itemQueue.hasAvailableItem()) {
-                	// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//                    AsyncQueueWaiter waiter = new AsyncQueueWaiter(state);
-//                    waiterList.add(waiter);
-//                    return waiter.Task;
                     CompletableFuture<T> waiter = new CompletableFuture<T>();
                     waiterList.add(waiter);
                     return (CompletableFuture<Boolean>) waiter;
@@ -122,10 +99,6 @@ final class InputQueue<T extends Object> {
             }
             else if (queueState == QueueState.SHUTDOWN) {
                 if (!itemQueue.hasAvailableItem() && itemQueue.hasAnyItem()) {
-                	// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//                    AsyncQueueWaiter waiter = new AsyncQueueWaiter(cancellationToken, state);
-//                    waiterList.Add(waiter);
-//                    return waiter.Task;
                     CompletableFuture<T> waiter = new CompletableFuture<T>();
                     waiterList.add(waiter);
                     return (CompletableFuture<Boolean>) waiter;
@@ -142,10 +115,6 @@ final class InputQueue<T extends Object> {
 
     @SuppressWarnings("unchecked")
 	protected void dispatch() {
-    	// TODO: fall back to IQueueReader/IQueueWaiter if completablefuture does not work out
-//        IQueueReader reader = null;
-//        IQueueReader[] outstandingReaders = null;
-//        IQueueWaiter[] waiters = null;
         CompletableFuture<T> reader = null;
         CompletableFuture<T>[] outstandingReaders = null;
         CompletableFuture<Boolean>[] waiters = null;
@@ -207,23 +176,14 @@ final class InputQueue<T extends Object> {
     }
 
     protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
-    	// TODO: fx
-//    	if (item instanceof Exception)
-//      Fx.Assert(exception != null, "EnqueueAndDispatch: exception parameter should not be null");
-    	// TODO: assert
-//        Fx.Assert(item != null, "EnqueueAndDispatch: item parameter should not be null");
         enqueueAndDispatch(new Item(item, dequeuedCallback), canDispatchOnThisThread);
     }
 
     protected boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
-    	// TODO: fx
-//        Fx.Assert(item != null, "EnqueueWithoutDispatch: item parameter should not be null");
         return enqueueWithoutDispatch(new Item(item, dequeuedCallback));
     }
 
     protected boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
-    	// TODO: fx
-//        Fx.Assert(exception != null, "EnqueueWithoutDispatch: exception parameter should not be null");
         return enqueueWithoutDispatch(new Item(exception, dequeuedCallback));
     }
 
@@ -356,9 +316,6 @@ final class InputQueue<T extends Object> {
 
     @SuppressWarnings("unchecked")
     void onInvokeDequeuedCallback(Object state) {
-    	// TODO: fx
-//        Fx.Assert(state != null, "InputQueue.OnInvokeDequeuedCallback: (state != null)");
-
 		Item item = (Item) state;
         item.getDequeuedCallback().accept(item.getValue());
     }
@@ -393,7 +350,7 @@ final class InputQueue<T extends Object> {
                     }
                 }
             }
-            else { // queueState == QueueState.Closed || queueState == QueueState.Shutdown
+            else {
                 disposeItem = true;
             }
         }
@@ -421,10 +378,8 @@ final class InputQueue<T extends Object> {
         }
     }
 
-    // This will not block, however, Dispatch() must be called later if this function
-    // returns true.
+    // This will not block, however, Dispatch() must be called later if this function returns true.
     boolean enqueueWithoutDispatch(Item item) {
-    	
         synchronized (thisLock) {
             if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN) {
             	
@@ -454,14 +409,9 @@ final class InputQueue<T extends Object> {
         return waiters;
     }
 
-    // Used for timeouts. The InputQueue must remove readers from its reader queue to prevent
-    // dispatching items to timed out readers.
+    // Used for timeouts. The InputQueue must remove readers from its reader queue to prevent dispatching items to timed out readers.
     boolean removeReader(CompletableFuture<T> reader) {
-    	// TODO: fx
-//        Fx.Assert(reader != null, "InputQueue.RemoveReader: (reader != null)");
-
         synchronized (thisLock) {
-        	
             if (queueState == QueueState.OPEN || queueState == QueueState.SHUTDOWN) {
                 boolean removed = false;
 
@@ -475,34 +425,20 @@ final class InputQueue<T extends Object> {
                         readerQueue.add(temp);
                     }
                 }
-
                 return removed;
             }
         }
-
         return false;
     }
 
     
-    enum QueueState
-    {
+    enum QueueState {
         OPEN,
         SHUTDOWN,
         CLOSED
     }
 
-//    interface IQueueReader
-//    {
-//        void Set(Item item);
-//    }
-//
-//    interface IQueueWaiter
-//    {
-//        void Set(boolean itemAvailable);
-//    }
-
-    class Item
-    {
+    class Item {
     	Consumer<T> dequeuedCallback;
         Exception exception;
         T value;
@@ -549,70 +485,6 @@ final class InputQueue<T extends Object> {
         }
     }
 
-    // TODO: tasksource
-//    class AsyncQueueReader : TaskCompletionSource<T>, IQueueReader
-//    {
-//        private final InputQueue<T> inputQueue;
-//        readonly CancellationTokenRegistration cancelRegistration;
-//
-//        // TODO: cancellationToken
-//        protected AsyncQueueReader(InputQueue<T> inputQueue, object state)
-//            : base(state)
-//        {
-//            this.inputQueue = inputQueue;
-//            this.cancelRegistration = cancellationToken.Register(s => CancelCallback(s), this);
-//        }
-//
-//        protected void Set(Item inputItem)
-//        {
-//            this.cancelRegistration.Dispose();
-//
-//            if (inputItem.Exception != null)
-//            {
-//                this.TrySetException(inputItem.Exception);
-//            }
-//            else
-//            {
-//                this.TrySetResult(inputItem.Value);
-//            }
-//        }
-//
-//        void cancelCallback(object state) {
-//            AsyncQueueReader thisPtr = (AsyncQueueReader)state;
-//            thisPtr.cancelRegistration.Dispose();
-//            if (thisPtr.inputQueue.RemoveReader(thisPtr))
-//            {
-//                thisPtr.TrySetCanceled();
-//            }
-//        }
-//    }
-
-    // TODO: tasksource
-//    class AsyncQueueWaiter : TaskCompletionSource<bool>, IQueueWaiter
-//    {
-//        readonly CancellationTokenRegistration cancelRegistration;
-//
-//        // TODO: cancellationtoken
-//        protected AsyncQueueWaiter(Object state)
-//            : base(state)
-//        {
-//            this.cancelRegistration = cancellationToken.Register(s => cancelCallback(s), this);
-//        }
-//
-//        protected void Set(bool currentItemAvailable)
-//        {
-//            this.cancelRegistration.Dispose();
-//            this.TrySetResult(currentItemAvailable);
-//        }
-//
-//        static void cancelCallback(object state)
-//        {
-//            var thisPtr = (AsyncQueueWaiter)state;
-//            thisPtr.cancelRegistration.Dispose();
-//            thisPtr.TrySetCanceled();
-//        }
-//    }
-
     class ItemQueue {
         int head;
         Item[] items;
@@ -638,22 +510,16 @@ final class InputQueue<T extends Object> {
         	return this.totalCount > this.pendingCount;
         }
 
-        protected Item dequeueAnyItem()
-        {
+        protected Item dequeueAnyItem() {
             if (this.pendingCount == this.totalCount) {
                 this.pendingCount--;
             }
+            
             return dequeueItemCore();
         }
 
-        protected Item dequeueAvailableItem()
-        {
-            if (this.totalCount == this.pendingCount)
-            {
-            	// TODO: fx
-//                Fx.Assert(this.totalCount != this.pendingCount, "ItemQueue does not contain any available items");
-            	// TODO: trace
-//                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any available items"), this);
+        protected Item dequeueAvailableItem() {
+            if (this.totalCount == this.pendingCount) {
             	throw new RuntimeException("ItemQueue does not contain any available items");
             }
 
@@ -670,23 +536,19 @@ final class InputQueue<T extends Object> {
         }
 
         protected void makePendingItemAvailable() {
-            if (pendingCount == 0) {
-            	// TODO: fx
-//                Fx.Assert(this.pendingCount != 0, "ItemQueue does not contain any pending items");
-                // TODO: trace
+            // TODO: trace
+//            if (pendingCount == 0) {
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any pending items"), this);
-            }
+//            }
 
             this.pendingCount--;
         }
 
         Item dequeueItemCore() {
-            if (totalCount == 0) {
-            	throw new IllegalArgumentException("Item queue is empty, cannot dequeue.");
-            	// TODO: trace
-//                Fx.Assert(totalCount != 0, "ItemQueue does not contain any items");
+        	// TODO: trace
+//            if (totalCount == 0) {
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any items"), this);
-            }
+//            }
 
             Item item = this.items[this.head];
             this.items[this.head] = new Item();

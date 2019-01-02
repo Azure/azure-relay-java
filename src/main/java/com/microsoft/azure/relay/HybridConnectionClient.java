@@ -5,7 +5,6 @@ package com.microsoft.azure.relay;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.Proxy;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -41,13 +40,6 @@ public class HybridConnectionClient {
 	 */
 	private Duration operationTimeout;
 	
-	/**
-	 * Controls whether the client will use custom websocket implementation
-	 */
-	private boolean useBuiltInClientWebSocket;
-	
-	// Gets or sets the connection buffer size. Default value is 64K.
-	private int connectionBufferSize;
 	private CompletableFuture<ClientWebSocket> connectionTask;
 	
 	public URI getAddress() {
@@ -74,19 +66,10 @@ public class HybridConnectionClient {
 	public Duration getOperationTimeout() {
 		return operationTimeout;
 	}
+	
 	public void setOperationTimeout(Duration operationTimeout) {
 		this.operationTimeout = operationTimeout;
 	}
-
-	/**
-	 * @return Controls whether the client will use custom websocket implementation
-	 */
-	public boolean isUseBuiltInClientWebSocket() {
-		return useBuiltInClientWebSocket;
-	}
-//	public void setUseBuiltInClientWebSocket(boolean useBuiltInClientWebSocket) {
-//		this.useBuiltInClientWebSocket = useBuiltInClientWebSocket;
-//	}
 
 	/**
 	 * Create a new HybridConnectionClient instance for initiating HybridConnections where no client authentication is required.
@@ -145,6 +128,7 @@ public class HybridConnectionClient {
 				throw new IllegalArgumentException("entityPath is required in connectionString");
 			}
 		} else {
+			
 			if (StringUtil.isNullOrWhiteSpace(path)) {
 				throw new IllegalArgumentException("path is required outside of connectionString");
 			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
@@ -161,8 +145,7 @@ public class HybridConnectionClient {
 
 		Duration connectTimeout = DEFAULT_CONNECTION_TIMEOUT;
 		if (builder.getOperationTimeout() != RelayConstants.DEFAULT_OPERATION_TIMEOUT) {
-			// Only change from our default (70 seconds) if it appears user has changed the
-			// OperationTimeout in the connectionString.
+			// Only change from our default (70 seconds) if it appears user has changed the operationTimeout in the connectionString.
 			connectTimeout = builder.getOperationTimeout();
 		}
 
@@ -274,7 +257,6 @@ public class HybridConnectionClient {
 //         return ManagementOperations.GetAsync<HybridConnectionRuntimeInformation>(this.Address, this.TokenProvider, cancellationToken);
 //     }
 
-	// TODO
 	private static TrackingContext createTrackingContext(URI address) {
 		if (IS_DEBUG) {
 			// In DEBUG builds allow setting the trackingId via query String: "?id=00000000-0000-0000-0000-000000000000"
@@ -295,16 +277,17 @@ public class HybridConnectionClient {
 		return TrackingContext.create(address);
 	}
 
-	private void initialize(URI address, Duration operationTimeout, TokenProvider tokenProvider,
-			boolean tokenProviderRequired) {
+	private void initialize(URI address, Duration operationTimeout, TokenProvider tokenProvider, boolean tokenProviderRequired) {
+		
 		if (address == null) {
 			// TODO: trace
 //             throw RelayEventSource.Log.ArgumentNull(nameof(address), this);
 			throw new IllegalArgumentException("cannot initiate hybrid connection client with null uri");
+			
 		} else if (!address.getScheme().equals(RelayConstants.HYBRID_CONNECTION_SCHEME)) {
-//			throw RelayEventSource.Log.Argument(nameof(address),
-//					SR.GetString(SR.InvalidUriScheme, address.Scheme, RelayConstants.HybridConnectionScheme), this);
+//			throw RelayEventSource.Log.Argument(nameof(address), SR.GetString(SR.InvalidUriScheme, address.Scheme, RelayConstants.HybridConnectionScheme), this);
 			throw new IllegalArgumentException("cannot initiate hybrid connection client with invalid uri scheme");
+			
 		} else if (tokenProviderRequired && tokenProvider == null) {
 //			throw RelayEventSource.Log.ArgumentNull(nameof(tokenProvider), this);
 			throw new IllegalArgumentException("cannot initiate hybrid connection client with null token provider");
@@ -312,9 +295,7 @@ public class HybridConnectionClient {
 
 		this.address = address;
 		this.tokenProvider = tokenProvider;
-		this.connectionBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
 		this.operationTimeout = operationTimeout;
 //		this.proxy = WebRequest.DefaultWebProxy;
-		this.useBuiltInClientWebSocket = HybridConnectionConstants.DEFAULT_USE_BUILTIN_CLIENT_WEBSOCKET;
 	}
 }

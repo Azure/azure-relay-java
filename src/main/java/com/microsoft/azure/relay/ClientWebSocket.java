@@ -8,8 +8,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-
 import java.io.IOException;
 import javax.websocket.ClientEndpoint;
 import javax.websocket.CloseReason;
@@ -88,10 +86,10 @@ public class ClientWebSocket {
 				this.session = this.container.connectToServer(this, uri);
 				this.closeTask = new CompletableFuture<Void>();
 			} catch (DeploymentException | IOException e) {
-				throw new RuntimeException("connection to the server failed.");
+				throw new RuntimeIOException("connection to the server failed.");
 			}
 			if (this.session == null || !this.session.isOpen()) {
-				throw new RuntimeException("connection to the server failed.");
+				throw new RuntimeIOException("connection to the server failed.");
 			}
 		});
 	}

@@ -14,7 +14,6 @@ public final class RelayedHttpListenerRequest {
 	private boolean hasEntityBody;
 	private InetSocketAddress remoteEndPoint;
 	
-	
     public boolean hasEntityBody() {
 		return hasEntityBody;
 	}

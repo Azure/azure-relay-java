@@ -167,7 +167,6 @@ public class HybridConnectionListener {
 		this.trackingContext = TrackingContext.create(this.address);
 		this.connectionInputQueue = new InputQueue<ClientWebSocket>();
 		this.controlConnection = new ControlConnection(this);
-		this.useBuiltInClientWebSocket = HybridConnectionConstants.DEFAULT_USE_BUILTIN_CLIENT_WEBSOCKET;
 	}
 
 	/**
@@ -201,6 +200,7 @@ public class HybridConnectionListener {
 		if (StringUtil.isNullOrWhiteSpace(connectionString)) {
 			// TODO: trace
 //            throw RelayEventSource.Log.ArgumentNull(nameof(connectionString), this);
+			throw new IllegalArgumentException("The connectionString is null or empty.");
 		}
 
 		RelayConnectionStringBuilder builder = new RelayConnectionStringBuilder(connectionString);
@@ -208,19 +208,19 @@ public class HybridConnectionListener {
 
 		if (pathFromConnectionString) {
 			if (StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
-				// connectionString did not have required EntityPath
 				// TODO: trace
 //                throw RelayEventSource.Log.Argument(nameof(connectionString), SR.GetString(SR.ConnectionStringMustIncludeEntityPath, nameof(HybridConnectionClient)), this);
+				throw new IllegalArgumentException("ConnectionString did not have required entityPath");
 			}
 		} else {
 			if (StringUtil.isNullOrWhiteSpace(path)) {
-				// path parameter is required
 				// TODO: trace
 //                throw RelayEventSource.Log.ArgumentNull(nameof(path), this);
+				throw new IllegalArgumentException("Path parameter is required.");
 			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
-				// EntityPath must not appear in connectionString
 				// TODO: trace
 //                throw RelayEventSource.Log.Argument(nameof(connectionString), SR.GetString(SR.ConnectionStringMustNotIncludeEntityPath, nameof(HybridConnectionListener)), this);
+				throw new IllegalArgumentException("EntityPath must not appear in connectionString");
 			}
 
 			builder.setEntityPath(path);
@@ -233,7 +233,6 @@ public class HybridConnectionListener {
 		this.trackingContext = TrackingContext.create(this.address);
 		this.connectionInputQueue = new InputQueue<ClientWebSocket>();
 		this.controlConnection = new ControlConnection(this);
-		this.useBuiltInClientWebSocket = HybridConnectionConstants.DEFAULT_USE_BUILTIN_CLIENT_WEBSOCKET;
 	}
 
 	/**
@@ -271,61 +270,54 @@ public class HybridConnectionListener {
 
 	/**
 	 * Disconnects all connections from the cloud service within the timeout
-	 * @param timeout The timeout duration for this openAsync operation
+	 * @param timeout The timeout duration for this closeAsync operation
 	 * @return A CompletableFuture which completes when all connections are disconnected with the cloud service
 	 */
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
 		CompletableFuture<Void> closeControlTask = new CompletableFuture<Void>();
 		CompletableFuture<Void> closeRendezvousTask = new CompletableFuture<Void>();
+		
         try {
-        	List<ClientWebSocket> clients;
-            synchronized (this.thisLock) {
-                if (this.closeCalled) {
-                    return CompletableFuture.completedFuture(null);
+        	CompletableFutureUtil.timedRunAsync(timeout, () -> {
+            	List<ClientWebSocket> clients;
+                synchronized (this.thisLock) {
+                    if (this.closeCalled) {
+                        return;
+                    }
+
+                    // TODO: trace
+//                    RelayEventSource.Log.ObjectClosing(this);
+                    this.closeCalled = true;
+
+                    // If the input queue is empty this completes all pending waiters with null and prevents
+                    // any new items being added to the input queue.
+                    this.connectionInputQueue.shutdown();
+
+                    // Close any unaccepted rendezvous. DequeueAsync won't block since we've called connectionInputQueue.Shutdown().
+                    clients = new ArrayList<ClientWebSocket>(this.connectionInputQueue.getPendingCount());
+                    ClientWebSocket webSocket;
+                    
+                    do {
+                    	webSocket =  this.connectionInputQueue.dequeueAsync().join();
+                    	
+                    	if (webSocket != null) {
+                    		clients.add(webSocket);
+                    	}
+                    } while (webSocket != null);
+                    
+                    this.isOnline = false;
                 }
+                
+                clients.forEach(client -> client.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
 
                 // TODO: trace
-//                RelayEventSource.Log.ObjectClosing(this);
-                this.closeCalled = true;
-
-                // If the input queue is empty this completes all pending waiters with null and prevents
-                // any new items being added to the input queue.
-                this.connectionInputQueue.shutdown();
-
-                // Close any unaccepted rendezvous.  DequeueAsync won't block since we've called connectionInputQueue.Shutdown().
-                clients = new ArrayList<ClientWebSocket>(this.connectionInputQueue.getPendingCount());
-                ClientWebSocket webSocket;
-                
-                do {
-                	webSocket = CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
-                    	ClientWebSocket socket = null;
-                    	try {
-                    		socket = this.connectionInputQueue.dequeueAsync().get();
-    					} catch (InterruptedException | ExecutionException e) {
-    						// TODO trace
-//    						e.printStackTrace();
-    					}
-                    	return socket;
-                    }).get();
-                	
-                	if (webSocket != null) {
-                		clients.add(webSocket);
-                	}
-                } while (webSocket != null);
-                
-                this.isOnline = false;
-            }
-            
-            clients.forEach(client -> client.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
-
-            // TODO: trace
-//            RelayEventSource.Log.ObjectClosed(this);
+//                RelayEventSource.Log.ObjectClosed(this);
+        	}).join();
         }
-        // TODO: Logging
+        // TODO: trace
         catch (Exception e) // when (!Fx.IsFatal(e))
         {
 //            RelayEventSource.Log.ThrowingException(e, this);
-            System.out.println(e.getMessage());
         }
         finally {
             this.connectionInputQueue.dispose();

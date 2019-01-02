@@ -21,32 +21,22 @@ public class TrackingContext {
         this.address = address;
     }
 
-    /// <summary> Returns the the Guid representation of the tracking id.</summary>
     public UUID getActivityId() { 
     	return this.activityId;
     }
 
-    /// <summary> Returns the tracking id used in this context.</summary>
     public String getTrackingId() { 
     	return this.trackingId;
     }
 
-    /// <summary> Returns the address associated with the current tracking context. </summary>
     public String getAddress() {
     	return this.address;
     }
 
-    /// <summary>
-    /// Create a TrackingContext with a new Guid/TrackingId and no address.
-    /// </summary>
     static TrackingContext create() {
         return create(UUID.randomUUID(), (String) null);
     }
 
-    /// <summary>
-    /// Create a TrackingContext with a new Guid/TrackingId and given address.
-    /// </summary>
-    /// <param name="address">subsystem-specific Uri like entity address to be used in the tracking context</param>
     static TrackingContext create(URI address) {
         return create(UUID.randomUUID(), HybridConnectionUtil.getAudience(address));
     }

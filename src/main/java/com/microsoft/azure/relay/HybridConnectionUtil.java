@@ -34,6 +34,17 @@ public final class HybridConnectionUtil {
     	return audience.toString();
     }
     
+    /**
+     * Build the websocket uri for use with HybridConnection WebSockets. Results in a Uri such as "wss://HOST:PORT/$hc/PATH?QUERY&amp;sb-hc-action=listen&amp;sb-hc-id=ID"
+     * @param host The host name (required).
+     * @param port The port (-1 is allowed).
+     * @param path The hybridConnection path.
+     * @param query An optional query string.
+     * @param action The action (listen|connect|accept).
+     * @param id The tracking id.
+     * @return A Uri to be used for HybridConnection WebSockets.
+     * @throws URISyntaxException
+     */
     public static URI BuildUri(String host, int port, String path, String query, String action, String id) throws URISyntaxException {
         if (path.charAt(0) != '/') {
             path = "/" + path;
@@ -51,6 +62,13 @@ public final class HybridConnectionUtil {
         );
     }
     
+    /**
+     * Builds a query string, e.g. "existing=stuff_here&amp;sb-hc-action=listen&amp;sb-hc-id=TRACKING_ID".
+     * @param existingQueryString An existing query string to be appended to, if exists
+     * @param action The action (listen|connect|accept).
+     * @param id The tracking id.
+     * @return A new query string with added action and id
+     */
     public static String buildQueryString(String existingQueryString, String action, String id) {
         StringBuilder buffer = new StringBuilder();
 
@@ -68,6 +86,11 @@ public final class HybridConnectionUtil {
         return buffer.toString();
     }
     
+    /**
+     * Filters out any query string values which start with the 'sb-hc-' prefix.  The returned string never has a '?' character at the start.
+     * @param queryString The query string to be filtered.
+     * @return Filtered query string without leading '=' and 'sb-hc-' prefix
+     */
     public static String filterQueryString(String queryString) {
         
     	if (StringUtil.isNullOrEmpty(queryString)) {
@@ -93,15 +116,17 @@ public final class HybridConnectionUtil {
 				sb.append(URLEncoder.encode(key, StringUtil.UTF8.name()))
 					.append("=")
 					.append(URLEncoder.encode(queryStringCollection.get(key), StringUtil.UTF8.name()));
-			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			} catch (UnsupportedEncodingException e) { }
         }
 
         return sb.toString();
     }
     
+    /**
+     * Parses a query into key value pairs.
+     * @param query The query to be parsed.
+     * @return A map containing the parsed key value pairs.
+     */
     public static Map<String, String> parseQueryString(String query) {
     	Map<String, String> map = new HashMap<String, String>();
     	

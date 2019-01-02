@@ -16,11 +16,7 @@ class TokenRenewer {
     protected Consumer<SecurityToken> onTokenRenewed;
 	protected Consumer<Exception> onTokenRenewException;
 	
-    protected TokenRenewer(HybridConnectionListener listener, String appliesTo, Duration tokenValidFor)
-    {
-    	// TODO: fx
-//        Fx.Assert(listener != null, "listener is required");
-//        Fx.Assert(!StringUtil.isNullOrEmpty(appliesTo), "appliesTo is required");
+    protected TokenRenewer(HybridConnectionListener listener, String appliesTo, Duration tokenValidFor) {
         this.listener = listener;
         this.appliesTo = appliesTo;
         this.tokenValidFor = tokenValidFor;
@@ -81,7 +77,6 @@ class TokenRenewer {
         try {
             CompletableFuture.runAsync(() -> thisPtr.getTokenAsync(true));
         }
-        // TODO: fx isfatal
         catch (Exception exception) {
 //            RelayEventSource.Log.HandledExceptionAsWarning(thisPtr.listener, exception);
         }

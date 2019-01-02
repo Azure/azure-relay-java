@@ -18,6 +18,7 @@ public class RelayedHttpListenerResponse {
     public int getStatusCode() {
 		return statusCode;
 	}
+    
 	public void setStatusCode(int statuscode) {
 		this.checkClosed();
 		if (statuscode < 100 || statuscode > 999) {
@@ -25,6 +26,7 @@ public class RelayedHttpListenerResponse {
 		}
 		this.statusCode = statuscode;
 	}
+	
 	public String getStatusDescription() {
 		if (this.statusDescription == null) {
 			this.statusDescription = (HttpStatus.getMessage(this.statusCode) != null) ? 
@@ -32,6 +34,7 @@ public class RelayedHttpListenerResponse {
 		}
 		return statusDescription;
 	}
+	
 	public void setStatusDescription(String statusDescription) {
 		this.checkClosed();
 		if (statusDescription == null) {
@@ -67,7 +70,9 @@ public class RelayedHttpListenerResponse {
         this.outputStream = null;
     }
 
-    /// <summary>Sends the response to the client and releases the resources held by this <see cref="RelayedHttpListenerResponse"/> instance.</summary>
+	/**
+	 * Sends the response to the client and releases the resources held by this RelayedHttpListenerResponse instance.
+	 */
     public void close() {
     	if (this.outputStream != null) {
         	this.outputStream.closeAsync();

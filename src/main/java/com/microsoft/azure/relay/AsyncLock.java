@@ -21,28 +21,27 @@ class AsyncLock {
 
     protected CompletableFuture<LockRelease> lockAsync(Duration duration) {
     	
-    	CompletableFuture<AsyncLock> wait = CompletableFuture.supplyAsync(() -> {
+    	CompletableFuture<Boolean> wait = CompletableFuture.supplyAsync(() -> {
+    		boolean acquired = false;
     		try {
     			if (duration != null) {
-    				this.asyncSemaphore.tryAcquire(duration.toMillis(), TimeUnit.MILLISECONDS);
+    				acquired = this.asyncSemaphore.tryAcquire(duration.toMillis(), TimeUnit.MILLISECONDS);
     			} else {
     				this.asyncSemaphore.acquire();
+    				acquired = true;
     			}
 			} catch (InterruptedException e) {
-				// TODO: exception
-                // AggregateException.GetBaseException gets the first AggregateException with more than one inner exception
-                // OR the first exception that's not an AggregateException.
-//                throw t.Exception.GetBaseException().Rethrow();
-				throw new RuntimeException("interrupted");
+				acquired = false;
 			}
-    		return this;
+    		return acquired;
     	});
     	
-    	if (wait.isDone()) {
+    	return wait.thenCompose((acquired) -> {
+    		if (!acquired) {
+    			throw new RuntimeException("Semaphore was not acquired");
+    		}
     		return this.lockRelease;
-    	}
-    	
-    	return wait.thenApply((state) -> new LockRelease((AsyncLock) state));
+    	});
     }
 
     protected final class LockRelease {

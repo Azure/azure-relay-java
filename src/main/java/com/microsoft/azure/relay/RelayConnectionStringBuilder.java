@@ -4,7 +4,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
-import java.util.Map;
 
 public class RelayConnectionStringBuilder {
     static final String ENDPOINT_CONFIG_NAME = "Endpoint";
@@ -109,7 +108,9 @@ public class RelayConnectionStringBuilder {
 		this.sharedAccessSignature = sharedAccessSignature;
 	}
 
-    // Creates a connectionString that represents the current object
+    /**
+     * Creates a connectionString that represents the current object
+     */
 	@Override
 	public String toString() {
         this.validate();
@@ -161,8 +162,7 @@ public class RelayConnectionStringBuilder {
     }
 
     protected void validate() {
-        if (this.endpoint == null)
-        {
+        if (this.endpoint == null) {
             throw new IllegalArgumentException("provided endpoint cannot be null");
         }
 
@@ -171,20 +171,17 @@ public class RelayConnectionStringBuilder {
         boolean hasSharedAccessKeyName = !StringUtil.isNullOrWhiteSpace(this.sharedAccessKeyName);
         boolean hasSharedAccessKey = !StringUtil.isNullOrWhiteSpace(this.sharedAccessKey);
         boolean hasSharedAccessSignature = !StringUtil.isNullOrWhiteSpace(this.sharedAccessSignature);
-        if (hasSharedAccessSignature)
-        {
-            if (hasSharedAccessKeyName)
-            {
+        
+        if (hasSharedAccessSignature) {
+            if (hasSharedAccessKeyName) {
             	throw new IllegalArgumentException("sharedAccessKeyName should not be supplied when sharedAccessSignture is supplied.");
             }
 
-            if (hasSharedAccessKey)
-            {
+            if (hasSharedAccessKey) {
             	throw new IllegalArgumentException("sharedAccessKey should not be supplied when sharedAccessSignture is supplied.");
             }
         }
-        else if ((hasSharedAccessKeyName && !hasSharedAccessKey) || (!hasSharedAccessKeyName && hasSharedAccessKey))
-        {
+        else if ((hasSharedAccessKeyName && !hasSharedAccessKey) || (!hasSharedAccessKeyName && hasSharedAccessKey)) {
         	throw new IllegalArgumentException("sharedAccessKeyName and sharedAccessKey should be both supplied when sharedAccessSignture is not supplied.");
         }
     }

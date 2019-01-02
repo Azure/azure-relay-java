@@ -6,7 +6,6 @@ final class HybridConnectionConstants {
     protected static final String HYBRIDCONNECTION_REQUEST_URI = "/$hc";
     protected static final String SECURE_WEBSOCKET_SCHEME = "wss";
     protected static final int MAX_UNRECOGNIZED_JSON = 1024;
-    protected static final boolean DEFAULT_USE_BUILTIN_CLIENT_WEBSOCKET = false;
 
     // Names of query String options
     protected static final String QUERY_STRING_KEY_PREFIX = "sb-hc-";

@@ -8,7 +8,6 @@ class TimeoutHelper {
     private LocalDateTime deadline;
     private boolean deadlineSet;
     private Duration originalTimeout;
-//    protected static final Duration MAXWAIT = RelayConstants.MAX_DURATION;
 
     protected TimeoutHelper(Duration timeout) {
     	this(timeout, false);
