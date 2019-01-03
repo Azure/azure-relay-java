@@ -155,7 +155,6 @@ public class ClientWebSocket {
 			future = this.sendAsync(data, null);
 		} catch (CompletionException e) {
 			// should not be an exception here because timeout is null
-			e.printStackTrace();
 		}
 		return future;
 	}
@@ -197,8 +196,8 @@ public class ClientWebSocket {
 		if (this.session == null) {
 			throw new RuntimeIOException("cannot send because the session is not connected.");
 		}
-		RemoteEndpoint.Async remote = this.session.getAsyncRemote();
 		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+			RemoteEndpoint.Async remote = this.session.getAsyncRemote();
 			remote.sendText(command);
 		});
 	}

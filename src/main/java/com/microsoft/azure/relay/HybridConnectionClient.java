@@ -36,8 +36,6 @@ public class HybridConnectionClient {
 	 */
 	private Duration operationTimeout;
 	
-	private CompletableFuture<ClientWebSocket> connectionTask;
-	
 	public URI getAddress() {
 		return address;
 	}
@@ -200,7 +198,6 @@ public class HybridConnectionClient {
 			} catch (CompletionException | URISyntaxException e) {
 				e.printStackTrace();
 			}
-		    this.connectionTask = future;
 		    return future;
 		} else {
 			throw new IllegalArgumentException("tokenProvider cannot be null.");

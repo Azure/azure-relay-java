@@ -16,10 +16,9 @@ class TimeoutHelper {
     protected TimeoutHelper(Duration timeout, boolean startTimeout) {
         this.originalTimeout = timeout;
         this.deadline = LocalDateTime.MAX;
-        this.deadlineSet = (timeout != null && !isMaxDuration(timeout));
+        this.deadlineSet = (timeout != null && isMaxDuration(timeout));
 
-        if (startTimeout && !this.deadlineSet)
-        {
+        if (startTimeout && !this.deadlineSet) {
             this.setDeadline();
         }
     }
@@ -103,10 +102,10 @@ class TimeoutHelper {
     }
 
     private void setDeadline() {
-    	// TODO: assert
-//        Fx.Assert(!deadlineSet, "TimeoutHelper deadline set twice.");
-        this.deadline = add(LocalDateTime.now(), this.originalTimeout);
-        this.deadlineSet = true;
+    	if (!deadlineSet) {
+            this.deadline = add(LocalDateTime.now(), this.originalTimeout);
+            this.deadlineSet = true;
+    	}
     }
 
     protected static void throwIfNegativeArgument(Duration timeout) {
@@ -116,6 +115,7 @@ class TimeoutHelper {
     protected static void throwIfNegativeArgument(Duration timeout, String argumentName) {
         if (timeout != null && timeout.isNegative()) {
         	throw new IllegalArgumentException("timeout interval cannot be negative.");
+        	// TODO: trace
 //            throw RelayEventSource.Log.ArgumentOutOfRange(argumentName, timeout, SR.GetString(SR.TimeoutMustBeNonNegative, argumentName, timeout));
         }
     }

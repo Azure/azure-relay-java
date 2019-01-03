@@ -534,6 +534,7 @@ public class HybridConnectionListener {
 				Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30) };
 		private final HybridConnectionListener listener;
 		private final URI address;
+		@SuppressWarnings("unused")
 		private String path;
 		private final TokenRenewer tokenRenewer;
 		private final AsyncLock sendAsyncLock;

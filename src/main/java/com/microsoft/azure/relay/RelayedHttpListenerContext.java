@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
-import javax.websocket.DeploymentException;
 import org.eclipse.jetty.http.HttpStatus;
 
 public class RelayedHttpListenerContext {
