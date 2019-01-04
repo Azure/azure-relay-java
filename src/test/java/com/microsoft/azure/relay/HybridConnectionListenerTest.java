@@ -42,7 +42,7 @@ public class HybridConnectionListenerTest {
 	public void acceptWebSocketConnectionTest() throws URISyntaxException {
 		CompletableFuture<Boolean> checkSocketConnectionTask = new CompletableFuture<Boolean>();
 		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
-		client.createConnectionAsync(null);
+		client.createConnectionAsync();
 		conn.thenAccept((websocket) -> {
 			checkSocketConnectionTask.complete(websocket.isOpen());
 		});

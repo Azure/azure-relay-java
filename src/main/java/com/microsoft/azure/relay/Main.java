@@ -155,15 +155,16 @@ public class Main {
 	// sends a message to the server through websocket
 	private static void webSocketClient() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
 		HybridConnectionClient client = new HybridConnectionClient(new URI(connectionParams.getEndpoint()+ connectionParams.getEntityPath()), tokenProvider);
-		ClientWebSocket webSocket = new ClientWebSocket();
-		webSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
-			bytes += bytesReceived.array().length;
-			System.out.println("Total Bytes received: " + bytes + ", Sender received: " + new String(bytesReceived.array()));
-			webSocket.closeAsync().join();
-		});
 		
-		client.createConnectionAsync(webSocket).get();
-		webSocket.sendAsync("hello world");
+		client.createConnectionAsync().thenAccept((webSocket) -> {
+			webSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
+				bytes += bytesReceived.array().length;
+				System.out.println("Total Bytes received: " + bytes + ", Sender received: " + new String(bytesReceived.array()));
+				webSocket.closeAsync().join();
+			});
+			
+			webSocket.sendAsync("hello world");
+		});
 	}
 	
 	private static void webSocketServer(HybridConnectionListener listener) throws URISyntaxException, InterruptedException, ExecutionException {

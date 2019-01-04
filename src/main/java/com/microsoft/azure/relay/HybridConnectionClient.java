@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.CompletionException;
 
 public class HybridConnectionClient {
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
@@ -151,15 +150,6 @@ public class HybridConnectionClient {
 	 * @return A CompletableFuture which returns the ClientWebSocket instance when its connection established with the remote endpoint
 	 */
 	public CompletableFuture<ClientWebSocket> createConnectionAsync() {
-		return this.createConnectionAsync(null);
-	}
-	
-	/**
-	 * Establishes a new send-side HybridConnection and returns the websocket with established connections.
-	 * @param webSocket A user created ClientWebSocket instance which may have predefined handlers
-	 * @return A CompletableFuture which returns the ClientWebSocket instance when its connection established with the remote endpoint
-	 */
-	public CompletableFuture<ClientWebSocket> createConnectionAsync(ClientWebSocket webSocket) {
 		// TODO: trace
         TrackingContext trackingContext = createTrackingContext(this.address);
 //         String traceSource = nameof(HybridConnectionClient) + "(" + trackingContext + ")";
@@ -182,21 +172,17 @@ public class HybridConnectionClient {
 			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
 		    try {
 				URI uri = HybridConnectionUtil.BuildUri(
-					    this.address.getHost(),
-					    this.address.getPort(),
-					    this.address.getPath(),
-					    this.address.getQuery(),
-					    HybridConnectionConstants.Actions.CONNECT,
-					    trackingContext.getTrackingId()
-					);
-		        if (webSocket == null) {
-		        	ClientWebSocket newSocket = new ClientWebSocket();
-		        	future = newSocket.connectAsync(uri, this.operationTimeout).thenApply(result -> newSocket);
-		        } else {
-		        	future = webSocket.connectAsync(uri, this.operationTimeout).thenApply(result -> webSocket);
-		        }
-			} catch (CompletionException | URISyntaxException e) {
-				e.printStackTrace();
+				    this.address.getHost(),
+				    this.address.getPort(),
+				    this.address.getPath(),
+				    this.address.getQuery(),
+				    HybridConnectionConstants.Actions.CONNECT,
+				    trackingContext.getTrackingId()
+				);
+	        	ClientWebSocket webSocket = new ClientWebSocket();
+	        	future = webSocket.connectAsync(uri, this.operationTimeout).thenApply(result -> webSocket);
+			} catch (URISyntaxException e) {
+				throw new IllegalArgumentException("The uri to connect to is invalid.");
 			}
 		    return future;
 		} else {
