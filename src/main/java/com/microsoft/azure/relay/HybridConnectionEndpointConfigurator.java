@@ -6,7 +6,7 @@ import javax.websocket.ClientEndpointConfig;
 
 public class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
 	private static Map<String, List<String>> currentHeaders;
-	
+
 	protected static Map<String, List<String>> getHeaders() {
 		return currentHeaders;
 	}
@@ -14,7 +14,7 @@ public class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.C
 	protected static void setHeaders(Map<String, List<String>> headers) {
 		currentHeaders = headers;
 	}
-	
+
 	@Override
 	public void beforeRequest(Map<String, List<String>> requestHeaders) {
 		requestHeaders.putAll(currentHeaders);

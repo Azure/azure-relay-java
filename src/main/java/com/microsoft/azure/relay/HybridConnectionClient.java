@@ -15,99 +15,129 @@ import java.util.concurrent.ExecutionException;
 
 public class HybridConnectionClient {
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
-	static final boolean IS_DEBUG = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments().toString().indexOf("-agentlib:jdwp") > 0;
+	static final boolean IS_DEBUG = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()
+			.toString().indexOf("-agentlib:jdwp") > 0;
 
 	/**
-	 * The address on which this HybridConnection will connect to. This address should be of the format "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 * The address on which this HybridConnection will connect to. This address
+	 * should be of the format
+	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
 	 */
 	private URI address;
-	
+
 	// Gets or sets proxy information for connecting to ServiceBus.
 //	private Proxy proxy;
-	
+
 	/**
 	 * The TokenProvider for authenticating this HybridConnection listener.
 	 */
 	private TokenProvider tokenProvider;
-	
+
 	/**
-	 * The default timeout for connecting a HybridConnection. Default value is 70 seconds.
+	 * The default timeout for connecting a HybridConnection. Default value is 70
+	 * seconds.
 	 */
 	private Duration operationTimeout;
-	
+
 	public URI getAddress() {
 		return address;
 	}
-	
+
 //	public Proxy getProxy() {
 //		return proxy;
 //	}
 //	public void setProxy(Proxy proxy) {
 //		this.proxy = proxy;
 //	}
-	
+
 	/**
-	 * @return Get the TokenProvider for authenticating this HybridConnection listener.
+	 * @return Get the TokenProvider for authenticating this HybridConnection
+	 *         listener.
 	 */
 	public TokenProvider getTokenProvider() {
 		return tokenProvider;
 	}
 
 	/**
-	 * @return The default timeout for connecting a HybridConnection. Default value is 70 seconds.
+	 * @return The default timeout for connecting a HybridConnection. Default value
+	 *         is 70 seconds.
 	 */
 	public Duration getOperationTimeout() {
 		return operationTimeout;
 	}
-	
+
 	public void setOperationTimeout(Duration operationTimeout) {
 		this.operationTimeout = operationTimeout;
 	}
 
 	/**
-	 * Create a new HybridConnectionClient instance for initiating HybridConnections where no client authentication is required.
-	 * @param address The address on which to listen for HybridConnections. This address should be of the format "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 * Create a new HybridConnectionClient instance for initiating HybridConnections
+	 * where no client authentication is required.
+	 * 
+	 * @param address The address on which to listen for HybridConnections. This
+	 *                address should be of the format
+	 *                "sb://contoso.servicebus.windows.net/yourhybridconnection".
 	 */
 	public HybridConnectionClient(URI address) {
 		this.initialize(address, DEFAULT_CONNECTION_TIMEOUT, null, false);
 	}
 
 	/**
-	 * Create a new HybridConnectionClient instance for initiating HybridConnections with client authentication.
-	 * @param address The address on which to listen for HybridConnections. This address should be of the format "sb://contoso.servicebus.windows.net/yourhybridconnection".
-	 * @param tokenProvider The TokenProvider for authenticating this HybridConnection client.
+	 * Create a new HybridConnectionClient instance for initiating HybridConnections
+	 * with client authentication.
+	 * 
+	 * @param address       The address on which to listen for HybridConnections.
+	 *                      This address should be of the format
+	 *                      "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 * @param tokenProvider The TokenProvider for authenticating this
+	 *                      HybridConnection client.
 	 */
 	public HybridConnectionClient(URI address, TokenProvider tokenProvider) {
 		this.initialize(address, DEFAULT_CONNECTION_TIMEOUT, tokenProvider, true);
 	}
 
 	/**
-	 * Create a new HybridConnectionClient instance for initiating HybridConnections.
-	 * @param connectionString The connection string to use. This connection string must include the EntityPath property.
-	 * @throws URISyntaxException Thrown when the format of the connectionSring is incorrect
+	 * Create a new HybridConnectionClient instance for initiating
+	 * HybridConnections.
+	 * 
+	 * @param connectionString The connection string to use. This connection string
+	 *                         must include the EntityPath property.
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is
+	 *                            incorrect
 	 */
 	public HybridConnectionClient(String connectionString) throws URISyntaxException {
-     	this(connectionString, null, true);
-     }
+		this(connectionString, null, true);
+	}
 
 	/**
-	 * Create a new HybridConnectionListener instance for initiating HybridConnections.
-	 * @param connectionString The connection string to use. This connection string must include the EntityPath property.
-	 * @param path The path to the HybridConnection.
-	 * @throws URISyntaxException Thrown when the format of the connectionSring is incorrect
+	 * Create a new HybridConnectionListener instance for initiating
+	 * HybridConnections.
+	 * 
+	 * @param connectionString The connection string to use. This connection string
+	 *                         must include the EntityPath property.
+	 * @param path             The path to the HybridConnection.
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is
+	 *                            incorrect
 	 */
 	public HybridConnectionClient(String connectionString, String path) throws URISyntaxException {
 		this(connectionString, path, false);
-     }
+	}
 
 	/**
-	 * This private .ctor handles both of the public overloads which take connectionString
-	 * @param connectionString The connection String used. This connection string must not include the EntityPath property.
-	 * @param path path The path to the HybridConnection.
-	 * @param pathFromConnectionString True if path is implicitly defined in the connection string
-	 * @throws URISyntaxException Thrown when the format of the connectionSring is incorrect
+	 * This private .ctor handles both of the public overloads which take
+	 * connectionString
+	 * 
+	 * @param connectionString         The connection String used. This connection
+	 *                                 string must not include the EntityPath
+	 *                                 property.
+	 * @param path                     path The path to the HybridConnection.
+	 * @param pathFromConnectionString True if path is implicitly defined in the
+	 *                                 connection string
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is
+	 *                            incorrect
 	 */
-	HybridConnectionClient(String connectionString, String path, boolean pathFromConnectionString) throws URISyntaxException {
+	HybridConnectionClient(String connectionString, String path, boolean pathFromConnectionString)
+			throws URISyntaxException {
 		if (StringUtil.isNullOrWhiteSpace(connectionString)) {
 			throw new IllegalArgumentException("the connection string cannot be null.");
 		}
@@ -121,7 +151,7 @@ public class HybridConnectionClient {
 				throw new IllegalArgumentException("entityPath is required in connectionString");
 			}
 		} else {
-			
+
 			if (StringUtil.isNullOrWhiteSpace(path)) {
 				throw new IllegalArgumentException("path is required outside of connectionString");
 			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
@@ -138,29 +168,35 @@ public class HybridConnectionClient {
 
 		Duration connectTimeout = DEFAULT_CONNECTION_TIMEOUT;
 		if (builder.getOperationTimeout() != RelayConstants.DEFAULT_OPERATION_TIMEOUT) {
-			// Only change from our default (70 seconds) if it appears user has changed the operationTimeout in the connectionString.
+			// Only change from our default (70 seconds) if it appears user has changed the
+			// operationTimeout in the connectionString.
 			connectTimeout = builder.getOperationTimeout();
 		}
 
-		this.initialize(new URI(builder.getEndpoint().toString() + builder.getEntityPath()), connectTimeout, tokenProvider, tokenProvider != null);
+		this.initialize(new URI(builder.getEndpoint().toString() + builder.getEntityPath()), connectTimeout,
+				tokenProvider, tokenProvider != null);
 	}
-	
+
 	/**
-	 * Establishes a new send-side HybridConnection and returns the websocket with established connections.
-	 * @return A CompletableFuture which returns the ClientWebSocket instance when its connection established with the remote endpoint
+	 * Establishes a new send-side HybridConnection and returns the websocket with
+	 * established connections.
+	 * 
+	 * @return A CompletableFuture which returns the ClientWebSocket instance when
+	 *         its connection established with the remote endpoint
 	 */
 	public CompletableFuture<ClientWebSocket> createConnectionAsync() {
 		// TODO: trace
-        TrackingContext trackingContext = createTrackingContext(this.address);
+		TrackingContext trackingContext = createTrackingContext(this.address);
 //         String traceSource = nameof(HybridConnectionClient) + "(" + trackingContext + ")";
 
-      // TODO: trace
+		// TODO: trace
 //         RelayEventSource.Log.ObjectConnecting(traceSource, trackingContext); 
-        
+
 		if (this.tokenProvider != null) {
 			String audience = HybridConnectionUtil.getAudience(this.address);
-			CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience, TokenProvider.DEFAULT_TOKEN_TIMEOUT);
-			
+			CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience,
+					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
+
 			Map<String, List<String>> headers = new HashMap<String, List<String>>();
 			try {
 				headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.get().getToken()));
@@ -168,28 +204,23 @@ public class HybridConnectionClient {
 				tokenError.printStackTrace();
 			}
 			HybridConnectionEndpointConfigurator.setHeaders(headers);
-		    
+
 			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
-		    try {
-				URI uri = HybridConnectionUtil.BuildUri(
-				    this.address.getHost(),
-				    this.address.getPort(),
-				    this.address.getPath(),
-				    this.address.getQuery(),
-				    HybridConnectionConstants.Actions.CONNECT,
-				    trackingContext.getTrackingId()
-				);
-	        	ClientWebSocket webSocket = new ClientWebSocket();
-	        	future = webSocket.connectAsync(uri, this.operationTimeout).thenApply(result -> webSocket);
+			try {
+				URI uri = HybridConnectionUtil.BuildUri(this.address.getHost(), this.address.getPort(),
+						this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
+						trackingContext.getTrackingId());
+				ClientWebSocket webSocket = new ClientWebSocket();
+				future = webSocket.connectAsync(uri, this.operationTimeout).thenApply(result -> webSocket);
 			} catch (URISyntaxException e) {
 				throw new IllegalArgumentException("The uri to connect to is invalid.");
 			}
-		    return future;
+			return future;
 		} else {
 			throw new IllegalArgumentException("tokenProvider cannot be null.");
 		}
 	}
-	
+
 	/// <summary>
 	/// Gets the <see cref="HybridConnectionRuntimeInformation"/> for this
 	/// HybridConnection entity using the default timeout.
@@ -222,7 +253,8 @@ public class HybridConnectionClient {
 
 	private static TrackingContext createTrackingContext(URI address) {
 		if (IS_DEBUG) {
-			// In DEBUG builds allow setting the trackingId via query String: "?id=00000000-0000-0000-0000-000000000000"
+			// In DEBUG builds allow setting the trackingId via query String:
+			// "?id=00000000-0000-0000-0000-000000000000"
 			String query = address.getQuery();
 			if (!StringUtil.isNullOrEmpty(query)) {
 				if (query.charAt(0) == '?') {
@@ -240,17 +272,18 @@ public class HybridConnectionClient {
 		return TrackingContext.create(address);
 	}
 
-	private void initialize(URI address, Duration operationTimeout, TokenProvider tokenProvider, boolean tokenProviderRequired) {
-		
+	private void initialize(URI address, Duration operationTimeout, TokenProvider tokenProvider,
+			boolean tokenProviderRequired) {
+
 		if (address == null) {
 			// TODO: trace
 //             throw RelayEventSource.Log.ArgumentNull(nameof(address), this);
 			throw new IllegalArgumentException("cannot initiate hybrid connection client with null uri");
-			
+
 		} else if (!address.getScheme().equals(RelayConstants.HYBRID_CONNECTION_SCHEME)) {
 //			throw RelayEventSource.Log.Argument(nameof(address), SR.GetString(SR.InvalidUriScheme, address.Scheme, RelayConstants.HybridConnectionScheme), this);
 			throw new IllegalArgumentException("cannot initiate hybrid connection client with invalid uri scheme");
-			
+
 		} else if (tokenProviderRequired && tokenProvider == null) {
 //			throw RelayEventSource.Log.ArgumentNull(nameof(tokenProvider), this);
 			throw new IllegalArgumentException("cannot initiate hybrid connection client with null token provider");

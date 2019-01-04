@@ -9,570 +9,554 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 final class InputQueue<T extends Object> {
-    private final ItemQueue itemQueue;
-    private final Queue<CompletableFuture<T>> readerQueue;
-    private final List<CompletableFuture<T>> waiterList;
+	private final ItemQueue itemQueue;
+	private final Queue<CompletableFuture<T>> readerQueue;
+	private final List<CompletableFuture<T>> waiterList;
 
-    private QueueState queueState;
-    private Object thisLock = new Object();
+	private QueueState queueState;
+	private Object thisLock = new Object();
 
-    private int pendingCount;
-    private Consumer<T> disposeItemCallback;
-    
-    protected int getPendingCount() {
-    	synchronized(thisLock) {
-        	return this.pendingCount;    		
-    	}
-    }
-    
-    protected int getReadersQueueCount() {
-    	synchronized(thisLock) {
-    		return this.readerQueue.size();
-    	}
-    }
-    
-    protected Consumer<T> getDisposeItemCallback() {
-    	return this.disposeItemCallback;
-    }
-    protected void setDisposeItemCallback(Consumer<T> callback) {
-    	this.disposeItemCallback = callback;
-    }
-    
-    protected InputQueue() {
-        this.itemQueue = new ItemQueue();
-        this.readerQueue = new LinkedList<CompletableFuture<T>>();
-        this.waiterList = new LinkedList<CompletableFuture<T>>();
-        this.queueState = QueueState.OPEN;
-    }
+	private int pendingCount;
+	private Consumer<T> disposeItemCallback;
 
-    protected CompletableFuture<T> dequeueAsync() {
-        return this.dequeueAsync(null);
-    }
+	protected int getPendingCount() {
+		synchronized (thisLock) {
+			return this.pendingCount;
+		}
+	}
 
-    protected CompletableFuture<T> dequeueAsync(Object state) {
-        Item item = null;
-        
-        synchronized(thisLock) {
-        	
-            if (this.queueState == QueueState.OPEN) {
-            	
-                if (itemQueue.hasAvailableItem()) {
-                    item = itemQueue.dequeueAvailableItem();
-                }
-                else {
-                	CompletableFuture<T> reader = new CompletableFuture<T>();
-                	this.readerQueue.add(reader);
-                	return reader;
-                }
-            }
-            else if (queueState == QueueState.SHUTDOWN) {
-            	
-                if (itemQueue.hasAvailableItem()) {
-                    item = itemQueue.dequeueAvailableItem();
-                }
-                else if (itemQueue.hasAnyItem()) {
-                	CompletableFuture<T> reader = new CompletableFuture<T>();
-                	this.readerQueue.add(reader);
-                	return reader;
-                }
-            }
-        }
+	protected int getReadersQueueCount() {
+		synchronized (thisLock) {
+			return this.readerQueue.size();
+		}
+	}
 
-        invokeDequeuedCallback(item);
-        return (item != null) ? CompletableFuture.completedFuture(item.getValue()) : CompletableFuture.completedFuture(null);
-    }
+	protected Consumer<T> getDisposeItemCallback() {
+		return this.disposeItemCallback;
+	}
 
-    protected CompletableFuture<Boolean> waitForItemAsync() {
-        return this.waitForItemAsync(null);
-    }
+	protected void setDisposeItemCallback(Consumer<T> callback) {
+		this.disposeItemCallback = callback;
+	}
 
-    @SuppressWarnings("unchecked")
+	protected InputQueue() {
+		this.itemQueue = new ItemQueue();
+		this.readerQueue = new LinkedList<CompletableFuture<T>>();
+		this.waiterList = new LinkedList<CompletableFuture<T>>();
+		this.queueState = QueueState.OPEN;
+	}
+
+	protected CompletableFuture<T> dequeueAsync() {
+		return this.dequeueAsync(null);
+	}
+
+	protected CompletableFuture<T> dequeueAsync(Object state) {
+		Item item = null;
+
+		synchronized (thisLock) {
+
+			if (this.queueState == QueueState.OPEN) {
+
+				if (itemQueue.hasAvailableItem()) {
+					item = itemQueue.dequeueAvailableItem();
+				} else {
+					CompletableFuture<T> reader = new CompletableFuture<T>();
+					this.readerQueue.add(reader);
+					return reader;
+				}
+			} else if (queueState == QueueState.SHUTDOWN) {
+
+				if (itemQueue.hasAvailableItem()) {
+					item = itemQueue.dequeueAvailableItem();
+				} else if (itemQueue.hasAnyItem()) {
+					CompletableFuture<T> reader = new CompletableFuture<T>();
+					this.readerQueue.add(reader);
+					return reader;
+				}
+			}
+		}
+
+		invokeDequeuedCallback(item);
+		return (item != null) ? CompletableFuture.completedFuture(item.getValue())
+				: CompletableFuture.completedFuture(null);
+	}
+
+	protected CompletableFuture<Boolean> waitForItemAsync() {
+		return this.waitForItemAsync(null);
+	}
+
+	@SuppressWarnings("unchecked")
 	protected CompletableFuture<Boolean> waitForItemAsync(Object state) {
-    	
-        synchronized (thisLock) {
-            if (queueState == QueueState.OPEN) {
-                if (!itemQueue.hasAvailableItem()) {
-                    CompletableFuture<T> waiter = new CompletableFuture<T>();
-                    waiterList.add(waiter);
-                    return (CompletableFuture<Boolean>) waiter;
-                }
-            }
-            else if (queueState == QueueState.SHUTDOWN) {
-                if (!itemQueue.hasAvailableItem() && itemQueue.hasAnyItem()) {
-                    CompletableFuture<T> waiter = new CompletableFuture<T>();
-                    waiterList.add(waiter);
-                    return (CompletableFuture<Boolean>) waiter;
-                }
-            }
-        }
 
-        return CompletableFuture.completedFuture(true);
-    }
+		synchronized (thisLock) {
+			if (queueState == QueueState.OPEN) {
+				if (!itemQueue.hasAvailableItem()) {
+					CompletableFuture<T> waiter = new CompletableFuture<T>();
+					waiterList.add(waiter);
+					return (CompletableFuture<Boolean>) waiter;
+				}
+			} else if (queueState == QueueState.SHUTDOWN) {
+				if (!itemQueue.hasAvailableItem() && itemQueue.hasAnyItem()) {
+					CompletableFuture<T> waiter = new CompletableFuture<T>();
+					waiterList.add(waiter);
+					return (CompletableFuture<Boolean>) waiter;
+				}
+			}
+		}
 
-    protected void close() {
-        dispose();
-    }
+		return CompletableFuture.completedFuture(true);
+	}
 
-    @SuppressWarnings("unchecked")
+	protected void close() {
+		dispose();
+	}
+
+	@SuppressWarnings("unchecked")
 	protected void dispatch() {
-        CompletableFuture<T> reader = null;
-        CompletableFuture<T>[] outstandingReaders = null;
-        CompletableFuture<Boolean>[] waiters = null;
-        Item item = new Item();
-        boolean itemAvailable = true;
+		CompletableFuture<T> reader = null;
+		CompletableFuture<T>[] outstandingReaders = null;
+		CompletableFuture<Boolean>[] waiters = null;
+		Item item = new Item();
+		boolean itemAvailable = true;
 
-        synchronized (thisLock) {
-        	
-            itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
-            waiters = this.getWaiters();
+		synchronized (thisLock) {
 
-            if (queueState != QueueState.CLOSED) {
-                this.itemQueue.makePendingItemAvailable();
+			itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
+			waiters = this.getWaiters();
 
-                if (this.readerQueue.size() > 0) {
-                    item = this.itemQueue.dequeueAvailableItem();
-                    reader = this.readerQueue.remove();
+			if (queueState != QueueState.CLOSED) {
+				this.itemQueue.makePendingItemAvailable();
 
-                    if (queueState == QueueState.SHUTDOWN && readerQueue.size() > 0 && itemQueue.getTotalCount() == 0) {
-                        outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class, readerQueue.size());
-                        
-                        // manually copy over values because only cloning of primitives are allowed
-                        int i = 0;
-                        while (!readerQueue.isEmpty()) {
-                        	outstandingReaders[i++] = readerQueue.remove();
-                        }
+				if (this.readerQueue.size() > 0) {
+					item = this.itemQueue.dequeueAvailableItem();
+					reader = this.readerQueue.remove();
 
-                        itemAvailable = false;
-                    }
-                }
-            }
-        }
+					if (queueState == QueueState.SHUTDOWN && readerQueue.size() > 0 && itemQueue.getTotalCount() == 0) {
+						outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class,
+								readerQueue.size());
 
-        if (outstandingReaders != null) {
-            ActionItem.schedule(s -> completeOutstandingReadersCallback(s), outstandingReaders);
-        }
+						// manually copy over values because only cloning of primitives are allowed
+						int i = 0;
+						while (!readerQueue.isEmpty()) {
+							outstandingReaders[i++] = readerQueue.remove();
+						}
 
-        if (waiters != null) {
-            completeWaitersLater(itemAvailable, waiters);
-        }
+						itemAvailable = false;
+					}
+				}
+			}
+		}
 
-        if (reader != null) {
-            invokeDequeuedCallback(item);
-            reader.complete((T) item.getValue());
-        }
-    }
+		if (outstandingReaders != null) {
+			ActionItem.schedule(s -> completeOutstandingReadersCallback(s), outstandingReaders);
+		}
 
-    protected void enqueueAndDispatch(T item) {
-        enqueueAndDispatch(item, null);
-    }
+		if (waiters != null) {
+			completeWaitersLater(itemAvailable, waiters);
+		}
 
-    // dequeuedCallback is called as an item is dequeued from the InputQueue.  The 
-    // InputQueue lock is not held during the callback.  However, the user code will
-    // not be notified of the item being available until the callback returns.  If you
-    // are not sure if the callback will block for a long time, then first call 
-    // ActionItem.Schedule to get to a "safe" thread.
-    protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
-    	enqueueAndDispatch(item, dequeuedCallback, true);
-    }
+		if (reader != null) {
+			invokeDequeuedCallback(item);
+			reader.complete((T) item.getValue());
+		}
+	}
 
-    protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
-        enqueueAndDispatch(new Item(item, dequeuedCallback), canDispatchOnThisThread);
-    }
+	protected void enqueueAndDispatch(T item) {
+		enqueueAndDispatch(item, null);
+	}
 
-    protected boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
-        return enqueueWithoutDispatch(new Item(item, dequeuedCallback));
-    }
+	// dequeuedCallback is called as an item is dequeued from the InputQueue. The
+	// InputQueue lock is not held during the callback. However, the user code will
+	// not be notified of the item being available until the callback returns. If
+	// you
+	// are not sure if the callback will block for a long time, then first call
+	// ActionItem.Schedule to get to a "safe" thread.
+	protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
+		enqueueAndDispatch(item, dequeuedCallback, true);
+	}
 
-    protected boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
-        return enqueueWithoutDispatch(new Item(exception, dequeuedCallback));
-    }
+	protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
+		enqueueAndDispatch(new Item(item, dequeuedCallback), canDispatchOnThisThread);
+	}
 
-    protected void shutdown() {
-        this.shutdown(null);
-    }
+	protected boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
+		return enqueueWithoutDispatch(new Item(item, dequeuedCallback));
+	}
 
-    // Don't let any more items in. Differs from Close in that we keep around
-    // existing items in our itemQueue for possible future calls to Dequeue
-    @SuppressWarnings("unchecked")
+	protected boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
+		return enqueueWithoutDispatch(new Item(exception, dequeuedCallback));
+	}
+
+	protected void shutdown() {
+		this.shutdown(null);
+	}
+
+	// Don't let any more items in. Differs from Close in that we keep around
+	// existing items in our itemQueue for possible future calls to Dequeue
+	@SuppressWarnings("unchecked")
 	protected void shutdown(Supplier<Exception> pendingExceptionGenerator) {
-        CompletableFuture<T>[] outstandingReaders = null;
-        
-        synchronized (thisLock) {
-        	
-            if (queueState == QueueState.SHUTDOWN || queueState == QueueState.CLOSED) {
-                return;
-            }
-            
-            this.queueState = QueueState.SHUTDOWN;
+		CompletableFuture<T>[] outstandingReaders = null;
 
-            if (readerQueue.size() > 0 && this.itemQueue.getTotalCount() == 0) {
-                outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class, readerQueue.size());
-                
-                // manually copy over values because only cloning of primitives are allowed
-                int i = 0;
-                while (!readerQueue.isEmpty()) {
-                	outstandingReaders[i++] = readerQueue.remove();
-                }
-            }
-        }
+		synchronized (thisLock) {
 
-        if (outstandingReaders != null) {
-            for (int i = 0; i < outstandingReaders.length; i++) {
-                Exception exception = (pendingExceptionGenerator != null) ? pendingExceptionGenerator.get() : null;
-                if (exception == null) {
-                	outstandingReaders[i].complete(null);
-                } else {
-                	outstandingReaders[i].completeExceptionally(exception);
-                }
-            }
-        }
-    }
+			if (queueState == QueueState.SHUTDOWN || queueState == QueueState.CLOSED) {
+				return;
+			}
 
-    @SuppressWarnings("unchecked")
+			this.queueState = QueueState.SHUTDOWN;
+
+			if (readerQueue.size() > 0 && this.itemQueue.getTotalCount() == 0) {
+				outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class,
+						readerQueue.size());
+
+				// manually copy over values because only cloning of primitives are allowed
+				int i = 0;
+				while (!readerQueue.isEmpty()) {
+					outstandingReaders[i++] = readerQueue.remove();
+				}
+			}
+		}
+
+		if (outstandingReaders != null) {
+			for (int i = 0; i < outstandingReaders.length; i++) {
+				Exception exception = (pendingExceptionGenerator != null) ? pendingExceptionGenerator.get() : null;
+				if (exception == null) {
+					outstandingReaders[i].complete(null);
+				} else {
+					outstandingReaders[i].completeExceptionally(exception);
+				}
+			}
+		}
+	}
+
+	@SuppressWarnings("unchecked")
 	protected void dispose() {
-        boolean dispose = false;
+		boolean dispose = false;
 
-        synchronized (thisLock) {
-        	if (queueState != QueueState.CLOSED) {
-                queueState = QueueState.CLOSED;
-                dispose = true;
-            }
-        }
+		synchronized (thisLock) {
+			if (queueState != QueueState.CLOSED) {
+				queueState = QueueState.CLOSED;
+				dispose = true;
+			}
+		}
 
-        if (dispose) {
-            while (readerQueue.size() > 0) {
-                CompletableFuture<T> reader = readerQueue.remove();
-                reader.complete((T) new Item());
-            }
+		if (dispose) {
+			while (readerQueue.size() > 0) {
+				CompletableFuture<T> reader = readerQueue.remove();
+				reader.complete((T) new Item());
+			}
 
-            while (itemQueue.hasAnyItem()) {
-                Item item = itemQueue.dequeueAnyItem();
-                disposeItem(item);
-                invokeDequeuedCallback(item);
-            }
-        }
-    }        
+			while (itemQueue.hasAnyItem()) {
+				Item item = itemQueue.dequeueAnyItem();
+				disposeItem(item);
+				invokeDequeuedCallback(item);
+			}
+		}
+	}
 
-    void disposeItem(Item item) {
-        if (item.getValue() != null && this.disposeItemCallback != null) {
-        	this.disposeItemCallback.accept(item.getValue());
-        }
-    }
+	void disposeItem(Item item) {
+		if (item.getValue() != null && this.disposeItemCallback != null) {
+			this.disposeItemCallback.accept(item.getValue());
+		}
+	}
 
 	@SuppressWarnings("unchecked")
 	void completeOutstandingReadersCallback(Object state) {
 		CompletableFuture<T>[] outstandingReaders = (CompletableFuture<T>[]) state;
 
-        for (int i = 0; i < outstandingReaders.length; i++)
-        {
-            outstandingReaders[i].complete((T) new Item());
-        }
-    }
+		for (int i = 0; i < outstandingReaders.length; i++) {
+			outstandingReaders[i].complete((T) new Item());
+		}
+	}
 
-    static void completeWaiters(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
-        for (int i = 0; i < waiters.length; i++)
-        {
-            waiters[i].complete(itemAvailable);
-        }
-    }
+	static void completeWaiters(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
+		for (int i = 0; i < waiters.length; i++) {
+			waiters[i].complete(itemAvailable);
+		}
+	}
 
 	@SuppressWarnings("unchecked")
 	static void completeWaitersFalseCallback(Object state) {
-        completeWaiters(false, (CompletableFuture<Boolean>[]) state);
-    }
+		completeWaiters(false, (CompletableFuture<Boolean>[]) state);
+	}
 
-    static void completeWaitersLater(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
-        if (itemAvailable)
-        {
-            ActionItem.schedule(s -> completeWaitersTrueCallback(s), waiters);
-        }
-        else
-        {
-            ActionItem.schedule(s -> completeWaitersFalseCallback(s), waiters);
-        }
-    }
+	static void completeWaitersLater(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
+		if (itemAvailable) {
+			ActionItem.schedule(s -> completeWaitersTrueCallback(s), waiters);
+		} else {
+			ActionItem.schedule(s -> completeWaitersFalseCallback(s), waiters);
+		}
+	}
 
 	@SuppressWarnings("unchecked")
 	static void completeWaitersTrueCallback(Object state) {
-        completeWaiters(true, (CompletableFuture<Boolean>[]) state);
-    }
+		completeWaiters(true, (CompletableFuture<Boolean>[]) state);
+	}
 
-    void invokeDequeuedCallback(Item item) {
-        if (item != null && item.getDequeuedCallback() != null) {
-        	item.dequeuedCallback.accept(item.getValue());
-        }
-    }
+	void invokeDequeuedCallback(Item item) {
+		if (item != null && item.getDequeuedCallback() != null) {
+			item.dequeuedCallback.accept(item.getValue());
+		}
+	}
 
-    void invokeDequeuedCallbackLater(Item item) {
-        if (item != null && item.getDequeuedCallback() != null) {
-            ActionItem.schedule(s -> onInvokeDequeuedCallback(s), item);
-        }
-    }
+	void invokeDequeuedCallbackLater(Item item) {
+		if (item != null && item.getDequeuedCallback() != null) {
+			ActionItem.schedule(s -> onInvokeDequeuedCallback(s), item);
+		}
+	}
 
-    @SuppressWarnings("unchecked")
+	@SuppressWarnings("unchecked")
 	void onDispatchCallback(Object state) {
-        ((InputQueue<T>) state).dispatch();
-    }
+		((InputQueue<T>) state).dispatch();
+	}
 
-    @SuppressWarnings("unchecked")
-    void onInvokeDequeuedCallback(Object state) {
+	@SuppressWarnings("unchecked")
+	void onInvokeDequeuedCallback(Object state) {
 		Item item = (Item) state;
-        item.getDequeuedCallback().accept(item.getValue());
-    }
+		item.getDequeuedCallback().accept(item.getValue());
+	}
 
-    void enqueueAndDispatch(Item item, boolean canDispatchOnThisThread) {
-        boolean disposeItem = false;
-        CompletableFuture<T> reader = null;
-        boolean dispatchLater = false;
-        CompletableFuture<Boolean>[] waiters = null;
-        boolean itemAvailable = true;
+	void enqueueAndDispatch(Item item, boolean canDispatchOnThisThread) {
+		boolean disposeItem = false;
+		CompletableFuture<T> reader = null;
+		boolean dispatchLater = false;
+		CompletableFuture<Boolean>[] waiters = null;
+		boolean itemAvailable = true;
 
-        synchronized (thisLock) {
-            itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
-            waiters = this.getWaiters();
+		synchronized (thisLock) {
+			itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
+			waiters = this.getWaiters();
 
-            if (queueState == QueueState.OPEN) {
-                if (canDispatchOnThisThread) {
-                    if (this.readerQueue.size() == 0) {
-                        itemQueue.enqueueAvailableItem(item);
-                    }
-                    else {
-                        reader = this.readerQueue.remove();
-                    }
-                }
-                else {
-                    if (readerQueue.size() == 0) {
-                        itemQueue.enqueueAvailableItem(item);
-                    }
-                    else {
-                        itemQueue.enqueuePendingItem(item);
-                        dispatchLater = true;
-                    }
-                }
-            }
-            else {
-                disposeItem = true;
-            }
-        }
+			if (queueState == QueueState.OPEN) {
+				if (canDispatchOnThisThread) {
+					if (this.readerQueue.size() == 0) {
+						itemQueue.enqueueAvailableItem(item);
+					} else {
+						reader = this.readerQueue.remove();
+					}
+				} else {
+					if (readerQueue.size() == 0) {
+						itemQueue.enqueueAvailableItem(item);
+					} else {
+						itemQueue.enqueuePendingItem(item);
+						dispatchLater = true;
+					}
+				}
+			} else {
+				disposeItem = true;
+			}
+		}
 
-        if (waiters != null) {
-            if (canDispatchOnThisThread) {
-                completeWaiters(itemAvailable, waiters);
-            }
-            else {
-                completeWaitersLater(itemAvailable, waiters);
-            }
-        }
+		if (waiters != null) {
+			if (canDispatchOnThisThread) {
+				completeWaiters(itemAvailable, waiters);
+			} else {
+				completeWaitersLater(itemAvailable, waiters);
+			}
+		}
 
-        if (reader != null) {
-            invokeDequeuedCallback(item);
-            reader.complete((T) item.getValue());
-        }
+		if (reader != null) {
+			invokeDequeuedCallback(item);
+			reader.complete((T) item.getValue());
+		}
 
-        if (dispatchLater) {
-            ActionItem.schedule(s -> onDispatchCallback(s), this);
-        }
-        else if (disposeItem) {
-            invokeDequeuedCallback(item);
-            disposeItem(item);
-        }
-    }
+		if (dispatchLater) {
+			ActionItem.schedule(s -> onDispatchCallback(s), this);
+		} else if (disposeItem) {
+			invokeDequeuedCallback(item);
+			disposeItem(item);
+		}
+	}
 
-    // This will not block, however, Dispatch() must be called later if this function returns true.
-    boolean enqueueWithoutDispatch(Item item) {
-        synchronized (thisLock) {
-            if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN) {
-            	
-                if (readerQueue.size() == 0 && waiterList.size() == 0) {
-                    itemQueue.enqueueAvailableItem(item);
-                    return false;
-                }
-                else {
-                    itemQueue.enqueuePendingItem(item);
-                    return true;
-                }
-            }
-        }
+	// This will not block, however, Dispatch() must be called later if this
+	// function returns true.
+	boolean enqueueWithoutDispatch(Item item) {
+		synchronized (thisLock) {
+			if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN) {
 
-        disposeItem(item);
-        invokeDequeuedCallbackLater(item);
-        return false;
-    }
+				if (readerQueue.size() == 0 && waiterList.size() == 0) {
+					itemQueue.enqueueAvailableItem(item);
+					return false;
+				} else {
+					itemQueue.enqueuePendingItem(item);
+					return true;
+				}
+			}
+		}
 
-    CompletableFuture<Boolean>[] getWaiters() {
-    	CompletableFuture<Boolean>[] waiters = null;
-    	
-        if (waiterList.size() > 0) {
-            waiters = waiterList.toArray(waiters);
-            waiterList.clear();
-        }
-        return waiters;
-    }
+		disposeItem(item);
+		invokeDequeuedCallbackLater(item);
+		return false;
+	}
 
-    // Used for timeouts. The InputQueue must remove readers from its reader queue to prevent dispatching items to timed out readers.
-    boolean removeReader(CompletableFuture<T> reader) {
-        synchronized (thisLock) {
-            if (queueState == QueueState.OPEN || queueState == QueueState.SHUTDOWN) {
-                boolean removed = false;
+	CompletableFuture<Boolean>[] getWaiters() {
+		CompletableFuture<Boolean>[] waiters = null;
 
-                for (int i = readerQueue.size(); i > 0; i--) {
-                    CompletableFuture<T> temp = readerQueue.remove();
-                    
-                    if (temp == reader) {
-                        removed = true;
-                    }
-                    else {
-                        readerQueue.add(temp);
-                    }
-                }
-                return removed;
-            }
-        }
-        return false;
-    }
+		if (waiterList.size() > 0) {
+			waiters = waiterList.toArray(waiters);
+			waiterList.clear();
+		}
+		return waiters;
+	}
 
-    
-    enum QueueState {
-        OPEN,
-        SHUTDOWN,
-        CLOSED
-    }
+	// Used for timeouts. The InputQueue must remove readers from its reader queue
+	// to prevent dispatching items to timed out readers.
+	boolean removeReader(CompletableFuture<T> reader) {
+		synchronized (thisLock) {
+			if (queueState == QueueState.OPEN || queueState == QueueState.SHUTDOWN) {
+				boolean removed = false;
 
-    class Item {
-    	Consumer<T> dequeuedCallback;
-        Exception exception;
-        T value;
-        
-        // Simulate empty struct constructor in C#
-        protected Item() {
-        	this(null, null, null);
-        }
+				for (int i = readerQueue.size(); i > 0; i--) {
+					CompletableFuture<T> temp = readerQueue.remove();
 
-        protected Item(T value, Consumer<T> dequeuedCallback) {
-        	this(value, null, dequeuedCallback);
-        }
+					if (temp == reader) {
+						removed = true;
+					} else {
+						readerQueue.add(temp);
+					}
+				}
+				return removed;
+			}
+		}
+		return false;
+	}
 
-        protected Item(Exception exception, Consumer<T> dequeuedCallback) {
-        	this(null, exception, dequeuedCallback);
-        }
+	enum QueueState {
+		OPEN, SHUTDOWN, CLOSED
+	}
 
-        Item(T value, Exception exception, Consumer<T> dequeuedCallback) {
-            this.value = value;
-            this.exception = exception;
-            this.dequeuedCallback = dequeuedCallback;
-        }
+	class Item {
+		Consumer<T> dequeuedCallback;
+		Exception exception;
+		T value;
 
-        protected Consumer<T> getDequeuedCallback() {
-            return this.dequeuedCallback;
-        }
+		// Simulate empty struct constructor in C#
+		protected Item() {
+			this(null, null, null);
+		}
 
-        protected Exception getException() {
-            return this.exception;
-        }
+		protected Item(T value, Consumer<T> dequeuedCallback) {
+			this(value, null, dequeuedCallback);
+		}
 
-        protected T getValue() {
-            return this.value;
-        }
-        
-        protected T getValueWithException() {
-            if (this.exception != null)
-            {
-            	 // TODO: trace
+		protected Item(Exception exception, Consumer<T> dequeuedCallback) {
+			this(null, exception, dequeuedCallback);
+		}
+
+		Item(T value, Exception exception, Consumer<T> dequeuedCallback) {
+			this.value = value;
+			this.exception = exception;
+			this.dequeuedCallback = dequeuedCallback;
+		}
+
+		protected Consumer<T> getDequeuedCallback() {
+			return this.dequeuedCallback;
+		}
+
+		protected Exception getException() {
+			return this.exception;
+		}
+
+		protected T getValue() {
+			return this.value;
+		}
+
+		protected T getValueWithException() {
+			if (this.exception != null) {
+				// TODO: trace
 //                throw RelayEventSource.Log.ThrowingException(this.exception, this, EventLevel.Informational);
-            }
+			}
 
-            return this.value;
-        }
-    }
+			return this.value;
+		}
+	}
 
-    class ItemQueue {
-        int head;
-        Item[] items;
-        int pendingCount;
-        int totalCount;
-        
-        @SuppressWarnings("unchecked")
-		protected ItemQueue()
-        {
-            this.items = (Item[]) Array.newInstance(Item.class, 1);
-        }
-        
-        // same as ItemCount
-        protected int getTotalCount() {
-        	return this.totalCount;
-        }
-        
-        protected boolean hasAnyItem() {
-        	return this.totalCount > 0;
-        }
-        
-        protected boolean hasAvailableItem() {
-        	return this.totalCount > this.pendingCount;
-        }
+	class ItemQueue {
+		int head;
+		Item[] items;
+		int pendingCount;
+		int totalCount;
 
-        protected Item dequeueAnyItem() {
-            if (this.pendingCount == this.totalCount) {
-                this.pendingCount--;
-            }
-            
-            return dequeueItemCore();
-        }
+		@SuppressWarnings("unchecked")
+		protected ItemQueue() {
+			this.items = (Item[]) Array.newInstance(Item.class, 1);
+		}
 
-        protected Item dequeueAvailableItem() {
-            if (this.totalCount == this.pendingCount) {
-            	throw new RuntimeException("ItemQueue does not contain any available items");
-            }
+		// same as ItemCount
+		protected int getTotalCount() {
+			return this.totalCount;
+		}
 
-            return dequeueItemCore();
-        }
+		protected boolean hasAnyItem() {
+			return this.totalCount > 0;
+		}
 
-        protected void enqueueAvailableItem(Item item) {
-            enqueueItemCore(item);
-        }
+		protected boolean hasAvailableItem() {
+			return this.totalCount > this.pendingCount;
+		}
 
-        protected void enqueuePendingItem(Item item) {
-            enqueueItemCore(item);
-            this.pendingCount++;
-        }
+		protected Item dequeueAnyItem() {
+			if (this.pendingCount == this.totalCount) {
+				this.pendingCount--;
+			}
 
-        protected void makePendingItemAvailable() {
-            // TODO: trace
+			return dequeueItemCore();
+		}
+
+		protected Item dequeueAvailableItem() {
+			if (this.totalCount == this.pendingCount) {
+				throw new RuntimeException("ItemQueue does not contain any available items");
+			}
+
+			return dequeueItemCore();
+		}
+
+		protected void enqueueAvailableItem(Item item) {
+			enqueueItemCore(item);
+		}
+
+		protected void enqueuePendingItem(Item item) {
+			enqueueItemCore(item);
+			this.pendingCount++;
+		}
+
+		protected void makePendingItemAvailable() {
+			// TODO: trace
 //            if (pendingCount == 0) {
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any pending items"), this);
 //            }
 
-            this.pendingCount--;
-        }
+			this.pendingCount--;
+		}
 
-        Item dequeueItemCore() {
-        	// TODO: trace
+		Item dequeueItemCore() {
+			// TODO: trace
 //            if (totalCount == 0) {
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any items"), this);
 //            }
 
-            Item item = this.items[this.head];
-            this.items[this.head] = new Item();
-            this.totalCount--;
-            this.head = (this.head + 1) % this.items.length;
-            return item;
-        }
+			Item item = this.items[this.head];
+			this.items[this.head] = new Item();
+			this.totalCount--;
+			this.head = (this.head + 1) % this.items.length;
+			return item;
+		}
 
-        @SuppressWarnings("unchecked")
+		@SuppressWarnings("unchecked")
 		void enqueueItemCore(Item item) {
-        	
-            if (this.totalCount == this.items.length) {
-                Item[] newItems = (Item[]) Array.newInstance(Item.class, this.items.length * 2);
-                for (int i = 0; i < this.totalCount; i++)
-                {
-                    newItems[i] = this.items[(head + i) % this.items.length];
-                }
-                this.head = 0;
-                this.items = newItems;
-            }
-            
-            int tail = (this.head + this.totalCount) % this.items.length;
-            this.items[tail] = item;
-            this.totalCount++;
-        }
-    }
+
+			if (this.totalCount == this.items.length) {
+				Item[] newItems = (Item[]) Array.newInstance(Item.class, this.items.length * 2);
+				for (int i = 0; i < this.totalCount; i++) {
+					newItems[i] = this.items[(head + i) % this.items.length];
+				}
+				this.head = 0;
+				this.items = newItems;
+			}
+
+			int tail = (this.head + this.totalCount) % this.items.length;
+			this.items[tail] = item;
+			this.totalCount++;
+		}
+	}
 }
