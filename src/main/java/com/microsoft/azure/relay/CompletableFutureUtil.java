@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -30,35 +31,30 @@ final class CompletableFutureUtil {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task) throws CompletionException {
+	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task) throws RuntimeException, CompletionException {
 		TimeoutHelper.throwIfNegativeArgument(timeout);
 		CompletableFuture<T> completableFuture = new CompletableFuture<T>();
 		
 		// Using supplyAsync here even for Future<Void> because it will just return null and won't cause a problem
-		try {
-			completableFuture = CompletableFuture.supplyAsync(throwingSupplierWrapper(() -> {
-				T result = null;
-				ScheduledFuture<?> cancelTask = null;
-				
-				try {
-					Future<?> future = (task instanceof Runnable) ? executor.submit((Runnable) task) : executor.submit((Callable<T>) task);
-					if (timeout != null) {
-						cancelTask = executor.schedule(() -> future.cancel(true), timeout.toMillis(), TimeUnit.MILLISECONDS);
-						result = (T) future.get();
-						cancelTask.cancel(true);
-					}
-					else {
-						result = (T) future.get();
-					}
-				} catch (Exception e) {
-					throw (e instanceof RuntimeException) ? new RuntimeException(e) : new CompletionException(e);
+		completableFuture = CompletableFuture.supplyAsync(() -> {
+			T result = null;
+			ScheduledFuture<?> cancelTask = null;
+			
+			try {
+				Future<?> future = (task instanceof Runnable) ? executor.submit((Runnable) task) : executor.submit((Callable<T>) task);
+				if (timeout != null) {
+					cancelTask = executor.schedule(() -> future.cancel(true), timeout.toMillis(), TimeUnit.MILLISECONDS);
+					result = (T) future.get();
+					cancelTask.cancel(true);
 				}
-				return result;
-			}));
-		} catch (Exception e) {
-			completableFuture.cancel(true);
-			throw (CompletionException) e;
-		}
+				else {
+					result = (T) future.get();
+				}
+			} catch (Exception e) {
+				throw (e instanceof ExecutionException) ? new RuntimeException(e.getCause()) : new RuntimeException(e);
+			}
+			return result;
+		});
 		return completableFuture;
 	}
 
@@ -70,15 +66,5 @@ final class CompletableFutureUtil {
 	
 	protected static void cleanup() {
 		executor.shutdown();
-	}
-	
-	protected static <T> Supplier<T> throwingSupplierWrapper(ThrowingSupplier<T, CompletionException> throwingSupplier) throws CompletionException {
-		return () -> {
-			try {
-				return throwingSupplier.supply();
-			} catch (Exception e) {
-				return ThrowingSupplier.throwException(e);
-			}
-		};
 	}
 }
