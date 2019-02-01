@@ -2,10 +2,10 @@ package com.microsoft.azure.relay;
 
 import java.time.DateTimeException;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 class TimeoutHelper {
-	private LocalDateTime deadline;
+	private Instant deadline;
 	private boolean deadlineSet;
 	private Duration originalTimeout;
 
@@ -15,7 +15,7 @@ class TimeoutHelper {
 
 	protected TimeoutHelper(Duration timeout, boolean startTimeout) {
 		this.originalTimeout = timeout;
-		this.deadline = LocalDateTime.MAX;
+		this.deadline = Instant.MAX;
 		this.deadlineSet = (timeout != null && isMaxDuration(timeout));
 
 		if (startTimeout && !this.deadlineSet) {
@@ -44,50 +44,46 @@ class TimeoutHelper {
 		return (val1.compareTo(val2) < 0) ? val1 : val2;
 	}
 
-	protected static LocalDateTime min(LocalDateTime val1, LocalDateTime val2) {
+	protected static Instant min(Instant val1, Instant val2) {
 		return (val1.compareTo(val2) < 0) ? val1 : val2;
 	}
 
-	protected static LocalDateTime add(LocalDateTime time, Duration timeout) {
-		LocalDateTime temp = LocalDateTime.of(time.toLocalDate(), time.toLocalTime());
+	protected static Instant add(Instant time, Duration timeout) {
 		try {
-			temp = temp.plusNanos(timeout.toNanos());
+			return time.plusNanos(timeout.toNanos());
 		}
 		// Catch if the result is out of bounds
 		catch (DateTimeException e) {
 			if (timeout.compareTo(Duration.ZERO) < 0) {
-				return LocalDateTime.MIN;
+				return Instant.MIN;
 			} else {
-				return LocalDateTime.MAX;
+				return Instant.MAX;
 			}
 		}
-		return temp;
 	}
 
-	protected static LocalDateTime subtract(LocalDateTime time, Duration timeout) {
-		LocalDateTime temp = LocalDateTime.of(time.toLocalDate(), time.toLocalTime());
+	protected static Instant subtract(Instant time, Duration timeout) {
 		try {
-			temp = temp.minusNanos(timeout.toNanos());
+			return time.minusNanos(timeout.toNanos());
 		}
 		// Catch if the result is out of bounds
 		catch (DateTimeException e) {
 			if (timeout.compareTo(Duration.ZERO) < 0) {
-				return LocalDateTime.MIN;
+				return Instant.MIN;
 			} else {
-				return LocalDateTime.MAX;
+				return Instant.MAX;
 			}
 		}
-		return temp;
 	}
 
 	protected Duration remainingTime() {
 		if (!this.deadlineSet) {
 			this.setDeadline();
 			return this.originalTimeout;
-		} else if (this.deadline == LocalDateTime.MAX) {
+		} else if (this.deadline == Instant.MAX) {
 			return RelayConstants.MAX_DURATION;
 		} else {
-			Duration remaining = Duration.between(LocalDateTime.now(), this.deadline);
+			Duration remaining = Duration.between(Instant.now(), this.deadline);
 			return (remaining.compareTo(Duration.ZERO) < 0) ? Duration.ZERO : remaining;
 		}
 	}
@@ -98,7 +94,7 @@ class TimeoutHelper {
 
 	private void setDeadline() {
 		if (!deadlineSet) {
-			this.deadline = add(LocalDateTime.now(), this.originalTimeout);
+			this.deadline = add(Instant.now(), this.originalTimeout);
 			this.deadlineSet = true;
 		}
 	}

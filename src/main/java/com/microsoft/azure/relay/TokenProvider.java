@@ -56,8 +56,15 @@ public abstract class TokenProvider {
 		}
 
 		TimeoutHelper.throwIfNegativeArgument(validFor, "validFor");
-		urlString = normalizeAudience(urlString);
-		return this.onGetTokenAsync(urlString, validFor);
+		CompletableFuture<SecurityToken> future = new CompletableFuture<SecurityToken>();
+		try {
+			urlString = normalizeAudience(urlString);
+			future = this.onGetTokenAsync(urlString, validFor);
+		}
+		catch (URISyntaxException e) {
+			future.completeExceptionally(e);
+		}
+		return future;
 	}
 
 	/**
@@ -70,14 +77,9 @@ public abstract class TokenProvider {
 	 */
 	protected abstract CompletableFuture<SecurityToken> onGetTokenAsync(String urlString, Duration validFor);
 
-	static String normalizeAudience(String audience) {
-		try {
-			String audienceURIString = new URI(audience).normalize().toString();
-			return (audienceURIString.charAt(audienceURIString.length() - 1) == '/') ? audienceURIString + '/'
-					: audienceURIString;
-		} catch (URISyntaxException e) {
-			// urlString should alredy be checked, so exception here is unlikely
-			return null;
-		}
+	static String normalizeAudience(String audience) throws URISyntaxException {
+		String audienceURIString = new URI(audience).normalize().toString();
+		return (audienceURIString.charAt(audienceURIString.length() - 1) == '/') ? audienceURIString + '/'
+				: audienceURIString;
 	}
 }

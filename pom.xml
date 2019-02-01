@@ -6,11 +6,8 @@
   <artifactId>azure-relay</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <packaging>maven-plugin</packaging>
-
-  <name>azure-relay Maven Plugin</name>
-
-  <!-- FIXME change it to the project's website -->
-  <url>http://maven.apache.org</url>
+  <name>azure-relay</name>
+  <url>https://github.com/Azure/azure-relay-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -40,6 +37,11 @@
 	    <artifactId>junit</artifactId>
 	    <version>4.12</version>
 	    <scope>test</scope>
+	</dependency>
+	<dependency>
+		<groupId>javax</groupId>
+		<artifactId>javaee-api</artifactId>
+		<version>7.0</version>
 	</dependency>
   </dependencies>
 

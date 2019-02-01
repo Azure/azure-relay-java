@@ -60,14 +60,19 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
 
 	@Override
 	protected CompletableFuture<SecurityToken> onGetTokenAsync(String resource, Duration validFor) {
-		String tokenString = this.BuildSignature(resource, validFor);
-		SharedAccessSignatureToken securityToken = new SharedAccessSignatureToken(tokenString);
-		return CompletableFuture.completedFuture(securityToken);
+		try {
+			String tokenString = this.buildSignature(resource, validFor);
+			SharedAccessSignatureToken securityToken = new SharedAccessSignatureToken(tokenString);
+			return CompletableFuture.completedFuture(securityToken);
+		} 
+		catch (InvalidKeyException | UnsupportedEncodingException | NoSuchAlgorithmException e) {
+			return CompletableFutureUtil.fromException(e);
+		}
 	}
 
-	protected String BuildSignature(String resource, Duration validFor) {
+	protected String buildSignature(String resource, Duration validFor) throws InvalidKeyException, UnsupportedEncodingException, NoSuchAlgorithmException {
 		if (StringUtil.isNullOrWhiteSpace(this.sharedAccessSignature)) {
-			return SharedAccessSignatureBuilder.BuildSignature(this.keyName, this.encodedSharedAccessKey, resource,
+			return SharedAccessSignatureBuilder.buildSignature(this.keyName, this.encodedSharedAccessKey, resource,
 					validFor);
 		}
 
@@ -77,13 +82,12 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
 	static class SharedAccessSignatureBuilder {
 		static final String HMAC_ALGORITHM = "HMACSHA256";
 
-		public static String BuildSignature(String keyName, byte[] encodedSharedAccessKey, String resource,
-				Duration timeToLive) {
+		public static String buildSignature(String keyName, byte[] encodedSharedAccessKey, String resource,
+				Duration timeToLive) throws UnsupportedEncodingException, InvalidKeyException, NoSuchAlgorithmException {
+			
 			// Note that target URI is not normalized because in IoT scenario it
 			// is case sensitive.
-
-			try {
-				String expiresOn = BuildExpiresOn(timeToLive);
+				String expiresOn = buildExpiresOn(timeToLive);
 				String audienceUri = URLEncoder.encode(resource, UTF8_ENCODING_NAME);
 				String[] fields = new String[] { audienceUri, expiresOn };
 
@@ -102,12 +106,9 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
 						URLEncoder.encode(signature, UTF8_ENCODING_NAME), SharedAccessSignatureToken.SIGNED_EXPIRY,
 						URLEncoder.encode(expiresOn, UTF8_ENCODING_NAME), SharedAccessSignatureToken.SIGNATURE_KEYNAME,
 						URLEncoder.encode(keyName, UTF8_ENCODING_NAME) });
-			} catch (UnsupportedEncodingException e) {
-				throw new RuntimeException("UTF-8 encoding or HMACSHA256 algorithm is missing in the java runtime.");
-			}
 		}
 
-		static String BuildExpiresOn(Duration timeToLive) {
+		static String buildExpiresOn(Duration timeToLive) {
 			long timeToLiveInSeconds = timeToLive.getSeconds();
 			if (timeToLiveInSeconds < 0) {
 				throw new IllegalArgumentException("timeToLive should be a positive value");
@@ -116,22 +117,16 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
 			return String.valueOf(expireOnInSeconds);
 		}
 
-		static String sign(String requestString, byte[] encodedSharedAccessKey) {
-			try {
-				Mac hmac = Mac.getInstance(HMAC_ALGORITHM);
-				SecretKeySpec secretKey = new SecretKeySpec(encodedSharedAccessKey, HMAC_ALGORITHM);
-				hmac.init(secretKey);
-				byte[] signatureBytes = hmac.doFinal(requestString.getBytes(StringUtil.UTF8));
-				return Base64.getEncoder().encodeToString(signatureBytes);
-			} catch (NoSuchAlgorithmException | InvalidKeyException e) {
-				throw new RuntimeException("UTF-8 encoding or HMACSHA256 algorithm is missing in the java runtime.");
-			}
+		static String sign(String requestString, byte[] encodedSharedAccessKey) throws InvalidKeyException, NoSuchAlgorithmException {
+			Mac hmac = Mac.getInstance(HMAC_ALGORITHM);
+			SecretKeySpec secretKey = new SecretKeySpec(encodedSharedAccessKey, HMAC_ALGORITHM);
+			hmac.init(secretKey);
+			byte[] signatureBytes = hmac.doFinal(requestString.getBytes(StringUtil.UTF8));
+			return Base64.getEncoder().encodeToString(signatureBytes);
 		}
 	}
 
-	/// <summary>
-	/// A WCF SecurityToken that wraps a Shared Access Signature
-	/// </summary>
+	// A SecurityToken that wraps a Shared Access Signature
 	static class SharedAccessSignatureToken extends SecurityToken {
 		public static final int MAX_KEYNAME_LENGTH = 256;
 		public static final int MAX_KEY_LENGTH = 256;

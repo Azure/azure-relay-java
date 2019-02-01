@@ -5,12 +5,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 public class TrackingContext {
-	static final UUID UUID_ZERO = new UUID(0L, 0L); // equivalent of Guid.Empty in C#
-	static final int UUID_STRING_LENGTH = UUID_ZERO.toString().length();
+	private static final UUID UUID_ZERO = new UUID(0L, 0L); // equivalent of Guid.Empty in C#
+	private static final int UUID_STRING_LENGTH = UUID_ZERO.toString().length();
 	static final String TRACKING_ID_NAME = "TrackingId";
-	final String ADDRESS_NAME = "Address";
-	final String TIMESTAMP_NAME = "Timestamp";
-	String cachedToString;
+	static final String ADDRESS_NAME = "Address";
+	static final String TIMESTAMP_NAME = "Timestamp";
+	private String cachedToString;
 	private UUID activityId;
 	private String trackingId;
 	private String address;
@@ -38,7 +38,7 @@ public class TrackingContext {
 	}
 
 	static TrackingContext create(URI address) {
-		return create(UUID.randomUUID(), HybridConnectionUtil.getAudience(address));
+		return create(UUID.randomUUID(), address.toString());
 	}
 
 	static TrackingContext create(UUID activityId, String address) {
@@ -46,7 +46,7 @@ public class TrackingContext {
 	}
 
 	static TrackingContext create(String trackingId, URI address) {
-		return create(trackingId, HybridConnectionUtil.getAudience(address));
+		return create(trackingId, address.toString());
 	}
 
 	static TrackingContext create(String trackingId, String address) {
@@ -73,18 +73,19 @@ public class TrackingContext {
 	}
 
 	static TrackingContext create(UUID activityId, String trackingId, URI address) {
-		return create(activityId, trackingId, HybridConnectionUtil.getAudience(address));
+		return create(activityId, trackingId, address.toString());
 	}
 
 	static TrackingContext create(UUID activityId, String trackingId, String address) {
 		return new TrackingContext(activityId, trackingId, address);
 	}
 
-	/// <summary>
-	/// Given a trackingId String with "_GXX" suffix remove that suffix.
-	/// Example: "1c048eb5-77c4-4b85-96fd-fa526801af35_G0" becomes
-	/// "1c048eb5-77c4-4b85-96fd-fa526801af35"
-	/// </summary>
+	/**
+	 * Given a trackingId String with "_GXX" suffix remove that suffix.
+	 * Example: "1c048eb5-77c4-4b85-96fd-fa526801af35_G0" becomes "1c048eb5-77c4-4b85-96fd-fa526801af35"
+	 * @param trackingId The trackId to be trimmed
+	 * @return The new trackId with trimmed suffix
+	 */
 	static String removeSuffix(String trackingId) {
 		int roleSuffixIndex = trackingId.indexOf("_");
 
@@ -95,9 +96,9 @@ public class TrackingContext {
 		return trackingId.substring(0, roleSuffixIndex);
 	}
 
-	/// <summary>
-	/// Returns a String that represents the current object.
-	/// </summary>
+	/**
+	 * Returns a String that represents the current object including the trackingId and the address if exists
+	 */
 	@Override
 	public String toString() {
 		if (this.cachedToString == null) {
@@ -112,11 +113,12 @@ public class TrackingContext {
 		return this.cachedToString;
 	}
 
-	/// <summary>
-	/// Ensures the given String contains a TrackingId. If one is already present,
-	/// nothing occurs.
-	/// Otherwise TrackingId, Timestamp, and if present, SystemTracker are added.
-	/// </summary>
+	/**
+	 * Ensures the given String contains a TrackingId. If one is already present, nothing occurs.
+	 * Otherwise TrackingId, Timestamp, and if present, SystemTracker are added.
+	 * @param exceptionMessage
+	 * @return
+	 */
 	String ensureTrackableMessage(String exceptionMessage) {
 		if (StringUtil.isNullOrEmpty(exceptionMessage) || exceptionMessage.indexOf(TRACKING_ID_NAME) == -1) {
 			// Ensure there's a period so we don't get a run-on sentence such as "An error
