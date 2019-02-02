@@ -17,7 +17,7 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedRunAsyncCompletionTest() throws CompletionException {
+	public void timedRunAsyncCompletionTest() {
 		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(30), () -> {
 			try {
 				Thread.sleep(15);
@@ -39,7 +39,7 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedRunAsyncNullTimeoutTest() throws CompletionException {
+	public void timedRunAsyncNullTimeoutTest() {
 		CompletableFutureUtil.timedRunAsync(null, () -> {
 			try {
 				Thread.sleep(15);
@@ -50,7 +50,7 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedSupplyAsyncCompletionTest() throws CompletionException {
+	public void timedSupplyAsyncCompletionTest() {
 		assertTrue(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(30), () -> {
 			try {
 				Thread.sleep(15);
@@ -60,7 +60,7 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test (expected = java.util.concurrent.CompletionException.class)
-	public void timedSupplyAsyncTimeoutTest() throws CompletionException {
+	public void timedSupplyAsyncTimeoutTest() {
 		assertNotEquals(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(15), () -> {
 			try {
 				Thread.sleep(30);
@@ -70,7 +70,7 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedSupplyAsyncNullTimeoutTest() throws CompletionException {
+	public void timedSupplyAsyncNullTimeoutTest() {
 		assertTrue(CompletableFutureUtil.timedSupplyAsync(null, () -> {
 			try {
 				Thread.sleep(15);

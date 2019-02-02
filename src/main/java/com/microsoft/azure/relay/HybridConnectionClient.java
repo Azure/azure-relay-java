@@ -193,7 +193,7 @@ public class HybridConnectionClient {
 //         RelayEventSource.Log.ObjectConnecting(traceSource, trackingContext); 
 
 		if (this.tokenProvider != null) {
-			String audience = HybridConnectionUtil.getAudience(this.address);
+			String audience = this.address.toString();
 			CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience,
 					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 
@@ -207,7 +207,7 @@ public class HybridConnectionClient {
 
 			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
 			try {
-				URI uri = HybridConnectionUtil.BuildUri(this.address.getHost(), this.address.getPort(),
+				URI uri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
 						this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
 						trackingContext.getTrackingId());
 				ClientWebSocket webSocket = new ClientWebSocket();
