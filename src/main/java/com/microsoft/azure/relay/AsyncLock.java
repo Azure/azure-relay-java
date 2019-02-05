@@ -2,6 +2,7 @@ package com.microsoft.azure.relay;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -29,29 +30,19 @@ class AsyncLock {
 		return this.lockAsync(null);
 	}
 
-	CompletableFuture<LockRelease> lockAsync(Duration duration) {
+	CompletableFuture<LockRelease> lockAsync(Duration timeout) {
 		synchronized (this.thisLock) {
 			if (!this.locked) {
 				this.locked = true;
-				return this.waiterQueue.dequeueAsync(duration).thenApply(acquired -> this.lockRelease);
+				return this.waiterQueue.dequeueAsync(timeout).thenApply(acquired -> this.lockRelease);
 			}
 		}
 		
 		AtomicReference<CompletableFuture<LockRelease>> waiter = new AtomicReference<CompletableFuture<LockRelease>>(null);
-		Future<?> cancelTask = (duration != null) ? CompletableFutureUtil.executor.schedule(() -> {
-			if (waiter.get() != null && !waiter.get().isDone()) {
-				waiter.get().completeExceptionally(new TimeoutException("Semaphore was not acquired in time"));
-			}
-		}, duration.toMillis(), TimeUnit.MILLISECONDS) : null;
-
-		// TODO: Add Duration/Cancel support to InputQueue<T>
-		waiter.set(this.waiterQueue.dequeueAsync().handle((acquired, ex) -> {
-			if (duration != null) {
-				cancelTask.cancel(true);
-			}
-			if (acquired != true || ex != null) {
+		waiter.set(this.waiterQueue.dequeueAsync(timeout).handle((acquired, ex) -> {
+			if (ex != null || acquired != true) {
 				if (ex != null) {
-					throw new RuntimeException(ex);
+					throw new CompletionException(ex);
 				}
 				throw new RuntimeException("AsyncLock was not acquired");
 			}

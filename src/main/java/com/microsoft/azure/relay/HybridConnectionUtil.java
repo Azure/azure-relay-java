@@ -10,6 +10,33 @@ import java.util.Map;
 final class HybridConnectionUtil {
 
 	/**
+	 * Removing the query portion of the URI to hide potential senstive information in it
+	 */
+	static String getAudience(URI uri) {
+		StringBuilder audience = new StringBuilder();
+		String scheme = uri.getScheme();
+		String host = uri.getHost();
+		int port = uri.getPort();
+		String path = uri.getPath();
+
+		if (!StringUtil.isNullOrEmpty(scheme)) {
+			audience.append(scheme).append("://");
+		}
+		if (!StringUtil.isNullOrEmpty(host)) {
+			audience.append(host);
+		}
+		// if port is not defined, uri.getPort will return -1
+		if (port > -1) {
+			audience.append(":").append(port);
+		}
+		if (StringUtil.isNullOrEmpty(path)) {
+			audience.append("/").append(path);
+		}
+		
+		return audience.toString();
+	}
+	
+	/**
 	 * Build the websocket uri for use with HybridConnection WebSockets. Results in
 	 * a Uri such as
 	 * "wss://HOST:PORT/$hc/PATH?QUERY&amp;sb-hc-action=listen&amp;sb-hc-id=ID"

@@ -45,12 +45,8 @@ public class AsyncLockTest {
 				
 				task2.join();
 			}).join();
-		}
-		catch (CompletionException e) {
+		} catch (CompletionException e) {
 			throw e.getCause();
-		}
-		finally {
-			
 		}
 	}
 	

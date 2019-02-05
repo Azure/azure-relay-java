@@ -193,7 +193,7 @@ public class HybridConnectionClient {
 //         RelayEventSource.Log.ObjectConnecting(traceSource, trackingContext); 
 
 		if (this.tokenProvider != null) {
-			String audience = this.address.toString();
+			String audience = HybridConnectionUtil.getAudience(this.address);
 			CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience,
 					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 

@@ -3,7 +3,6 @@ package com.microsoft.azure.relay;
 import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -18,13 +17,16 @@ final class CompletableFutureUtil {
 	static AtomicInteger tasksRunning = new AtomicInteger(0);
 
     static CompletableFuture<Void> delayAsync(Duration delay) {
-        prepareNewTask();
         if (delay == null || delay.isZero() || delay.isNegative()) {
             return CompletableFuture.completedFuture(null);
         }
        
+        prepareNewTask();
         CompletableFuture<Void> future = new CompletableFuture<Void>();
-        executor.schedule(() -> future.complete(null), delay.toMillis(), TimeUnit.MILLISECONDS);
+        executor.schedule(() -> {
+        	future.complete(null);
+        	shutdownExecutorIfNeeded();
+        }, delay.toMillis(), TimeUnit.MILLISECONDS);
         return future;
     }
     
@@ -63,19 +65,17 @@ final class CompletableFutureUtil {
 			try {
 				if (task instanceof Runnable) {
 					((Runnable) task).run();
-				}
-				else if (task instanceof Callable) {
+				} else if (task instanceof Callable) {
 					taskResult = ((Callable<T>) task).call();
 				}
 				taskCF.complete(taskResult);
-			} 
-			catch (Exception e) {
+			} catch (Exception e) {
 				taskCF.completeExceptionally(e);
-			}
-			finally {
+			} finally {
 				if (cancelFuture.get() != null) {
 					cancelFuture.get().cancel(true);
 				}
+				shutdownExecutorIfNeeded();
 			}
 		});
 		
@@ -89,9 +89,17 @@ final class CompletableFutureUtil {
 		return taskCF;
 	}
 
+	// Should be called every time a task is scheduled by the executor
 	private static void prepareNewTask() {
 		initExecutorIfNeeded();
 		tasksRunning.incrementAndGet();
+	}
+	
+	// Should be called every time a task is completed by the executor regardless of successful completion
+	private static void shutdownExecutorIfNeeded() {
+		if (tasksRunning.decrementAndGet() == 0) {
+			executor.shutdown();
+		}
 	}
 	
 	private static void initExecutorIfNeeded() {

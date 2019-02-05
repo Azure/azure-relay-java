@@ -1,118 +1,133 @@
 package com.microsoft.azure.relay;
 
 import java.lang.reflect.Array;
+import java.time.Duration;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-final class InputQueue<T extends Object> {
+final class InputQueue<T> {
 	private final ItemQueue itemQueue;
 	private final Queue<CompletableFuture<T>> readerQueue;
 	private final List<CompletableFuture<T>> waiterList;
+	private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
 
 	private QueueState queueState;
-	private Object thisLock = new Object();
+	private final Object thisLock = new Object();
 
-	private int pendingCount;
 	private Consumer<T> disposeItemCallback;
 
-	protected int getPendingCount() {
+	int getPendingCount() {
 		synchronized (thisLock) {
-			return this.pendingCount;
+			return this.itemQueue.getTotalCount();
 		}
 	}
 
-	protected int getReadersQueueCount() {
+	int getReadersQueueCount() {
 		synchronized (thisLock) {
 			return this.readerQueue.size();
 		}
 	}
 
-	protected Consumer<T> getDisposeItemCallback() {
+	Consumer<T> getDisposeItemCallback() {
 		return this.disposeItemCallback;
 	}
 
-	protected void setDisposeItemCallback(Consumer<T> callback) {
+	void setDisposeItemCallback(Consumer<T> callback) {
 		this.disposeItemCallback = callback;
 	}
 
-	protected InputQueue() {
+	InputQueue() {
 		this.itemQueue = new ItemQueue();
 		this.readerQueue = new LinkedList<CompletableFuture<T>>();
 		this.waiterList = new LinkedList<CompletableFuture<T>>();
 		this.queueState = QueueState.OPEN;
 	}
 
-	protected CompletableFuture<T> dequeueAsync() {
-		return this.dequeueAsync(null);
+	CompletableFuture<T> dequeueAsync() {
+		return dequeueAsync(null);
 	}
-
-	protected CompletableFuture<T> dequeueAsync(Object state) {
+	
+	CompletableFuture<T> dequeueAsync(Duration timeout) {
 		Item item = null;
 
 		synchronized (thisLock) {
-
 			if (this.queueState == QueueState.OPEN) {
-
 				if (itemQueue.hasAvailableItem()) {
 					item = itemQueue.dequeueAvailableItem();
 				} else {
-					CompletableFuture<T> reader = new CompletableFuture<T>();
-					this.readerQueue.add(reader);
-					return reader;
+					return this.createReader(timeout);
 				}
 			} else if (queueState == QueueState.SHUTDOWN) {
-
 				if (itemQueue.hasAvailableItem()) {
 					item = itemQueue.dequeueAvailableItem();
 				} else if (itemQueue.hasAnyItem()) {
-					CompletableFuture<T> reader = new CompletableFuture<T>();
-					this.readerQueue.add(reader);
-					return reader;
+					return this.createReader(timeout);
 				}
 			}
 		}
 
 		invokeDequeuedCallback(item);
-		return (item != null) ? CompletableFuture.completedFuture(item.getValue())
-				: CompletableFuture.completedFuture(null);
+		CompletableFuture<T> future = new CompletableFuture<T>();
+		if (item != null && item.getException()!= null) {
+			future.completeExceptionally(item.getException());
+		} else {
+			future.complete((item != null) ? item.getValue() : null);
+		}
+		return future;
+	}
+	
+	private CompletableFuture<T> createReader(Duration timeout) {
+		CompletableFuture<T> reader = new CompletableFuture<T>();
+		
+		if (timeout != null) {
+			Future<?> cancelTask = executor.schedule(() -> {
+				reader.completeExceptionally(new TimeoutException("This InputQueue item could not complete in time."));
+			}, timeout.toMillis(), TimeUnit.MILLISECONDS);
+			
+			reader.thenRunAsync(() -> cancelTask.cancel(true));
+		}
+		
+		this.readerQueue.add(reader);
+		return reader;
 	}
 
-	protected CompletableFuture<Boolean> waitForItemAsync() {
-		return this.waitForItemAsync(null);
-	}
-
-	@SuppressWarnings("unchecked")
-	protected CompletableFuture<Boolean> waitForItemAsync(Object state) {
-
+	CompletableFuture<Boolean> waitForItemAsync() {
 		synchronized (thisLock) {
 			if (queueState == QueueState.OPEN) {
 				if (!itemQueue.hasAvailableItem()) {
-					CompletableFuture<T> waiter = new CompletableFuture<T>();
-					waiterList.add(waiter);
-					return (CompletableFuture<Boolean>) waiter;
+					return this.createWaiter();
 				}
 			} else if (queueState == QueueState.SHUTDOWN) {
 				if (!itemQueue.hasAvailableItem() && itemQueue.hasAnyItem()) {
-					CompletableFuture<T> waiter = new CompletableFuture<T>();
-					waiterList.add(waiter);
-					return (CompletableFuture<Boolean>) waiter;
+					return this.createWaiter();
 				}
 			}
 		}
 
 		return CompletableFuture.completedFuture(true);
 	}
+	
+	@SuppressWarnings("unchecked")
+	private CompletableFuture<Boolean> createWaiter() {
+		CompletableFuture<T> waiter = new CompletableFuture<T>();
+		this.waiterList.add(waiter);
+		return (CompletableFuture<Boolean>) waiter;
+	}
 
-	protected void close() {
+	void close() {
 		dispose();
 	}
 
 	@SuppressWarnings("unchecked")
-	protected void dispatch() {
+	void dispatch() {
 		CompletableFuture<T> reader = null;
 		CompletableFuture<T>[] outstandingReaders = null;
 		CompletableFuture<Boolean>[] waiters = null;
@@ -121,24 +136,23 @@ final class InputQueue<T extends Object> {
 
 		synchronized (thisLock) {
 
-			itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
+			itemAvailable = !((this.queueState == QueueState.CLOSED) || (this.queueState == QueueState.SHUTDOWN));
 			waiters = this.getWaiters();
 
-			if (queueState != QueueState.CLOSED) {
+			if (this.queueState != QueueState.CLOSED) {
 				this.itemQueue.makePendingItemAvailable();
 
 				if (this.readerQueue.size() > 0) {
 					item = this.itemQueue.dequeueAvailableItem();
 					reader = this.readerQueue.remove();
 
-					if (queueState == QueueState.SHUTDOWN && readerQueue.size() > 0 && itemQueue.getTotalCount() == 0) {
-						outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class,
-								readerQueue.size());
+					if (this.queueState == QueueState.SHUTDOWN && this.readerQueue.size() > 0 && itemQueue.getTotalCount() == 0) {
+						outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class, this.readerQueue.size());
 
 						// manually copy over values because only cloning of primitives are allowed
 						int i = 0;
-						while (!readerQueue.isEmpty()) {
-							outstandingReaders[i++] = readerQueue.remove();
+						while (!this.readerQueue.isEmpty()) {
+							outstandingReaders[i++] = this.readerQueue.remove();
 						}
 
 						itemAvailable = false;
@@ -149,6 +163,7 @@ final class InputQueue<T extends Object> {
 
 		if (outstandingReaders != null) {
 			ActionItem.schedule(s -> completeOutstandingReadersCallback(s), outstandingReaders);
+			
 		}
 
 		if (waiters != null) {
@@ -157,45 +172,45 @@ final class InputQueue<T extends Object> {
 
 		if (reader != null) {
 			invokeDequeuedCallback(item);
-			reader.complete((T) item.getValue());
+			reader.complete(item.getValue());
 		}
 	}
 
-	protected void enqueueAndDispatch(T item) {
+	void enqueueAndDispatch(T item) {
 		enqueueAndDispatch(item, null);
 	}
 
 	// dequeuedCallback is called as an item is dequeued from the InputQueue. The
 	// InputQueue lock is not held during the callback. However, the user code will
 	// not be notified of the item being available until the callback returns. If
-	// you
-	// are not sure if the callback will block for a long time, then first call
+	// you are not sure if the callback will block for a long time, then first call
 	// ActionItem.Schedule to get to a "safe" thread.
-	protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
+	void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
 		enqueueAndDispatch(item, dequeuedCallback, true);
 	}
 
-	protected void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
+	void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
 		enqueueAndDispatch(new Item(item, dequeuedCallback), canDispatchOnThisThread);
 	}
 
-	protected boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
+	boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
 		return enqueueWithoutDispatch(new Item(item, dequeuedCallback));
 	}
 
-	protected boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
+	boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
 		return enqueueWithoutDispatch(new Item(exception, dequeuedCallback));
 	}
 
-	protected void shutdown() {
+	void shutdown() {
 		this.shutdown(null);
 	}
 
 	// Don't let any more items in. Differs from Close in that we keep around
 	// existing items in our itemQueue for possible future calls to Dequeue
 	@SuppressWarnings("unchecked")
-	protected void shutdown(Supplier<Exception> pendingExceptionGenerator) {
+	void shutdown(Supplier<Exception> pendingExceptionGenerator) {
 		CompletableFuture<T>[] outstandingReaders = null;
+		this.executor.shutdown();
 
 		synchronized (thisLock) {
 
@@ -204,15 +219,13 @@ final class InputQueue<T extends Object> {
 			}
 
 			this.queueState = QueueState.SHUTDOWN;
-
-			if (readerQueue.size() > 0 && this.itemQueue.getTotalCount() == 0) {
-				outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class,
-						readerQueue.size());
+			if (this.readerQueue.size() > 0 && this.itemQueue.getTotalCount() == 0) {
+				outstandingReaders = (CompletableFuture<T>[]) Array.newInstance(CompletableFuture.class, readerQueue.size());
 
 				// manually copy over values because only cloning of primitives are allowed
 				int i = 0;
-				while (!readerQueue.isEmpty()) {
-					outstandingReaders[i++] = readerQueue.remove();
+				while (!this.readerQueue.isEmpty()) {
+					outstandingReaders[i++] = this.readerQueue.remove();
 				}
 			}
 		}
@@ -229,8 +242,7 @@ final class InputQueue<T extends Object> {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
-	protected void dispose() {
+	void dispose() {
 		boolean dispose = false;
 
 		synchronized (thisLock) {
@@ -241,9 +253,9 @@ final class InputQueue<T extends Object> {
 		}
 
 		if (dispose) {
-			while (readerQueue.size() > 0) {
-				CompletableFuture<T> reader = readerQueue.remove();
-				reader.complete((T) new Item());
+			while (this.readerQueue.size() > 0) {
+				CompletableFuture<T> reader = this.readerQueue.remove();
+				reader.complete(null);
 			}
 
 			while (itemQueue.hasAnyItem()) {
@@ -252,6 +264,7 @@ final class InputQueue<T extends Object> {
 				invokeDequeuedCallback(item);
 			}
 		}
+		this.executor.shutdownNow();
 	}
 
 	void disposeItem(Item item) {
@@ -261,11 +274,11 @@ final class InputQueue<T extends Object> {
 	}
 
 	@SuppressWarnings("unchecked")
-	void completeOutstandingReadersCallback(Object state) {
-		CompletableFuture<T>[] outstandingReaders = (CompletableFuture<T>[]) state;
+	void completeOutstandingReadersCallback(Object readers) {
+		CompletableFuture<T>[] outstandingReaders = (CompletableFuture<T>[]) readers;
 
 		for (int i = 0; i < outstandingReaders.length; i++) {
-			outstandingReaders[i].complete((T) new Item());
+			outstandingReaders[i].complete(null);
 		}
 	}
 
@@ -276,8 +289,8 @@ final class InputQueue<T extends Object> {
 	}
 
 	@SuppressWarnings("unchecked")
-	static void completeWaitersFalseCallback(Object state) {
-		completeWaiters(false, (CompletableFuture<Boolean>[]) state);
+	static void completeWaitersFalseCallback(Object waiters) {
+		completeWaiters(false, (CompletableFuture<Boolean>[]) waiters);
 	}
 
 	static void completeWaitersLater(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
@@ -289,13 +302,13 @@ final class InputQueue<T extends Object> {
 	}
 
 	@SuppressWarnings("unchecked")
-	static void completeWaitersTrueCallback(Object state) {
-		completeWaiters(true, (CompletableFuture<Boolean>[]) state);
+	static void completeWaitersTrueCallback(Object waiters) {
+		completeWaiters(true, (CompletableFuture<Boolean>[]) waiters);
 	}
 
 	void invokeDequeuedCallback(Item item) {
 		if (item != null && item.getDequeuedCallback() != null) {
-			item.dequeuedCallback.accept(item.getValue());
+			item.dequeuedCallback.accept(item.getValueWithException());
 		}
 	}
 
@@ -313,7 +326,7 @@ final class InputQueue<T extends Object> {
 	@SuppressWarnings("unchecked")
 	void onInvokeDequeuedCallback(Object state) {
 		Item item = (Item) state;
-		item.getDequeuedCallback().accept(item.getValue());
+		item.getDequeuedCallback().accept(item.getValueWithException());
 	}
 
 	void enqueueAndDispatch(Item item, boolean canDispatchOnThisThread) {
@@ -335,7 +348,7 @@ final class InputQueue<T extends Object> {
 						reader = this.readerQueue.remove();
 					}
 				} else {
-					if (readerQueue.size() == 0) {
+					if (this.readerQueue.size() == 0) {
 						itemQueue.enqueueAvailableItem(item);
 					} else {
 						itemQueue.enqueuePendingItem(item);
@@ -357,7 +370,7 @@ final class InputQueue<T extends Object> {
 
 		if (reader != null) {
 			invokeDequeuedCallback(item);
-			reader.complete((T) item.getValue());
+			reader.complete(item.getValue());
 		}
 
 		if (dispatchLater) {
@@ -374,7 +387,7 @@ final class InputQueue<T extends Object> {
 		synchronized (thisLock) {
 			if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN) {
 
-				if (readerQueue.size() == 0 && waiterList.size() == 0) {
+				if (this.readerQueue.size() == 0 && waiterList.size() == 0) {
 					itemQueue.enqueueAvailableItem(item);
 					return false;
 				} else {
@@ -426,20 +439,20 @@ final class InputQueue<T extends Object> {
 	}
 
 	class Item {
-		Consumer<T> dequeuedCallback;
-		Exception exception;
-		T value;
+		private Consumer<T> dequeuedCallback;
+		private Exception exception;
+		private T value;
 
 		// Simulate empty struct constructor in C#
-		protected Item() {
+		Item() {
 			this(null, null, null);
 		}
 
-		protected Item(T value, Consumer<T> dequeuedCallback) {
+		Item(T value, Consumer<T> dequeuedCallback) {
 			this(value, null, dequeuedCallback);
 		}
 
-		protected Item(Exception exception, Consumer<T> dequeuedCallback) {
+		Item(Exception exception, Consumer<T> dequeuedCallback) {
 			this(null, exception, dequeuedCallback);
 		}
 
@@ -449,19 +462,19 @@ final class InputQueue<T extends Object> {
 			this.dequeuedCallback = dequeuedCallback;
 		}
 
-		protected Consumer<T> getDequeuedCallback() {
+		Consumer<T> getDequeuedCallback() {
 			return this.dequeuedCallback;
 		}
 
-		protected Exception getException() {
+		Exception getException() {
 			return this.exception;
 		}
 
-		protected T getValue() {
+		T getValue() {
 			return this.value;
 		}
 
-		protected T getValueWithException() {
+		T getValueWithException() {
 			if (this.exception != null) {
 				// TODO: trace
 //                throw RelayEventSource.Log.ThrowingException(this.exception, this, EventLevel.Informational);
@@ -472,30 +485,30 @@ final class InputQueue<T extends Object> {
 	}
 
 	class ItemQueue {
-		int head;
-		Item[] items;
-		int pendingCount;
-		int totalCount;
+		private int head;
+		private Item[] items;
+		private int pendingCount;
+		private int totalCount;
 
 		@SuppressWarnings("unchecked")
-		protected ItemQueue() {
+		ItemQueue() {
 			this.items = (Item[]) Array.newInstance(Item.class, 1);
 		}
 
 		// same as ItemCount
-		protected int getTotalCount() {
+		int getTotalCount() {
 			return this.totalCount;
 		}
 
-		protected boolean hasAnyItem() {
+		boolean hasAnyItem() {
 			return this.totalCount > 0;
 		}
 
-		protected boolean hasAvailableItem() {
+		boolean hasAvailableItem() {
 			return this.totalCount > this.pendingCount;
 		}
 
-		protected Item dequeueAnyItem() {
+		Item dequeueAnyItem() {
 			if (this.pendingCount == this.totalCount) {
 				this.pendingCount--;
 			}
@@ -503,7 +516,7 @@ final class InputQueue<T extends Object> {
 			return dequeueItemCore();
 		}
 
-		protected Item dequeueAvailableItem() {
+		Item dequeueAvailableItem() {
 			if (this.totalCount == this.pendingCount) {
 				throw new RuntimeException("ItemQueue does not contain any available items");
 			}
@@ -511,16 +524,16 @@ final class InputQueue<T extends Object> {
 			return dequeueItemCore();
 		}
 
-		protected void enqueueAvailableItem(Item item) {
+		void enqueueAvailableItem(Item item) {
 			enqueueItemCore(item);
 		}
 
-		protected void enqueuePendingItem(Item item) {
+		void enqueuePendingItem(Item item) {
 			enqueueItemCore(item);
 			this.pendingCount++;
 		}
 
-		protected void makePendingItemAvailable() {
+		void makePendingItemAvailable() {
 			// TODO: trace
 //            if (pendingCount == 0) {
 //                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any pending items"), this);
@@ -547,6 +560,7 @@ final class InputQueue<T extends Object> {
 
 			if (this.totalCount == this.items.length) {
 				Item[] newItems = (Item[]) Array.newInstance(Item.class, this.items.length * 2);
+				
 				for (int i = 0; i < this.totalCount; i++) {
 					newItems[i] = this.items[(head + i) % this.items.length];
 				}

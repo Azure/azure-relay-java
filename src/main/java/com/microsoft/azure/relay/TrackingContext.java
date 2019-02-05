@@ -38,7 +38,7 @@ public class TrackingContext {
 	}
 
 	static TrackingContext create(URI address) {
-		return create(UUID.randomUUID(), address.toString());
+		return create(UUID.randomUUID(), HybridConnectionUtil.getAudience(address));
 	}
 
 	static TrackingContext create(UUID activityId, String address) {
@@ -46,7 +46,7 @@ public class TrackingContext {
 	}
 
 	static TrackingContext create(String trackingId, URI address) {
-		return create(trackingId, address.toString());
+		return create(trackingId, HybridConnectionUtil.getAudience(address));
 	}
 
 	static TrackingContext create(String trackingId, String address) {

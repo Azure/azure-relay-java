@@ -2,7 +2,10 @@ package com.microsoft.azure.relay;
 
 import static org.junit.Assert.*;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.*;
 
@@ -98,6 +101,32 @@ public class InputQueueTest {
 			assertNull(num1.join());
 		} catch (Exception e) {
 			assertTrue("The exception supposed to be thrown from InputQueue.shutdown() did not work properly", e instanceof RuntimeException);
+		}
+	}
+	
+	@Test (expected = java.util.concurrent.TimeoutException.class)
+	public void timeoutDequeueTest() throws Throwable {
+		CompletableFuture<Integer> timeoutDequeueTask = queue.dequeueAsync(Duration.ofMillis(100));
+		Thread.sleep(150);
+		queue.enqueueAndDispatch(num1);
+		try {
+			timeoutDequeueTask.join();
+		}
+		catch (Exception e) {
+			throw e.getCause();
+		}
+	}
+	
+	@Test
+	public void ontimeDequeueTest() throws Throwable {
+		CompletableFuture<Integer> timeoutDequeueTask = queue.dequeueAsync(Duration.ofMillis(100));
+		Thread.sleep(50);
+		queue.enqueueAndDispatch(num1);
+		try {
+			assertEquals("Dequeue did not return the expected result in time.", timeoutDequeueTask.join(), num1);
+		}
+		catch (Exception e) {
+			fail("Dequeue threw exception when the operation is within time limit and it shouldn't have thrown.");
 		}
 	}
 }

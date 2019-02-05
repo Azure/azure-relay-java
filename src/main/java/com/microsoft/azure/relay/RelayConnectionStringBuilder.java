@@ -157,8 +157,7 @@ public class RelayConnectionStringBuilder {
 			tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(this.sharedAccessSignature);
 		} else if (!StringUtil.isNullOrEmpty(this.sharedAccessKeyName)
 				&& !StringUtil.isNullOrEmpty(this.sharedAccessKey)) {
-			tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(this.sharedAccessKeyName,
-					this.sharedAccessKey);
+			tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(this.sharedAccessKeyName, this.sharedAccessKey);
 		} else {
 			throw new IllegalArgumentException(
 					"need to supply sharedAccessSignature or both sharedAccessKeyName and sharedAccessKey");
@@ -236,20 +235,15 @@ public class RelayConnectionStringBuilder {
 							"The following string must be a valid absolute URI: " + endpoint);
 				}
 				this.endpoint = endpoint;
-			} 
-			else if (key.equalsIgnoreCase(ENTITY_PATH_CONFIG_NAME)) {
+			} else if (key.equalsIgnoreCase(ENTITY_PATH_CONFIG_NAME)) {
 				this.entityPath = value;
-			} 
-			else if (key.equalsIgnoreCase(SHARED_ACCESS_KEYNAME_CONFIG_NAME)) {
+			} else if (key.equalsIgnoreCase(SHARED_ACCESS_KEYNAME_CONFIG_NAME)) {
 				this.sharedAccessKeyName = value;
-			} 
-			else if (key.equalsIgnoreCase(SHARED_ACCESS_KEY_CONFIG_NAME)) {
+			} else if (key.equalsIgnoreCase(SHARED_ACCESS_KEY_CONFIG_NAME)) {
 				this.sharedAccessKey = value;
-			} 
-			else if (key.equalsIgnoreCase(SHARED_ACCESS_SIGNATURE_CONFIG_NAME)) {
+			} else if (key.equalsIgnoreCase(SHARED_ACCESS_SIGNATURE_CONFIG_NAME)) {
 				this.sharedAccessSignature = value;
-			} 
-			else if (key.equalsIgnoreCase(OPERATION_TIMEOUT_CONFIG_NAME)) {
+			} else if (key.equalsIgnoreCase(OPERATION_TIMEOUT_CONFIG_NAME)) {
 				// TODO: handle duration strings in the C# TimeSpan format
 				try {
 					Duration timeValue = Duration.parse(value);
@@ -258,8 +252,7 @@ public class RelayConnectionStringBuilder {
 					throw new DateTimeParseException(value + " cannot be parsed into a valid duration.",
 							e.getParsedString(), e.getErrorIndex());
 				}
-			} 
-			else {
+			} else {
 				throw new IllegalArgumentException("the following is not a valid field for connection string: " + key);
 			}
 		}

@@ -115,7 +115,10 @@ class ListenerCommand {
 		}
 
 		Map<String, String> getConnectHeaders() {
-			return (this.connectHeaders == null) ? new HashMap<String, String>() : this.connectHeaders;
+			if (this.connectHeaders == null) {
+				this.connectHeaders = new HashMap<String, String>();
+			}
+			return this.connectHeaders;
 		}
 
 		void setConnectHeaders(Map<String, String> connectHeaders) {
@@ -308,7 +311,10 @@ class ListenerCommand {
 			this.body = json.getBoolean("body");
 			Map<String, Object> headers = json.optJSONObject("responseHeaders").toMap();
 			this.responseHeaders = new HashMap<String, String>();
-			headers.forEach((k, v) -> this.responseHeaders.put(k, (String) v));
+			
+			if (headers != null) {
+				headers.forEach((k, v) -> this.responseHeaders.put(k, (String) v));
+			}
 		}
 
 		String toJsonString() {

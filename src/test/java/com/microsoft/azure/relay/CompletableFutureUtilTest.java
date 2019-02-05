@@ -10,6 +10,8 @@ import org.junit.Test;
 
 public class CompletableFutureUtilTest {
 	private static boolean testBool = false;
+	private static final int SHORT_MS = 20;
+	private static final int LONG_MS = 40;
 	
 	@After
 	public void resetBool() {
@@ -18,9 +20,9 @@ public class CompletableFutureUtilTest {
 	
 	@Test
 	public void timedRunAsyncCompletionTest() {
-		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(30), () -> {
+		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(LONG_MS), () -> {
 			try {
-				Thread.sleep(15);
+				Thread.sleep(SHORT_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
 		}).join();
@@ -28,10 +30,10 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test (expected = java.util.concurrent.CompletionException.class)
-	public void timedRunAsyncTimeoutTest() throws CompletionException {
-		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(15), () -> {
+	public void timedRunAsyncTimeoutTest() {
+		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(SHORT_MS), () -> {
 			try {
-				Thread.sleep(30);
+				Thread.sleep(LONG_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
 		}).join();
@@ -42,7 +44,7 @@ public class CompletableFutureUtilTest {
 	public void timedRunAsyncNullTimeoutTest() {
 		CompletableFutureUtil.timedRunAsync(null, () -> {
 			try {
-				Thread.sleep(15);
+				Thread.sleep(SHORT_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
 		}).join();
@@ -51,9 +53,9 @@ public class CompletableFutureUtilTest {
 	
 	@Test
 	public void timedSupplyAsyncCompletionTest() {
-		assertTrue(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(30), () -> {
+		assertTrue(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(LONG_MS), () -> {
 			try {
-				Thread.sleep(15);
+				Thread.sleep(SHORT_MS);
 			} catch (InterruptedException e) { }
 			return true;
 		}).join());
@@ -61,9 +63,9 @@ public class CompletableFutureUtilTest {
 	
 	@Test (expected = java.util.concurrent.CompletionException.class)
 	public void timedSupplyAsyncTimeoutTest() {
-		assertNotEquals(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(15), () -> {
+		assertNotEquals(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(SHORT_MS), () -> {
 			try {
-				Thread.sleep(30);
+				Thread.sleep(LONG_MS);
 			} catch (InterruptedException e) { }
 			return true;
 		}).join(), true);
@@ -73,7 +75,7 @@ public class CompletableFutureUtilTest {
 	public void timedSupplyAsyncNullTimeoutTest() {
 		assertTrue(CompletableFutureUtil.timedSupplyAsync(null, () -> {
 			try {
-				Thread.sleep(15);
+				Thread.sleep(SHORT_MS);
 			} catch (InterruptedException e) { }
 			return true;
 		}).join());
