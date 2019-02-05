@@ -51,7 +51,7 @@ public class RelayConnectionStringBuilder {
 	public RelayConnectionStringBuilder(String connectionString) {
 		this();
 		if (StringUtil.isNullOrEmpty(connectionString)) {
-			throw new IllegalArgumentException("connection cannot be null or empty");
+			throw new IllegalArgumentException("connectionString cannot be null or empty");
 		}
 
 		this.parseConnectionString(connectionString);
@@ -65,7 +65,7 @@ public class RelayConnectionStringBuilder {
 		if (value == null) {
 			throw new IllegalArgumentException("the supplied endpoint endpoint cannot be null");
 		} else if (!value.isAbsolute()) {
-			throw new IllegalArgumentException("the supplied endpoint must be n bsolute uri");
+			throw new IllegalArgumentException("the supplied endpoint must be an absolute uri");
 		}
 		this.endpoint = value;
 	}
@@ -74,10 +74,9 @@ public class RelayConnectionStringBuilder {
 		return operationTimeout;
 	}
 
-	public void setOperationTimeout(Duration value) {
-		if (value.isNegative())
-			throw new IllegalArgumentException("the timeout duration cannot be negative");
-		this.operationTimeout = value;
+	public void setOperationTimeout(Duration timeout) {
+		TimeoutHelper.throwIfNegativeArgument(timeout);
+		this.operationTimeout = timeout;
 	}
 
 	public String getEntityPath() {
@@ -158,8 +157,7 @@ public class RelayConnectionStringBuilder {
 			tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(this.sharedAccessSignature);
 		} else if (!StringUtil.isNullOrEmpty(this.sharedAccessKeyName)
 				&& !StringUtil.isNullOrEmpty(this.sharedAccessKey)) {
-			tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(this.sharedAccessKeyName,
-					this.sharedAccessKey);
+			tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(this.sharedAccessKeyName, this.sharedAccessKey);
 		} else {
 			throw new IllegalArgumentException(
 					"need to supply sharedAccessSignature or both sharedAccessKeyName and sharedAccessKey");
@@ -208,7 +206,7 @@ public class RelayConnectionStringBuilder {
 	 * @exception DateTimeParseException   Thrown if the connection string contains
 	 *                                     an invalid operation timeout.
 	 */
-	public void parseConnectionString(String connectionString) {
+	private void parseConnectionString(String connectionString) {
 		// First split into strings based on ';'
 		String[] keyValuePairs = connectionString.split(String.valueOf(KEY_VALUE_PAIR_DELIMITER));
 
@@ -224,7 +222,7 @@ public class RelayConnectionStringBuilder {
 			String key = keyAndValue[0];
 			String value = keyAndValue[1];
 
-			if (key.equals(ENDPOINT_CONFIG_NAME)) {
+			if (key.equalsIgnoreCase(ENDPOINT_CONFIG_NAME)) {
 				URI endpoint;
 				try {
 					endpoint = new URI(value);
@@ -246,7 +244,7 @@ public class RelayConnectionStringBuilder {
 			} else if (key.equalsIgnoreCase(SHARED_ACCESS_SIGNATURE_CONFIG_NAME)) {
 				this.sharedAccessSignature = value;
 			} else if (key.equalsIgnoreCase(OPERATION_TIMEOUT_CONFIG_NAME)) {
-
+				// TODO: handle duration strings in the C# TimeSpan format
 				try {
 					Duration timeValue = Duration.parse(value);
 					this.operationTimeout = timeValue;
@@ -258,27 +256,5 @@ public class RelayConnectionStringBuilder {
 				throw new IllegalArgumentException("the following is not a valid field for connection string: " + key);
 			}
 		}
-	}
-
-	/**
-	 * Get an URL as a string from the connection string, which can be used as the
-	 * HTTP endpoint for the Hybrid Connection.
-	 * 
-	 * @return A formatted URL as a string.
-	 */
-	public String getHttpUrlString() {
-		if (this.endpoint == null || this.entityPath == null) {
-			throw new IllegalArgumentException("The endpoint or entityPath of the URL is undefined.");
-		}
-
-		String urlString = this.endpoint.toString() + entityPath;
-		if (!urlString.startsWith("https://")) {
-			StringBuilder builder = new StringBuilder(urlString);
-			int schemeIndex = urlString.indexOf("://");
-
-			builder.replace(0, schemeIndex, "https");
-			return builder.toString();
-		}
-		return urlString;
 	}
 }

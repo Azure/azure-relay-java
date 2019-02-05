@@ -2,14 +2,10 @@ package com.microsoft.azure.relay;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-
 import org.json.JSONObject;
 
 class ListenerCommand {
@@ -18,8 +14,6 @@ class ListenerCommand {
 	private final static String REQUEST = "request";
 	private final static String RESPONSE = "response";
 	private final static String INJECT_FAULT = "injectFault";
-	protected final static Set<String> COMMANDS = new HashSet<String>(
-			Arrays.asList(ACCEPT, RENEW_TOKEN, REQUEST, RESPONSE, INJECT_FAULT));
 
 	private AcceptCommand accept;
 	private RenewTokenCommand renewToken;
@@ -27,47 +21,7 @@ class ListenerCommand {
 	private ResponseCommand response;
 	private InjectFaultCommand injectFault;
 
-	protected AcceptCommand getAccept() {
-		return accept;
-	}
-
-	protected void setAccept(AcceptCommand accept) {
-		this.accept = accept;
-	}
-
-	protected RenewTokenCommand getRenewToken() {
-		return renewToken;
-	}
-
-	protected void setRenewToken(RenewTokenCommand renewToken) {
-		this.renewToken = renewToken;
-	}
-
-	protected RequestCommand getRequest() {
-		return request;
-	}
-
-	protected void setRequest(RequestCommand request) {
-		this.request = request;
-	}
-
-	protected ResponseCommand getResponse() {
-		return response;
-	}
-
-	protected void setResponse(ResponseCommand response) {
-		this.response = response;
-	}
-
-	protected InjectFaultCommand getInjectFault() {
-		return injectFault;
-	}
-
-	protected void setInjectFault(InjectFaultCommand injectFault) {
-		this.injectFault = injectFault;
-	}
-
-	protected ListenerCommand(JSONObject json) {
+	ListenerCommand(JSONObject json) {
 		if (json == null || json.isEmpty()) {
 			return;
 		}
@@ -97,46 +51,92 @@ class ListenerCommand {
 			}
 		}
 	}
+	
+	AcceptCommand getAccept() {
+		return accept;
+	}
 
-	protected class AcceptCommand {
+	RenewTokenCommand getRenewToken() {
+		return renewToken;
+	}
+
+	RequestCommand getRequest() {
+		return request;
+	}
+
+	ResponseCommand getResponse() {
+		return response;
+	}
+
+	InjectFaultCommand getInjectFault() {
+		return injectFault;
+	}
+
+	void setAccept(AcceptCommand accept) {
+		this.accept = accept;
+	}
+
+	void setRenewToken(RenewTokenCommand renewToken) {
+		this.renewToken = renewToken;
+	}
+
+	void setRequest(RequestCommand request) {
+		this.request = request;
+	}
+
+	void setResponse(ResponseCommand response) {
+		this.response = response;
+	}
+
+	void setInjectFault(InjectFaultCommand injectFault) {
+		this.injectFault = injectFault;
+	}
+	
+	class AcceptCommand {
 		private String address;
 		private String id;
 		private Map<String, String> connectHeaders;
 		private Endpoint remoteEndpoint;
 
-		protected String getAddress() {
+		String getAddress() {
 			return address;
 		}
 
-		protected void setAddress(String address) {
+		void setAddress(String address) {
 			this.address = address;
 		}
 
-		protected String getId() {
+		String getId() {
 			return id;
 		}
 
-		protected void setId(String id) {
+		void setId(String id) {
 			this.id = id;
 		}
 
-		protected Map<String, String> getConnectHeaders() {
-			return (this.connectHeaders == null) ? new HashMap<String, String>() : this.connectHeaders;
+		Map<String, String> getConnectHeaders() {
+			if (this.connectHeaders == null) {
+				this.connectHeaders = new HashMap<String, String>();
+			}
+			return this.connectHeaders;
 		}
 
-		protected void setConnectHeaders(Map<String, String> connectHeaders) {
+		void setConnectHeaders(Map<String, String> connectHeaders) {
 			this.connectHeaders = connectHeaders;
 		}
 
-		protected Endpoint getRemoteEndpoint() {
-			return (this.remoteEndpoint == null) ? new Endpoint() : this.remoteEndpoint;
+		Endpoint getRemoteEndpoint() {
+			if (this.remoteEndpoint == null) {
+				this.remoteEndpoint = new Endpoint();
+			}
+			return this.remoteEndpoint;
 		}
 
-		protected void setRemoteEndpoint(Endpoint remoteEndpoint) {
+		void setRemoteEndpoint(Endpoint remoteEndpoint) {
 			this.remoteEndpoint = remoteEndpoint;
 		}
 
-		protected AcceptCommand(JSONObject json) {
+		AcceptCommand(JSONObject json) {
 			this.address = json.optString("address");
 			this.id = json.optString("id");
 			this.remoteEndpoint = new Endpoint(json.getJSONObject("remoteEndpoint"));
@@ -146,7 +146,7 @@ class ListenerCommand {
 		}
 	}
 
-	protected class RequestCommand {
+	class RequestCommand {
 		private String address;
 		private String id;
 		private String requestTarget;
@@ -155,63 +155,69 @@ class ListenerCommand {
 		private Map<String, String> requestHeaders;
 		private Boolean body;
 
-		protected String getAddress() {
+		String getAddress() {
 			return address;
 		}
 
-		protected void setAddress(String address) {
+		void setAddress(String address) {
 			this.address = address;
 		}
 
-		protected String getId() {
+		String getId() {
 			return id;
 		}
 
-		protected void setId(String id) {
+		void setId(String id) {
 			this.id = id;
 		}
 
-		protected String getRequestTarget() {
+		String getRequestTarget() {
 			return requestTarget;
 		}
 
-		protected void setRequestTarget(String requestTarget) {
+		void setRequestTarget(String requestTarget) {
 			this.requestTarget = requestTarget;
 		}
 
-		protected String getMethod() {
+		String getMethod() {
 			return method;
 		}
 
-		protected void setMethod(String method) {
+		void setMethod(String method) {
 			this.method = method;
 		}
 
-		protected Endpoint getRemoteEndpoint() {
-			return (this.remoteEndpoint == null) ? new Endpoint() : remoteEndpoint;
+		Endpoint getRemoteEndpoint() {
+			if (this.remoteEndpoint == null) {
+				this.remoteEndpoint = new Endpoint();
+			}
+			return this.remoteEndpoint;
 		}
 
-		protected void setRemoteEndpoint(Endpoint remoteEndpoint) {
+		void setRemoteEndpoint(Endpoint remoteEndpoint) {
 			this.remoteEndpoint = remoteEndpoint;
 		}
 
-		protected Map<String, String> getRequestHeaders() {
-			return (this.requestHeaders == null) ? new HashMap<String, String>() : this.requestHeaders;
+		Map<String, String> getRequestHeaders() {
+			if (this.requestHeaders == null) {
+				this.requestHeaders = new HashMap<String, String>();
+			}
+			return this.requestHeaders;
 		}
 
-		protected void setRequestHeaders(Map<String, String> requestHeaders) {
+		void setRequestHeaders(Map<String, String> requestHeaders) {
 			this.requestHeaders = requestHeaders;
 		}
 
-		protected Boolean hasBody() {
+		Boolean hasBody() {
 			return body;
 		}
 
-		protected void setBody(Boolean body) {
+		void setBody(Boolean body) {
 			this.body = body;
 		}
 
-		protected RequestCommand(JSONObject json) {
+		RequestCommand(JSONObject json) {
 			this.address = json.optString("address");
 			this.id = json.optString("id");
 			this.requestTarget = json.optString("requestTarget");
@@ -227,100 +233,99 @@ class ListenerCommand {
 		}
 	}
 
-	protected class RenewTokenCommand {
+	class RenewTokenCommand {
 		private String token;
 
-		protected String getToken() {
+		String getToken() {
 			return token;
 		}
 
-		protected void setToken(String token) {
+		void setToken(String token) {
 			this.token = token;
 		}
 
-		protected RenewTokenCommand(JSONObject json) {
+		RenewTokenCommand(JSONObject json) {
 			if (json != null) {
 				this.token = json.optString("token");
 			}
 		}
 	}
 
-	protected class ResponseCommand {
+	class ResponseCommand {
 		private String requestId;
 		private int statusCode;
 		private String statusDescription;
 		private Map<String, String> responseHeaders;
-		private Boolean body;
+		private boolean body;
 
-		protected String getRequestId() {
+		String getRequestId() {
 			return requestId;
 		}
 
-		protected void setRequestId(String requestId) {
+		void setRequestId(String requestId) {
 			this.requestId = requestId;
 		}
 
-		protected int getStatusCode() {
+		int getStatusCode() {
 			return statusCode;
 		}
 
-		protected void setStatusCode(int statusCode) {
+		void setStatusCode(int statusCode) {
 			this.statusCode = statusCode;
 		}
 
-		protected String getStatusDescription() {
+		String getStatusDescription() {
 			return statusDescription;
 		}
 
-		protected void setStatusDescription(String statusDescription) {
+		void setStatusDescription(String statusDescription) {
 			this.statusDescription = statusDescription;
 		}
 
-		protected Map<String, String> getResponseHeaders() {
-			return (this.responseHeaders == null) ? new HashMap<String, String>() : responseHeaders;
+		Map<String, String> getResponseHeaders() {
+			if (this.responseHeaders == null) {
+				this.responseHeaders = new HashMap<String, String>();
+			}
+			return this.responseHeaders;
 		}
 
-		protected void setResponseHeaders(Map<String, String> responseHeaders) {
+		void setResponseHeaders(Map<String, String> responseHeaders) {
 			this.responseHeaders = responseHeaders;
 		}
 
-		protected Boolean hasBody() {
+		boolean hasBody() {
 			return body;
 		}
 
-		protected void setBody(Boolean body) {
+		void setBody(boolean body) {
 			this.body = body;
 		}
 
-		protected ResponseCommand() {
+		ResponseCommand() {
 		}
 
-		protected ResponseCommand(JSONObject json) {
-			this.requestId = json.optString("id");
-			this.statusCode = json.optInt("statusCode");
+		ResponseCommand(JSONObject json) {
+			this.requestId = json.getString("id");
+			this.statusCode = json.getInt("statusCode");
 			this.statusDescription = json.optString("statusDescription");
-			this.body = json.optBoolean("body");
-			Map<String, Object> headers = json.getJSONObject("responseHeaders").toMap();
+			this.body = json.getBoolean("body");
+			Map<String, Object> headers = json.optJSONObject("responseHeaders").toMap();
 			this.responseHeaders = new HashMap<String, String>();
-			headers.forEach((k, v) -> this.responseHeaders.put(k, (String) v));
+			
+			if (headers != null) {
+				headers.forEach((k, v) -> this.responseHeaders.put(k, (String) v));
+			}
 		}
 
-		protected String toJsonString() {
-			StringBuilder builder = new StringBuilder("{\"response\":{");
+		String toJsonString() {
+			StringBuilder builder = new StringBuilder("{\"" + HybridConnectionConstants.Actions.RESPONSE + "\":{");
 			List<String> fields = new ArrayList<String>();
 
 			if (this.requestId != null) {
 				fields.add("\"requestId\":\"" + this.requestId + "\"");
 			}
-
-			if (this.body == null) {
-				fields.add("\"body\":\"null\"");
-			} else if (this.body == true) {
-				fields.add("\"body\":\"true\"");
-			} else if (this.body == false) {
-				fields.add("\"body\":\"false\"");
-			}
-
+			
+			fields.add("\"body\":" + ((this.body) ? "true" : "false"));
 			fields.add("\"statusCode\":" + this.statusCode);
 
 			if (this.statusDescription != null) {
@@ -332,42 +337,42 @@ class ListenerCommand {
 		}
 	}
 
-	protected class InjectFaultCommand {
+	class InjectFaultCommand {
 		private Duration delay;
 
-		protected Duration getDelay() {
+		Duration getDelay() {
 			return delay;
 		}
 
-		protected void setDelay(Duration delay) {
+		void setDelay(Duration delay) {
 			this.delay = delay;
 		}
 	}
 
-	protected class Endpoint {
+	class Endpoint {
 		private String address;
 		private int port;
 
-		protected String getAddress() {
+		String getAddress() {
 			return address;
 		}
 
-		protected void setAddress(String address) {
+		void setAddress(String address) {
 			this.address = address;
 		}
 
-		protected int getPort() {
+		int getPort() {
 			return port;
 		}
 
-		protected void setPort(int port) {
+		void setPort(int port) {
 			this.port = port;
 		}
 
-		protected Endpoint() {
+		Endpoint() {
 		}
 
-		protected Endpoint(JSONObject json) {
+		Endpoint(JSONObject json) {
 			this.port = json.optInt("port");
 			this.address = json.optString("address");
 		}

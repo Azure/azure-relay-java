@@ -271,7 +271,7 @@ public class ClientWebSocket {
 		this.closeReason = reason;
 		this.messageQueue.shutdown();
 		this.closeTask.complete(null);
-		CompletableFutureUtil.cleanup();
+
 		try {
 			((LifeCycle) this.container).stop();
 		} catch (Exception e) {

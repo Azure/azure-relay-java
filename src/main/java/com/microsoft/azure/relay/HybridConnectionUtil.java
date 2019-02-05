@@ -7,11 +7,12 @@ import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
 
-public final class HybridConnectionUtil {
+final class HybridConnectionUtil {
 
-	// Equivalent of URI.GetComponents(UriComponents.SchemeAndServer |
-	// UriComponents.Path, UriFormat.UriEscaped)
-	protected static String getAudience(URI uri) {
+	/**
+	 * Removing the query portion of the URI to hide potential senstive information in it
+	 */
+	static String getAudience(URI uri) {
 		StringBuilder audience = new StringBuilder();
 		String scheme = uri.getScheme();
 		String host = uri.getHost();
@@ -31,10 +32,10 @@ public final class HybridConnectionUtil {
 		if (StringUtil.isNullOrEmpty(path)) {
 			audience.append("/").append(path);
 		}
-
+		
 		return audience.toString();
 	}
-
+	
 	/**
 	 * Build the websocket uri for use with HybridConnection WebSockets. Results in
 	 * a Uri such as
@@ -49,8 +50,7 @@ public final class HybridConnectionUtil {
 	 * @return A Uri to be used for HybridConnection WebSockets.
 	 * @throws URISyntaxException
 	 */
-	public static URI BuildUri(String host, int port, String path, String query, String action, String id)
-			throws URISyntaxException {
+	static URI buildUri(String host, int port, String path, String query, String action, String id) throws URISyntaxException {
 		if (path.charAt(0) != '/') {
 			path = "/" + path;
 		}
@@ -70,7 +70,7 @@ public final class HybridConnectionUtil {
 	 * @param id                  The tracking id.
 	 * @return A new query string with added action and id
 	 */
-	public static String buildQueryString(String existingQueryString, String action, String id) {
+	static String buildQueryString(String existingQueryString, String action, String id) {
 		StringBuilder buffer = new StringBuilder();
 
 		if (!StringUtil.isNullOrEmpty(existingQueryString)) {
@@ -94,8 +94,9 @@ public final class HybridConnectionUtil {
 	 * 
 	 * @param queryString The query string to be filtered.
 	 * @return Filtered query string without leading '=' and 'sb-hc-' prefix
+	 * @throws UnsupportedEncodingException 
 	 */
-	public static String filterQueryString(String queryString) {
+	static String filterQueryString(String queryString) throws UnsupportedEncodingException {
 
 		if (StringUtil.isNullOrEmpty(queryString)) {
 			return "";
@@ -115,11 +116,9 @@ public final class HybridConnectionUtil {
 			if (sb.length() > 0) {
 				sb.append('&');
 			}
-			try {
-				sb.append(URLEncoder.encode(key, StringUtil.UTF8.name())).append("=")
-						.append(URLEncoder.encode(queryStringCollection.get(key), StringUtil.UTF8.name()));
-			} catch (UnsupportedEncodingException e) {
-			}
+			sb.append(URLEncoder.encode(key, StringUtil.UTF8.name()))
+			.append("=")
+			.append(URLEncoder.encode(queryStringCollection.get(key), StringUtil.UTF8.name()));
 		}
 
 		return sb.toString();
@@ -131,7 +130,7 @@ public final class HybridConnectionUtil {
 	 * @param query The query to be parsed.
 	 * @return A map containing the parsed key value pairs.
 	 */
-	public static Map<String, String> parseQueryString(String query) {
+	static Map<String, String> parseQueryString(String query) {
 		Map<String, String> map = new HashMap<String, String>();
 
 		if (StringUtil.isNullOrEmpty(query)) {

@@ -1,8 +1,8 @@
 package com.microsoft.azure.relay;
 
 @SuppressWarnings("serial")
-class RelayException extends Exception {
-
+public class RelayException extends Exception {
+	private final static String DEFAULT_ERROR_MESSAGE = "Azure Relay has run into an invalid state.";
 	private boolean isTransient;
 
 	/**
@@ -15,15 +15,15 @@ class RelayException extends Exception {
 		return isTransient;
 	}
 
-	public void setTransient(boolean isTransient) {
+	protected void setTransient(boolean isTransient) {
 		this.isTransient = isTransient;
 	}
 
 	/**
 	 * Creates a new instance of the RelayException class.
 	 */
-	public RelayException() {
-		this.isTransient = true;
+	RelayException() {
+		this(DEFAULT_ERROR_MESSAGE);
 	}
 
 	/**
@@ -32,7 +32,7 @@ class RelayException extends Exception {
 	 * 
 	 * @param message The message that describes the error.
 	 */
-	public RelayException(String message) {
+	RelayException(String message) {
 		super(message);
 		this.isTransient = true;
 	}

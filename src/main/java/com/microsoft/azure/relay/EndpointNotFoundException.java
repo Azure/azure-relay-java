@@ -1,8 +1,9 @@
 package com.microsoft.azure.relay;
 
 //Represents an exception when the Relay HybridConnection/Endpoint should exist but was not present.
-@SuppressWarnings("serial")
 public class EndpointNotFoundException extends RelayException {
+
+	private static final long serialVersionUID = 63770492444384139L;
 
 	/**
 	 * Creates a new instance of the EndpointNotFoundException class.

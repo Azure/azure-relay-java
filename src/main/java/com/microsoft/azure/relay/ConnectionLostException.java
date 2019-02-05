@@ -1,8 +1,10 @@
 package com.microsoft.azure.relay;
 
-@SuppressWarnings("serial")
+
 //An exception that occurs when a Listener gets disconnected from the Azure cloud service.
 public class ConnectionLostException extends RelayException {
+
+	private static final long serialVersionUID = -5654006432009140373L;
 
 	/**
 	 * Creates a new instance of the ConnectionLostException class.
@@ -32,5 +34,4 @@ public class ConnectionLostException extends RelayException {
 	public ConnectionLostException(String message, Exception innerException) {
 		super(message, innerException);
 	}
-
 }

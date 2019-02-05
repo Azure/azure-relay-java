@@ -443,40 +443,36 @@ public class HybridConnectionListener {
 		ListenerCommand listenerCommand = new ListenerCommand(jsonObj);
 
 		if (listenerCommand.getAccept() != null) {
-			try {
-				this.onAcceptCommandAsync(listenerCommand.getAccept());
-			} catch (URISyntaxException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		} else if (listenerCommand.getRequest() != null) {
+			this.onAcceptCommandAsync(listenerCommand.getAccept());
+		} 
+		else if (listenerCommand.getRequest() != null) {
 			HybridHttpConnection httpConnection = new HybridHttpConnection();
 			httpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
 		}
 	}
 
-	private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand)
-			throws URISyntaxException {
-		URI rendezvousUri = new URI(acceptCommand.getAddress());
-		URI requestUri = this.generateAcceptRequestUri(rendezvousUri);
-
-		RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(this, requestUri,
-				acceptCommand.getId(), "GET", acceptCommand.getConnectHeaders());
-		listenerContext.getRequest().setRemoteAddress(acceptCommand.getRemoteEndpoint());
-
-		Function<RelayedHttpListenerContext, Boolean> acceptHandler = this.acceptHandler;
-		// TODO: setting shouldAccept as class variable or else it must be final in the
-		// block below, which is not the case
-		this.shouldAccept = acceptHandler == null;
-
-		// TODO: trace
-//      RelayEventSource.Log.RelayListenerRendezvousStart(listenerContext.Listener, listenerContext.TrackingContext.TrackingId, acceptCommand.Address);
+	private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand) {
 		try {
+			URI rendezvousUri = new URI(acceptCommand.getAddress());
+			URI requestUri = this.generateAcceptRequestUri(rendezvousUri);
+	
+			RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(this, requestUri,
+					acceptCommand.getId(), "GET", acceptCommand.getConnectHeaders());
+			listenerContext.getRequest().setRemoteAddress(acceptCommand.getRemoteEndpoint());
+	
+			Function<RelayedHttpListenerContext, Boolean> acceptHandler = this.acceptHandler;
+			// TODO: setting shouldAccept as class variable or else it must be final in the
+			// block below, which is not the case
+			this.shouldAccept = acceptHandler == null;
+	
+			// TODO: trace
+	//      RelayEventSource.Log.RelayListenerRendezvousStart(listenerContext.Listener, listenerContext.TrackingContext.TrackingId, acceptCommand.Address);
 			if (acceptHandler != null) {
 				// Invoke and await the user's AcceptHandler method
 				try {
 					this.shouldAccept = acceptHandler.apply(listenerContext);
-				} catch (Exception userException) {
+				} 
+				catch (Exception userException) {
 					// TODO: trace
 //                    	when (!Fx.IsFatal(userException)) {
 //                        String description = SR.GetString(SR.AcceptHandlerException, listenerContext.TrackingContext.TrackingId);
@@ -489,12 +485,13 @@ public class HybridConnectionListener {
 
 			// Don't block the pump waiting for the rendezvous
 			return this.completeAcceptAsync(listenerContext, rendezvousUri);
-		} catch (Exception exception) {
+		} 
+		catch (Exception exception) {
 			// TODO: trace
 //	        	when (!Fx.IsFatal(exception)) {
 //	            RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, exception);
 //	            RelayEventSource.Log.RelayListenerRendezvousStop();
-			throw new RuntimeIOException("could not connect to rendezvous.");
+			return CompletableFutureUtil.fromException(exception);
 		}
 	}
 
@@ -503,7 +500,7 @@ public class HybridConnectionListener {
 	// and the path from the acceptCommand (minus "/$hc")
 	// e.g. sb://contoso.servicebus.windows.net/hybrid1?foo=bar
 	// </summary>
-	private URI generateAcceptRequestUri(URI rendezvousUri) throws URISyntaxException {
+	private URI generateAcceptRequestUri(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException {
 		String query = HybridConnectionUtil.filterQueryString(rendezvousUri.getQuery());
 		String path = rendezvousUri.getPath();
 		path = (path.startsWith("$hc/")) ? path.substring(4) : path;
@@ -797,7 +794,7 @@ public class HybridConnectionListener {
 			// "wss://contoso.servicebus.windows.net:443/$hc/endpoint1?sb-hc-action=listen&sb-hc-id=E2E_TRACKING_ID"
 			URI websocketUri;
 			try {
-				websocketUri = HybridConnectionUtil.BuildUri(this.address.getHost(), this.address.getPort(),
+				websocketUri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
 						this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.LISTEN,
 						trackingId);
 			} catch (URISyntaxException e) {

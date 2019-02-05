@@ -103,7 +103,12 @@ HybridConnectionListener listener = new HybridConnectionListener("sb://namespace
 listener.openAsync(Duration.ofSeconds(60)).join(); 
 
 listener.setRequestHandler((context) -> {
-	// Handle HTTP requests in this handler	
+	// Handle HTTP requests in this handler
+
+	RelayedHttpListenerResponse response = context.getResponse();
+	response.setStatusCode(202);
+	response.setStatusDescription("OK");
+	resonse.close();
 });
 
 do 

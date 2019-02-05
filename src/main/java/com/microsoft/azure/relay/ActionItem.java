@@ -6,6 +6,6 @@ import java.util.function.Consumer;
 class ActionItem {
 
 	protected static void schedule(Consumer<Object> action, Object params) {
-		CompletableFuture.supplyAsync(() -> params).thenAccept(s -> action.accept(s));
+		CompletableFuture.runAsync(() -> action.accept(params));
 	}
 }

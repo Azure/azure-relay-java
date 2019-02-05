@@ -2,9 +2,16 @@ package com.microsoft.azure.relay;
 
 import static org.junit.Assert.*;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.*;
+
+import com.microsoft.azure.relay.AsyncLock.LockRelease;
 
 public class InputQueueTest {
 	private static InputQueue<Integer> queue;
@@ -98,6 +105,40 @@ public class InputQueueTest {
 			assertNull(num1.join());
 		} catch (Exception e) {
 			assertTrue("The exception supposed to be thrown from InputQueue.shutdown() did not work properly", e instanceof RuntimeException);
+		}
+	}
+	
+	@Test
+	public void timeoutDequeueTest() throws Throwable {
+		queue.enqueueAndDispatch(num1);
+		CompletableFuture<Integer> future1 = queue.dequeueAsync();
+		CompletableFuture<Integer> future2 = queue.dequeueAsync(Duration.ofMillis(10));
+		CompletableFuture<Integer> future3 = queue.dequeueAsync();
+		assertTrue("future1 should be done without waiting", future1.isDone());
+		assertFalse("future2 should not be done", future2.isDone());
+		assertFalse("future3 should not be done", future3.isDone());
+
+		try {
+			Thread.sleep(20);
+			queue.enqueueAndDispatch(num1);
+			future2.get();
+			fail("future2.get() should have thrown.");
+		} catch (ExecutionException e) {
+			assertEquals("Cause should be TimeoutException", e.getCause().getClass(), TimeoutException.class);
+		}
+		assertEquals("future3 should be completed with the value of num", num1, future3.get());
+	}
+	
+	@Test
+	public void ontimeDequeueTest() throws Throwable {
+		CompletableFuture<Integer> timeoutDequeueTask = queue.dequeueAsync(Duration.ofMillis(100));
+		Thread.sleep(50);
+		queue.enqueueAndDispatch(num1);
+		try {
+			assertEquals("Dequeue did not return the expected result in time.", timeoutDequeueTask.join(), num1);
+		}
+		catch (Exception e) {
+			fail("Dequeue threw exception when the operation is within time limit and it shouldn't have thrown.");
 		}
 	}
 }

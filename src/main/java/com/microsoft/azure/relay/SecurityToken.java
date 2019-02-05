@@ -7,17 +7,16 @@ import java.util.HashMap;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.Instant;
 
 public class SecurityToken {
 	private final String token;
-	private LocalDateTime expiresAtUtc;
-	private String audience;
 	private final String audienceFieldName;
 	private final String expiresOnFieldName;
 	private final String keyValueSeparator;
 	private final String pairSeparator;
+	private Instant expiresAtUtc;
+	private String audience;
 
 	/**
 	 * @return Returns the token string from this token
@@ -29,7 +28,7 @@ public class SecurityToken {
 	/**
 	 * @return Returns the expiry time for this token
 	 */
-	public LocalDateTime getExpiresAtUtc() {
+	public Instant getExpiresAtUtc() {
 		return expiresAtUtc;
 	}
 
@@ -73,29 +72,33 @@ public class SecurityToken {
 				StandardCharsets.UTF_8.name(), this.keyValueSeparator, this.pairSeparator);
 		String expiresOn = decodedToken.get(this.expiresOnFieldName);
 		if (expiresOn == null) {
-			throw new IllegalArgumentException("tokenstring missing expireOn field");
+			throw new IllegalArgumentException("tokenString missing expiresOn field");
 		}
 
 		if ((this.audience = decodedToken.get(this.audienceFieldName)) == null) {
 			throw new IllegalArgumentException("tokenstring missing audience field");
 		}
 
-		this.expiresAtUtc = LocalDateTime.ofEpochSecond(Long.parseLong(expiresOn), 0, ZoneOffset.UTC);
+		this.expiresAtUtc = Instant.ofEpochSecond(Long.parseLong(expiresOn));
 	}
 
 	static HashMap<String, String> getDecodedTokenMap(String tokenString, String keyEncodingScheme,
 			String valueEncodingScheme, String keyValueSeparator, String pairSeparator) {
+		
 		HashMap<String, String> map = new HashMap<String, String>();
 		String[] valueEncodedPairs = tokenString.split(pairSeparator);
+		
 		for (String valueEncodedPair : valueEncodedPairs) {
+			
 			String[] pair = valueEncodedPair.split(keyValueSeparator);
 			if (pair.length != 2) {
-				throw new IllegalArgumentException("invalid encoding of tokenstring.");
+				throw new IllegalArgumentException("invalid encoding of tokenString.");
 			}
 
 			try {
 				map.put(URLDecoder.decode(pair[0], keyEncodingScheme), URLDecoder.decode(pair[1], valueEncodingScheme));
-			} catch (UnsupportedEncodingException e) {
+			} 
+			catch (UnsupportedEncodingException e) {
 				throw new RuntimeException(keyEncodingScheme
 						+ ((keyEncodingScheme.equals(valueEncodingScheme)) ? "" : " or " + valueEncodingScheme)
 						+ " decoding is not supported in the java runtime.");

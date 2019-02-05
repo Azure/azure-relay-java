@@ -207,7 +207,7 @@ public class HybridConnectionClient {
 
 			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
 			try {
-				URI uri = HybridConnectionUtil.BuildUri(this.address.getHost(), this.address.getPort(),
+				URI uri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
 						this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
 						trackingContext.getTrackingId());
 				ClientWebSocket webSocket = new ClientWebSocket();

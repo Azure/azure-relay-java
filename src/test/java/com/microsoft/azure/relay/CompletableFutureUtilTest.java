@@ -10,6 +10,8 @@ import org.junit.Test;
 
 public class CompletableFutureUtilTest {
 	private static boolean testBool = false;
+	private static final int SHORT_MS = 20;
+	private static final int LONG_MS = 40;
 	
 	@After
 	public void resetBool() {
@@ -17,10 +19,10 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedRunAsyncCompletionTest() throws CompletionException {
-		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(4), () -> {
+	public void timedRunAsyncCompletionTest() {
+		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(LONG_MS), () -> {
 			try {
-				Thread.sleep(2);
+				Thread.sleep(SHORT_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
 		}).join();
@@ -28,10 +30,10 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test (expected = java.util.concurrent.CompletionException.class)
-	public void timedRunAsyncTimeoutTest() throws CompletionException {
-		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(4), () -> {
+	public void timedRunAsyncTimeoutTest() {
+		CompletableFutureUtil.timedRunAsync(Duration.ofMillis(SHORT_MS), () -> {
 			try {
-				Thread.sleep(8);
+				Thread.sleep(LONG_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
 		}).join();
@@ -39,10 +41,10 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedRunAsyncNullTimeoutTest() throws CompletionException {
+	public void timedRunAsyncNullTimeoutTest() {
 		CompletableFutureUtil.timedRunAsync(null, () -> {
 			try {
-				Thread.sleep(2);
+				Thread.sleep(SHORT_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
 		}).join();
@@ -50,38 +52,32 @@ public class CompletableFutureUtilTest {
 	}
 	
 	@Test
-	public void timedSupplyAsyncCompletionTest() throws CompletionException {
-		CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(4), () -> {
+	public void timedSupplyAsyncCompletionTest() {
+		assertTrue(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(LONG_MS), () -> {
 			try {
-				Thread.sleep(2);
-				testBool = true;
+				Thread.sleep(SHORT_MS);
 			} catch (InterruptedException e) { }
-			return null;
-		}).join();
-		assertTrue(testBool);
+			return true;
+		}).join());
 	}
 	
 	@Test (expected = java.util.concurrent.CompletionException.class)
-	public void timedSupplyAsyncTimeoutTest() throws CompletionException {
-		CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(4), () -> {
+	public void timedSupplyAsyncTimeoutTest() {
+		assertNotEquals(CompletableFutureUtil.timedSupplyAsync(Duration.ofMillis(SHORT_MS), () -> {
 			try {
-				Thread.sleep(8);
-				testBool = true;
+				Thread.sleep(LONG_MS);
 			} catch (InterruptedException e) { }
-			return null;
-		}).join();
-		assertFalse(testBool);
+			return true;
+		}).join(), true);
 	}
 	
 	@Test
-	public void timedSupplyAsyncNullTimeoutTest() throws CompletionException {
-		CompletableFutureUtil.timedSupplyAsync(null, () -> {
+	public void timedSupplyAsyncNullTimeoutTest() {
+		assertTrue(CompletableFutureUtil.timedSupplyAsync(null, () -> {
 			try {
-				Thread.sleep(6);
-				testBool = true;
+				Thread.sleep(SHORT_MS);
 			} catch (InterruptedException e) { }
-			return null;
-		}).join();
-		assertTrue(testBool);
+			return true;
+		}).join());
 	}
 }
