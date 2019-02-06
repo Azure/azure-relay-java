@@ -13,13 +13,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
-	static final AutoShutdownScheduledExecutor EXECUTOR = new AutoShutdownScheduledExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));
+	public static final AutoShutdownScheduledExecutor EXECUTOR = new AutoShutdownScheduledExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));
 	private final Object thisLock = new Object();
-	private static int corePoolSize;
-	private static int refCount = 0;
-	private static ScheduledThreadPoolExecutor innerExecutor;
+	private final int corePoolSize;
+	private int refCount = 0;
+	private ScheduledThreadPoolExecutor innerExecutor;
 
-	AutoShutdownScheduledExecutor(int size) {
+	private AutoShutdownScheduledExecutor(int size) {
 		corePoolSize = size;
 	}
 
