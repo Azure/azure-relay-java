@@ -84,9 +84,8 @@ final class InputQueue<T> {
 
 		if (timeout != null) {
 			Future<?> cancelTask = AutoShutdownScheduledExecutor.EXECUTOR.schedule(() -> {
-				synchronized (this.thisLock) {
+				if (this.removeReader(reader)) {
 					reader.completeExceptionally(new TimeoutException("This InputQueue item could not complete in time."));
-					readerQueue.remove(reader);
 				}
 			}, timeout.toMillis(), TimeUnit.MILLISECONDS);
 
@@ -351,18 +350,7 @@ final class InputQueue<T> {
 	boolean removeReader(CompletableFuture<T> reader) {
 		synchronized (thisLock) {
 			if (queueState == QueueState.OPEN || queueState == QueueState.SHUTDOWN) {
-				boolean removed = false;
-
-				for (int i = readerQueue.size(); i > 0; i--) {
-					CompletableFuture<T> temp = readerQueue.remove();
-
-					if (temp == reader) {
-						removed = true;
-					} else {
-						readerQueue.add(temp);
-					}
-				}
-				return removed;
+				return readerQueue.remove(reader);
 			}
 		}
 		return false;
