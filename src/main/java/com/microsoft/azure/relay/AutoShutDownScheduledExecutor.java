@@ -194,17 +194,14 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 	}
 
 	private <T> ScheduledFuture<T> wrapFuture(ScheduledFuture<T> schedule) {
-		return new CancellableScheduledFuture<T>(this, schedule);
+		return new CancellableScheduledFuture<T>(schedule);
 	}
 
 	private class CancellableScheduledFuture<T> implements ScheduledFuture<T> {
 
-		private final AutoShutdownScheduledExecutor executor;
 		private final ScheduledFuture<T> innerFuture;
 
-		public CancellableScheduledFuture(AutoShutdownScheduledExecutor executor,
-				ScheduledFuture<T> innerFuture) {
-			this.executor = executor;
+		public CancellableScheduledFuture(ScheduledFuture<T> innerFuture) {
 			this.innerFuture = innerFuture;
 		}
 
@@ -222,7 +219,7 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 		public boolean cancel(boolean mayInterruptIfRunning) {
 			boolean cancelResult = this.innerFuture.cancel(mayInterruptIfRunning);
 			if (cancelResult) {
-				this.executor.decrementRefCount();
+				AutoShutdownScheduledExecutor.this.decrementRefCount();
 			}
 
 			return cancelResult;
