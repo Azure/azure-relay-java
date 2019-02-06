@@ -9,36 +9,27 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.After;
 import org.junit.Test;
 
 import com.microsoft.azure.relay.AsyncLock.LockRelease;
 
 public class AsyncLockTest {
 	private static final long TIMEOUT_MS = 30;
-	private final AsyncLock lock = new AsyncLock();
-	private static AtomicReference<LockRelease> release = new AtomicReference<AsyncLock.LockRelease>(null);
-
-	@After
-	public void cleanup() {
-		LockRelease lockRelease = release.get();
-		if (lockRelease != null) {
-			lockRelease.release();
-		}
-		assertFalse("AsyncLock is still locked after release.", lock.isLocked());
-	}
 
 	@Test
 	public void simpleLockAndReleaseTest() {
+		AsyncLock lock = new AsyncLock();
 		lock.lockAsync().thenAccept((lockRelease) -> {
-			release.set(lockRelease);
 			assertTrue("AsyncLock is not locked when the lock was idle.", lock.isLocked());
+			lockRelease.release();
+			assertFalse("AsyncLock is still locked after release.", lock.isLocked());
 		}).join();
 	}
 
 	@Test(expected = java.util.concurrent.TimeoutException.class)
 	public void timeoutLockAndReleaseTest() throws Throwable {
+		AsyncLock lock = new AsyncLock();
+		AtomicReference<LockRelease> release = new AtomicReference<AsyncLock.LockRelease>(null);
 		CompletableFuture<LockRelease> task1 = lock.lockAsync();
 
 		try {
@@ -49,20 +40,21 @@ public class AsyncLockTest {
 				CompletableFuture<LockRelease> task2 = lock.lockAsync(Duration.ofMillis(TIMEOUT_MS));
 				assertFalse("AsyncLock is acquired after it was already locked.", task2.isDone());
 
-				task2.join();
+				task2.join().release();
 			}).join();
 		} catch (CompletionException e) {
+			release.get().release();
 			throw e.getCause();
 		}
 	}
 
 	@Test
 	public void ensureAsyncLockIsAsyncTest() {
+		AsyncLock lock = new AsyncLock();
 		CompletableFuture<Void> taskToComplete = new CompletableFuture<Void>();
 
 		CompletableFuture<Void> task1 = lock.lockAsync().thenAcceptAsync(lockRelease -> {
 			try {
-				release.set(lockRelease);
 				Thread.sleep(TIMEOUT_MS);
 			} catch (InterruptedException e) {
 				fail("Task interrupted when it shouldn't have been");
@@ -71,9 +63,9 @@ public class AsyncLockTest {
 		});
 
 		CompletableFuture<Void> task2 = lock.lockAsync().thenAcceptAsync(lockRelease -> {
-			release.set(lockRelease);
 			assertTrue("Task should have been completed synchronously while waiting for lock.",
 					taskToComplete.isDone());
+			lockRelease.release();
 		});
 
 		// This task should complete while task2 is waiting for the lock
@@ -85,8 +77,6 @@ public class AsyncLockTest {
 
 	@Test
 	public void ensureAsyncLockIsAsyncTest2() throws InterruptedException, ExecutionException, TimeoutException {
-		// I don't see much value in all tests using a single AsyncLock, but there is a
-		// down-side that they could interfere with each other.
 		AsyncLock asyncLock = new AsyncLock();
 		CompletableFuture<LockRelease> lockFuture1 = asyncLock.lockAsync();
 		CompletableFuture<LockRelease> lockFuture2 = asyncLock.lockAsync();
@@ -97,8 +87,7 @@ public class AsyncLockTest {
 		lockRelease1.release();
 
 		// The pending lockAsync should be released soon but may require thread switches
-		// so use wait with a timeout to give it a little time without waiting any
-		// longer than needed.
+		// so use wait with a timeout to give it a little time without waiting any longer than needed.
 		final int WAIT_TIMEOUT_MS = 2000;
 		LockRelease lockRelease2 = lockFuture2.get(WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 		assertTrue("Second lock should be available now", lockFuture2.isDone());
@@ -107,8 +96,6 @@ public class AsyncLockTest {
 
 	@Test
 	public void lockTimeoutTest() throws InterruptedException, ExecutionException, TimeoutException {
-		// I don't see much value in all tests using a single AsyncLock,
-		// but there is a down-side that they could interfere with each other.
 		AsyncLock asyncLock = new AsyncLock();
 		CompletableFuture<LockRelease> lockFuture1 = asyncLock.lockAsync();
 		CompletableFuture<LockRelease> lockFuture2 = asyncLock.lockAsync(Duration.ofMillis(10));

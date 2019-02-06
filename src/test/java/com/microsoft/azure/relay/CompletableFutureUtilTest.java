@@ -3,8 +3,6 @@ package com.microsoft.azure.relay;
 import static org.junit.Assert.*;
 
 import java.time.Duration;
-import java.util.concurrent.CompletionException;
-
 import org.junit.After;
 import org.junit.Test;
 

@@ -4,14 +4,10 @@ import static org.junit.Assert.*;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.junit.*;
-
-import com.microsoft.azure.relay.AsyncLock.LockRelease;
 
 public class InputQueueTest {
 	private static InputQueue<Integer> queue;

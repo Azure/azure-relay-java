@@ -20,7 +20,6 @@ import java.util.function.Function;
 
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
-import org.eclipse.jetty.io.RuntimeIOException;
 import org.json.JSONObject;
 
 public class HybridConnectionListener {
