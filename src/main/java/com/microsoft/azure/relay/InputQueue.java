@@ -3,11 +3,9 @@ package com.microsoft.azure.relay;
 import java.lang.reflect.Array;
 import java.time.Duration;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -16,8 +14,6 @@ import java.util.function.Supplier;
 final class InputQueue<T> {
 	private final ItemQueue itemQueue;
 	private final Queue<CompletableFuture<T>> readerQueue;
-	private final List<CompletableFuture<T>> waiterList;
-	private ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(Runtime.getRuntime().availableProcessors());
 
 	private QueueState queueState;
 	private final Object thisLock = new Object();
@@ -47,7 +43,6 @@ final class InputQueue<T> {
 	InputQueue() {
 		this.itemQueue = new ItemQueue();
 		this.readerQueue = new LinkedList<CompletableFuture<T>>();
-		this.waiterList = new LinkedList<CompletableFuture<T>>();
 		this.queueState = QueueState.OPEN;
 	}
 
@@ -86,60 +81,29 @@ final class InputQueue<T> {
 	
 	private CompletableFuture<T> createReader(Duration timeout) {
 		CompletableFuture<T> reader = new CompletableFuture<T>();
-		
+
 		if (timeout != null) {
-			Future<?> cancelTask = executor.schedule(() -> {
-				reader.completeExceptionally(new TimeoutException("This InputQueue item could not complete in time."));
-				readerQueue.remove(reader);
+			Future<?> cancelTask = AutoShutdownScheduledExecutor.EXECUTOR.schedule(() -> {
+				synchronized (this.thisLock) {
+					reader.completeExceptionally(new TimeoutException("This InputQueue item could not complete in time."));
+					readerQueue.remove(reader);
+				}
 			}, timeout.toMillis(), TimeUnit.MILLISECONDS);
-			
+
 			reader.thenRunAsync(() -> cancelTask.cancel(true));
 		}
-		
+
 		this.readerQueue.add(reader);
 		return reader;
-	}
-
-	CompletableFuture<Boolean> waitForItemAsync() {
-		synchronized (thisLock) {
-			if (queueState == QueueState.OPEN) {
-				if (!itemQueue.hasAvailableItem()) {
-					return this.createWaiter();
-				}
-			} else if (queueState == QueueState.SHUTDOWN) {
-				if (!itemQueue.hasAvailableItem() && itemQueue.hasAnyItem()) {
-					return this.createWaiter();
-				}
-			}
-		}
-
-		return CompletableFuture.completedFuture(true);
-	}
-	
-	@SuppressWarnings("unchecked")
-	private CompletableFuture<Boolean> createWaiter() {
-		CompletableFuture<T> waiter = new CompletableFuture<T>();
-		this.waiterList.add(waiter);
-		return (CompletableFuture<Boolean>) waiter;
-	}
-
-	void close() {
-		dispose();
 	}
 
 	@SuppressWarnings("unchecked")
 	void dispatch() {
 		CompletableFuture<T> reader = null;
 		CompletableFuture<T>[] outstandingReaders = null;
-		CompletableFuture<Boolean>[] waiters = null;
 		Item item = new Item();
-		boolean itemAvailable = true;
 
 		synchronized (thisLock) {
-
-			itemAvailable = !((this.queueState == QueueState.CLOSED) || (this.queueState == QueueState.SHUTDOWN));
-			waiters = this.getWaiters();
-
 			if (this.queueState != QueueState.CLOSED) {
 				this.itemQueue.makePendingItemAvailable();
 
@@ -155,8 +119,6 @@ final class InputQueue<T> {
 						while (!this.readerQueue.isEmpty()) {
 							outstandingReaders[i++] = this.readerQueue.remove();
 						}
-
-						itemAvailable = false;
 					}
 				}
 			}
@@ -165,10 +127,6 @@ final class InputQueue<T> {
 		if (outstandingReaders != null) {
 			ActionItem.schedule(s -> completeOutstandingReadersCallback(s), outstandingReaders);
 			
-		}
-
-		if (waiters != null) {
-			completeWaitersLater(itemAvailable, waiters);
 		}
 
 		if (reader != null) {
@@ -211,7 +169,6 @@ final class InputQueue<T> {
 	@SuppressWarnings("unchecked")
 	void shutdown(Supplier<Exception> pendingExceptionGenerator) {
 		CompletableFuture<T>[] outstandingReaders = null;
-		this.executor.shutdown();
 
 		synchronized (thisLock) {
 
@@ -265,7 +222,6 @@ final class InputQueue<T> {
 				invokeDequeuedCallback(item);
 			}
 		}
-		this.executor.shutdownNow();
 	}
 
 	void disposeItem(Item item) {
@@ -334,13 +290,8 @@ final class InputQueue<T> {
 		boolean disposeItem = false;
 		CompletableFuture<T> reader = null;
 		boolean dispatchLater = false;
-		CompletableFuture<Boolean>[] waiters = null;
-		boolean itemAvailable = true;
 
 		synchronized (thisLock) {
-			itemAvailable = !((queueState == QueueState.CLOSED) || (queueState == QueueState.SHUTDOWN));
-			waiters = this.getWaiters();
-
 			if (queueState == QueueState.OPEN) {
 				if (canDispatchOnThisThread) {
 					if (this.readerQueue.size() == 0) {
@@ -358,14 +309,6 @@ final class InputQueue<T> {
 				}
 			} else {
 				disposeItem = true;
-			}
-		}
-
-		if (waiters != null) {
-			if (canDispatchOnThisThread) {
-				completeWaiters(itemAvailable, waiters);
-			} else {
-				completeWaitersLater(itemAvailable, waiters);
 			}
 		}
 
@@ -388,7 +331,7 @@ final class InputQueue<T> {
 		synchronized (thisLock) {
 			if (queueState != QueueState.CLOSED && queueState != QueueState.SHUTDOWN) {
 
-				if (this.readerQueue.size() == 0 && waiterList.size() == 0) {
+				if (this.readerQueue.size() == 0) {
 					itemQueue.enqueueAvailableItem(item);
 					return false;
 				} else {
@@ -401,16 +344,6 @@ final class InputQueue<T> {
 		disposeItem(item);
 		invokeDequeuedCallbackLater(item);
 		return false;
-	}
-
-	CompletableFuture<Boolean>[] getWaiters() {
-		CompletableFuture<Boolean>[] waiters = null;
-
-		if (waiterList.size() > 0) {
-			waiters = waiterList.toArray(waiters);
-			waiterList.clear();
-		}
-		return waiters;
 	}
 
 	// Used for timeouts. The InputQueue must remove readers from its reader queue
