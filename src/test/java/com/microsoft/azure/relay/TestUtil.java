@@ -1,10 +1,12 @@
 package com.microsoft.azure.relay;
 
+import java.net.URI;
+
 public class TestUtil {
 	public static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
-	static RelayConnectionStringBuilder connectionParams = new RelayConnectionStringBuilder(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
-	public static final String RELAY_NAME_SPACE = connectionParams.getEndpoint().toString();
-	public static final String CONNECTION_STRING = connectionParams.getEntityPath();
-	public static final String KEY_NAME = connectionParams.getSharedAccessKeyName();
-	public static final String KEY = connectionParams.getSharedAccessKey();
+	public static final RelayConnectionStringBuilder CONNECTION_STRING_BUILDER = new RelayConnectionStringBuilder(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
+	public static final URI RELAY_NAMESPACE_URI = CONNECTION_STRING_BUILDER.getEndpoint();
+	public static final String ENTITY_PATH = CONNECTION_STRING_BUILDER.getEntityPath();
+	public static final String KEY_NAME = CONNECTION_STRING_BUILDER.getSharedAccessKeyName();
+	public static final String KEY = CONNECTION_STRING_BUILDER.getSharedAccessKey();
 }
