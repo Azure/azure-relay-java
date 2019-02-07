@@ -26,7 +26,6 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 	@Override
 	public <T> Future<T> submit(Callable<T> task) {
 		this.incrementRefCount();
-		AutoShutdownScheduledExecutor outerThis = this;
 
 		Callable<T> callable = new Callable<T>() {
 			@Override
@@ -34,7 +33,7 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 				try {
 					return task.call();
 				} finally {
-					outerThis.decrementRefCount();
+					AutoShutdownScheduledExecutor.this.decrementRefCount();
 				}
 			}
 		};
@@ -95,7 +94,6 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 	@Override
 	public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
 		this.incrementRefCount();
-		AutoShutdownScheduledExecutor outerThis = this;
 
 		Callable<V> wrapper = new Callable<V>() {
 			@Override
@@ -103,7 +101,7 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 				try {
 					return callable.call();
 				} finally {
-					outerThis.decrementRefCount();
+					AutoShutdownScheduledExecutor.this.decrementRefCount();
 				}
 			}
 		};
