@@ -1,5 +1,6 @@
 package com.microsoft.azure.relay;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
@@ -13,5 +14,9 @@ final class StringUtil {
 
 	static boolean isNullOrEmpty(String s) {
 		return s == null || s.isEmpty();
+	}
+	
+	static ByteBuffer toBuffer(String str) {
+		return ByteBuffer.wrap(str.getBytes(UTF8));
 	}
 }

@@ -11,7 +11,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+
+import javax.websocket.ClientEndpointConfig;
 
 public class HybridConnectionClient {
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
@@ -42,13 +43,6 @@ public class HybridConnectionClient {
 	public URI getAddress() {
 		return address;
 	}
-
-//	public Proxy getProxy() {
-//		return proxy;
-//	}
-//	public void setProxy(Proxy proxy) {
-//		this.proxy = proxy;
-//	}
 
 	/**
 	 * @return Get the TokenProvider for authenticating this HybridConnection
@@ -151,7 +145,6 @@ public class HybridConnectionClient {
 				throw new IllegalArgumentException("entityPath is required in connectionString");
 			}
 		} else {
-
 			if (StringUtil.isNullOrWhiteSpace(path)) {
 				throw new IllegalArgumentException("path is required outside of connectionString");
 			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
@@ -184,7 +177,8 @@ public class HybridConnectionClient {
 	 * @return A CompletableFuture which returns the ClientWebSocket instance when
 	 *         its connection established with the remote endpoint
 	 */
-	public CompletableFuture<ClientWebSocket> createConnectionAsync() {
+	@SuppressWarnings("resource")
+	public CompletableFuture<HybridConnectionChannel> createConnectionAsync() {
 		// TODO: trace
 		TrackingContext trackingContext = createTrackingContext(this.address);
 //         String traceSource = nameof(HybridConnectionClient) + "(" + trackingContext + ")";
@@ -192,64 +186,27 @@ public class HybridConnectionClient {
 		// TODO: trace
 //         RelayEventSource.Log.ObjectConnecting(traceSource, trackingContext); 
 
-		if (this.tokenProvider != null) {
-			String audience = HybridConnectionUtil.getAudience(this.address);
-			CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience,
-					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
+		String audience = HybridConnectionUtil.getAudience(this.address);
+		CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience,
+				TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 
-			Map<String, List<String>> headers = new HashMap<String, List<String>>();
-			try {
-				headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.get().getToken()));
-			} catch (InterruptedException | ExecutionException tokenError) {
-				tokenError.printStackTrace();
-			}
-			HybridConnectionEndpointConfigurator.setHeaders(headers);
+		// Set the authentication in request header
+		Map<String, List<String>> headers = new HashMap<String, List<String>>();
+		headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.join().getToken()));
+		HybridConnectionEndpointConfigurator configurator = new HybridConnectionEndpointConfigurator();
+		configurator.addHeaders(headers);
+		ClientEndpointConfig config = ClientEndpointConfig.Builder.create().configurator(configurator).build();
 
-			CompletableFuture<ClientWebSocket> future = new CompletableFuture<ClientWebSocket>();
-			try {
-				URI uri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
-						this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
-						trackingContext.getTrackingId());
-				ClientWebSocket webSocket = new ClientWebSocket();
-				future = webSocket.connectAsync(uri, this.operationTimeout).thenApply(result -> webSocket);
-			} catch (URISyntaxException e) {
-				throw new IllegalArgumentException("The uri to connect to is invalid.");
-			}
-			return future;
-		} else {
-			throw new IllegalArgumentException("tokenProvider cannot be null.");
+		try {
+			URI uri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
+					this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
+					trackingContext.getTrackingId());
+			WebSocketChannel channel = new WebSocketChannel(trackingContext);
+			return channel.getWebSocket().connectAsync(uri, this.operationTimeout, config).thenApply(result -> channel);
+		} catch (URISyntaxException e) {
+			return CompletableFutureUtil.fromException(e);
 		}
 	}
-
-	/// <summary>
-	/// Gets the <see cref="HybridConnectionRuntimeInformation"/> for this
-	/// HybridConnection entity using the default timeout.
-	/// Unless specified in the connection String the default is 1 minute.
-	/// </summary>
-	// TODO
-//     public async Task<HybridConnectionRuntimeInformation> GetRuntimeInformationAsync()
-//     {
-//         using (var cancelSource = new CancellationTokenSource(this.OperationTimeout))
-//         {
-//             return await this.GetRuntimeInformationAsync(cancelSource.Token).ConfigureAwait(false);
-//         }
-//     }
-
-	/// <summary>
-	/// Gets the <see cref="HybridConnectionRuntimeInformation"/> for this
-	/// HybridConnection entity using the provided CancellationToken.
-	/// </summary>
-	/// <param name="cancellationToken">A cancellation token to observe.</param>
-	// TODO
-//     public Task<HybridConnectionRuntimeInformation> GetRuntimeInformationAsync(CancellationToken cancellationToken)
-//     {
-//         if (this.TokenProvider == null)
-//         {
-//             throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.TokenProviderRequired), this);
-//         }
-//
-//         return ManagementOperations.GetAsync<HybridConnectionRuntimeInformation>(this.Address, this.TokenProvider, cancellationToken);
-//     }
 
 	private static TrackingContext createTrackingContext(URI address) {
 		if (IS_DEBUG) {
@@ -292,6 +249,5 @@ public class HybridConnectionClient {
 		this.address = address;
 		this.tokenProvider = tokenProvider;
 		this.operationTimeout = operationTimeout;
-//		this.proxy = WebRequest.DefaultWebProxy;
 	}
 }

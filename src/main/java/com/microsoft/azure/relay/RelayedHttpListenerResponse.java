@@ -8,12 +8,12 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.RuntimeIOException;
 
 public class RelayedHttpListenerResponse {
+	private final Map<String, String> headers;
+	private final RelayedHttpListenerContext context;
 	private boolean disposed;
 	private int statusCode;
 	private String statusDescription;
-	private Map<String, String> headers;
 	private HybridHttpConnection.ResponseStream outputStream;
-	private RelayedHttpListenerContext context;
 
 	public int getStatusCode() {
 		return statusCode;
@@ -61,7 +61,7 @@ public class RelayedHttpListenerResponse {
 		return outputStream;
 	}
 
-	public void setOutputStream(HybridHttpConnection.ResponseStream outputStream) {
+	void setOutputStream(HybridHttpConnection.ResponseStream outputStream) {
 		this.outputStream = outputStream;
 	}
 

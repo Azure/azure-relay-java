@@ -6,57 +6,55 @@ import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.io.IOException;
-import javax.websocket.ClientEndpoint;
-import javax.websocket.CloseReason;
-import javax.websocket.ContainerProvider;
-import javax.websocket.DeploymentException;
-import javax.websocket.OnClose;
-import javax.websocket.OnError;
-import javax.websocket.OnMessage;
-import javax.websocket.OnOpen;
-import javax.websocket.RemoteEndpoint;
-import javax.websocket.Session;
-import javax.websocket.WebSocketContainer;
+import java.io.Writer;
+
+import javax.websocket.*;
 
 import org.eclipse.jetty.io.RuntimeIOException;
-import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
-@ClientEndpoint(configurator = HybridConnectionEndpointConfigurator.class)
-public class ClientWebSocket {
-	private Session session;
+class ClientWebSocket extends Endpoint {
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
+	private final TrackingContext trackingContext;
+	private Session session;
 	private int maxMessageBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
 	private CloseReason closeReason;
-	private InputQueue<MessageFragment> messageQueue;
-	private InputQueue<String> controlMessageQueue;
-	private CompletableFuture<Void> closeTask = new CompletableFuture<Void>();
-
-	public CloseReason getCloseReason() {
+	private InputQueue<MessageFragment> fragmentQueue;
+	private InputQueue<String> textQueue;
+	private CompletableFuture<Void> closeTask;
+	
+	TrackingContext getTrackingContext() {
+		return trackingContext;
+	}
+	
+	CloseReason getCloseReason() {
 		return this.closeReason;
 	}
 
-	public int getMaxMessageBufferSize() {
+	int getMaxMessageBufferSize() {
 		return maxMessageBufferSize;
 	}
 
-	public void setMaxMessageBufferSize(int maxMessageBufferSize) {
-		this.maxMessageBufferSize = maxMessageBufferSize;
-		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
+	void setMaxMessageBufferSize(int maxMessageBufferSize) {
+		if (maxMessageBufferSize > 0) {
+			this.maxMessageBufferSize = maxMessageBufferSize;
+			this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
+		} else {
+			throw new IllegalArgumentException("MaxBufferSize of the web socket must be a positive value.");
+		}
 	}
 
 	/**
 	 * Creates a websocket instance
 	 */
-	public ClientWebSocket() {
-		this.controlMessageQueue = new InputQueue<String>();
-		this.messageQueue = new InputQueue<MessageFragment>();
+	ClientWebSocket(TrackingContext trackingContext) {
+		this.textQueue = new InputQueue<String>();
+		this.fragmentQueue = new InputQueue<MessageFragment>();
 		this.closeReason = null;
+		this.trackingContext = trackingContext;
 	}
-
+	
 	/**
 	 * Establish websocket connection between the control websocket and the cloud
 	 * service if not already established.
@@ -65,14 +63,8 @@ public class ClientWebSocket {
 	 * @return Returns a completableFuture which completes when websocket connection
 	 *         is established with the remote endpoint
 	 */
-	public CompletableFuture<Void> connectAsync(URI uri) {
-		CompletableFuture<Void> future = new CompletableFuture<Void>();
-		try {
-			future = this.connectAsync(uri, null);
-		} catch (CompletionException e) {
-			e.printStackTrace();
-		}
-		return future;
+	CompletableFuture<Void> connectAsync(URI uri) {
+		return this.connectAsync(uri, null, null);
 	}
 
 	/**
@@ -87,21 +79,42 @@ public class ClientWebSocket {
 	 * @throws CompletionException Throws when connection could not be established
 	 *                             within the given timeout
 	 */
-	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) throws CompletionException {
+	CompletableFuture<Void> connectAsync(URI uri, Duration timeout) {
+		return this.connectAsync(uri, timeout, null);
+	}
+	
+	/**
+	 * Establish websocket connection between the control websocket and the cloud
+	 * service if not already established.
+	 * 
+	 * @param uri     The uri of the endpoint that the websocket is trying to
+	 *                connect to
+	 * @param timeout The timeout to connect to cloud service within
+	 * @return Returns a completableFuture which completes when websocket connection
+	 *         is established with the remote endpoint
+	 * @throws CompletionException Throws when connection could not be established
+	 *                             within the given timeout
+	 */
+	CompletableFuture<Void> connectAsync(URI uri, Duration timeout, ClientEndpointConfig config) {
 		if (this.isOpen()) {
-			return CompletableFuture.completedFuture(null);
+			return CompletableFutureUtil.fromException(new RuntimeIOException("This connection is already connected."));
 		}
+		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
+		
 		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 			try {
-				this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
-				this.session = this.container.connectToServer(this, uri);
-				this.closeTask = new CompletableFuture<Void>();
+				if (config != null) {
+					this.container.connectToServer(this, config, uri);
+				} else {
+					this.container.connectToServer(this, uri);
+				}
 			} catch (DeploymentException | IOException e) {
 				if (e.getCause() instanceof UpgradeException) {
-					throw new InvalidRelayOperationException(e.getCause().getMessage());
+					throw new RuntimeException(e.getCause());
 				}
-				throw new RuntimeIOException("connection to the server failed.");
+				throw new RuntimeIOException(e);
 			}
+			
 			if (this.session == null || !this.session.isOpen()) {
 				throw new RuntimeIOException("connection to the server failed.");
 			}
@@ -114,42 +127,51 @@ public class ClientWebSocket {
 	 * @return Boolean indicating if this websocket is connected with its remote
 	 *         endpoint
 	 */
-	public boolean isOpen() {
-		return ((LifeCycle) this.container).isRunning() && this.session != null && this.session.isOpen();
+	boolean isOpen() {
+		return this.session != null && this.session.isOpen();
 	}
 
 	/**
-	 * Receives control messages
+	 * Receives text messages asynchronously.
 	 * 
-	 * @return Returns a CompletableFuture which completes when websocket receives
-	 *         control message
+	 * @return Returns a CompletableFuture which completes when websocket receives text messages
 	 */
-	public CompletableFuture<String> receiveControlMessageAsync() {
-		return this.controlMessageQueue.dequeueAsync();
+	CompletableFuture<String> readTextAsync() {
+		return this.textQueue.dequeueAsync();
 	}
-
+	
 	/**
-	 * Receives byte messages from the remote sender. Blocks the thread until a
-	 * whole message is received
+	 * Receives byte messages from the remote sender asynchronously.
 	 * 
-	 * @return Returns a CompletableFuture of the bytes which completes when
-	 *         websocket receives the entire bytes
+	 * @return Returns a CompletableFuture of the bytes which completes when websocket receives an entire message
 	 */
-	public CompletableFuture<ByteBuffer> receiveMessageAsync() {
-		AtomicBoolean receivedWholeMsg = new AtomicBoolean(true);
-		LinkedList<byte[]> fragments = new LinkedList<byte[]>();
-		AtomicInteger messageSize = new AtomicInteger(0);
-
-		return CompletableFuture.supplyAsync(() -> {
+	CompletableFuture<ByteBuffer> readBinaryAsync() {
+		return this.readBinaryAsync(null);
+	}
+	
+	/**
+	 * Receives byte messages from the remote sender asynchronously.
+	 * 
+	 * @param timeout The timeout duration for this operation.
+	 * @return Returns a CompletableFuture of the bytes which completes when websocket receives the entire message.
+	 * @throws TimeoutException thrown when a complete message frame is not received within the timeout.
+	 */
+	CompletableFuture<ByteBuffer> readBinaryAsync(Duration timeout) {
+		
+		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
+			LinkedList<byte[]> fragments = new LinkedList<byte[]>();
+			boolean receivedWholeMsg;
+			int messageSize = 0;
+			
 			do {
-				MessageFragment fragment = messageQueue.dequeueAsync().join();
-
-				messageSize.set(messageSize.get() + fragment.getBytes().length);
+				MessageFragment fragment = fragmentQueue.dequeueAsync().join();
+				messageSize += fragment.getBytes().length;
 				fragments.add(fragment.getBytes());
-				receivedWholeMsg.set(fragment.hasEnded());
-			} while (!receivedWholeMsg.get());
+				receivedWholeMsg = fragment.isEnd();
+			} 
+			while (!receivedWholeMsg);
 
-			byte[] message = new byte[messageSize.get()];
+			byte[] message = new byte[messageSize];
 			int offset = 0;
 			for (byte[] bytes : fragments) {
 				System.arraycopy(bytes, 0, message, offset, bytes.length);
@@ -159,80 +181,100 @@ public class ClientWebSocket {
 			return ByteBuffer.wrap(message);
 		});
 	}
-
+	
 	/**
-	 * Sends the data to the remote endpoint. String or bytes will be sent as
-	 * byte[], other objects will be sent as encoded object
+	 * Sends the data to the remote endpoint as binary.
 	 * 
-	 * @param data Message to be sent
-	 * @return Returns a CompletableFuture which completes when websocket finishes
-	 *         sending the bytes
+	 * @param data Message to be sent.
+	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
 	 */
-	public CompletableFuture<Void> sendAsync(Object data) {
-		CompletableFuture<Void> future = new CompletableFuture<Void>();
-		try {
-			future = this.sendAsync(data, null);
-		} catch (CompletionException e) {
-			// should not be an exception here because timeout is null
-		}
-		return future;
+	CompletableFuture<Void> writeAsync(Object data) {
+		return this.writeAsync(data, null);
 	}
 
 	/**
-	 * Sends the data to the remote endpoint. String or bytes will be sent as
-	 * byte[], other objects will be sent as encoded object
+	 * Sends the data to the remote endpoint within a timeout as binary.
 	 * 
-	 * @param data Message to be sent
-	 * @param timeout The timeout to connect to send the data within
-	 * @return Returns a CompletableFuture which completes when websocket finishes
-	 *         sending the bytes
-	 * @throws CompletionException Throws when the sending task does not complete
-	 *                             within the given timeout
+	 * @param data Message to be sent.
+	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
+	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
+	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
-	public CompletableFuture<Void> sendAsync(Object data, Duration timeout) throws CompletionException {
-		if (this.session != null && this.session.isOpen()) {
-			RemoteEndpoint.Async remote = this.session.getAsyncRemote();
-
+	CompletableFuture<Void> writeAsync(Object data, Duration timeout) {
+		return writeAsync(data, timeout, WriteMode.BINARY);
+	}
+	
+	/**
+	 * Sends the data to the remote endpoint within a timeout in one of the WriteModes.
+	 * 
+	 * @param data Message to be sent.
+	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
+	 * @param mode The type of the message to be sent.
+	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
+	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
+	 */
+	CompletableFuture<Void> writeAsync(Object data, Duration timeout, WriteMode mode) {
+		if (this.isOpen()) {
 			if (data == null) {
+				// TODO: Log warns sending nothing because message is null
 				return CompletableFuture.completedFuture(null);
-			} else if (data instanceof String) {
-				String text = (String) data;
-				return CompletableFutureUtil.timedRunAsync(timeout,
-						() -> remote.sendBinary(ByteBuffer.wrap(text.getBytes())));
-			} else if (data instanceof byte[]) {
-				return CompletableFutureUtil.timedRunAsync(timeout,
-						() -> remote.sendBinary(ByteBuffer.wrap((byte[]) data)));
-			} else if (data instanceof ByteBuffer) {
-				return CompletableFutureUtil.timedRunAsync(timeout, () -> remote.sendBinary((ByteBuffer) data));
-			} else {
-				return CompletableFutureUtil.timedRunAsync(timeout, () -> remote.sendObject(data));
 			}
-		} else {
-			throw new RuntimeIOException("cannot send because the session is not connected.");
+			else {
+				return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+					RemoteEndpoint.Basic remote = this.session.getBasicRemote();
+					
+					try {
+						if (mode.equals(WriteMode.TEXT)) {
+							Writer writer = remote.getSendWriter();
+							writer.write(data.toString());
+							writer.close();
+						}
+						else {
+							ByteBuffer bytes = null;
+							
+							if (data instanceof byte[]) {
+								bytes = ByteBuffer.wrap((byte[]) data);
+							} 
+							else if (data instanceof ByteBuffer) {
+								bytes = (ByteBuffer) data;
+							}
+							else if (data instanceof String){
+								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
+							}
+							remote.sendBinary(bytes);
+						}
+					}
+					catch (IOException e) {
+						throw new RuntimeIOException(e);
+					}
+				});
+			}
+		}
+		else {
+			return CompletableFutureUtil.fromException(new RuntimeIOException("cannot send because the session is not connected."));	
 		}
 	}
-
-	CompletableFuture<Void> sendCommandAsync(String command, Duration timeout) throws CompletionException {
-		if (this.session == null) {
-			throw new RuntimeIOException("cannot send because the session is not connected.");
-		}
-		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
-			RemoteEndpoint.Async remote = this.session.getAsyncRemote();
-			remote.sendText(command);
-		});
-	}
-
+	
 	/**
 	 * Closes the connection with the remote websocket
 	 * 
 	 * @return Returns a CompletableFuture which completes when the connection is
 	 *         completely closed
 	 */
-	public CompletableFuture<Void> closeAsync() {
+	CompletableFuture<Void> closeAsync() {
 		return this.closeAsync(null);
 	}
 
-	public CompletableFuture<Void> closeAsync(CloseReason reason) {
+	/**
+	 * Closes the connection with the remote websocket with a given CloseReason
+	 * 
+	 * @param reason The CloseReason to be given for this operation. For details please see javax.websocket.CloseReason.
+	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
+	 */
+	CompletableFuture<Void> closeAsync(CloseReason reason) {
+		this.fragmentQueue.shutdown();
+		this.textQueue.shutdown();
+		
 		if (this.session == null || !this.session.isOpen()) {
 			return this.closeTask;
 		}
@@ -242,65 +284,70 @@ public class ClientWebSocket {
 			} else {
 				this.session.close();
 			}
-		} catch (Exception e) {
-			throw new RuntimeIOException("something went wrong when trying to close the websocket.");
+		} 
+		catch (Throwable e) {
+			this.closeTask.completeExceptionally(e);
 		}
 		return this.closeTask;
 	}
-
+	
 	@OnOpen
-	public void onWebSocketConnect(Session sess) {
+	public void onOpen(Session session, EndpointConfig config) {
 		this.closeReason = null;
-	}
+		this.session = session;
+		session.setMaxBinaryMessageBufferSize(this.maxMessageBufferSize);
+		session.setMaxTextMessageBufferSize(this.maxMessageBufferSize);
+		this.closeTask = new CompletableFuture<Void>();
+		
+		session.addMessageHandler(new MessageHandler.Whole<String>() {
+			@Override
+			public void onMessage(String text) {
+				textQueue.enqueueAndDispatch(text);
+			}
+		});
 
-	// Handles binary data sent to the listener
-	@OnMessage
-	public void onWebSocketBytes(byte[] inputBuffer, boolean isEnd) {
-		MessageFragment fragment = new MessageFragment(inputBuffer, isEnd);
-		this.messageQueue.enqueueAndDispatch(fragment);
+		session.addMessageHandler(new MessageHandler.Partial<byte[]>() {
+			@Override
+			public void onMessage(byte[] inputBytes, boolean isEnd) {
+				fragmentQueue.enqueueAndDispatch(new MessageFragment(inputBytes, isEnd));
+			}
+		});
 	}
-
-	// Handles text from control message
-	@OnMessage
-	public void onWebSocketText(String text) {
-		this.controlMessageQueue.enqueueAndDispatch(text);
-	}
-
+	
 	@OnClose
-	public void onWebSocketClose(CloseReason reason) {
+	public void onClose(Session session, CloseReason reason) {
+		this.textQueue.shutdown();
+		this.fragmentQueue.shutdown();
+		
 		this.closeReason = reason;
-		this.messageQueue.shutdown();
-		this.closeTask.complete(null);
-
-		try {
-			((LifeCycle) this.container).stop();
-		} catch (Exception e) {
-		}
 		if (reason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
-			throw new RuntimeIOException("did not close properly");
+			this.closeTask.completeExceptionally(new RuntimeIOException("Websocket did not close properly: " + reason.toString()));
+		} else {
+			this.closeTask.complete(null);
 		}
 	}
 
 	@OnError
-	public void onWebSocketError(Throwable cause) {
-		// TODO: error handling if necessary
+	public void onError(Session session, Throwable cause) {
+		// TODO: trace with logger
 	}
-
+	
 	class MessageFragment {
-		private byte[] bytes;
-		private boolean ended;
+		private final byte[] bytes;
+		private final boolean ended;
 
-		public MessageFragment(byte[] bytes, boolean ended) {
+		MessageFragment(byte[] bytes, boolean ended) {
 			this.bytes = bytes;
 			this.ended = ended;
 		}
 
-		public byte[] getBytes() {
+		byte[] getBytes() {
 			return bytes;
 		}
 
-		public boolean hasEnded() {
+		boolean isEnd() {
 			return this.ended;
 		}
 	}
 }
+

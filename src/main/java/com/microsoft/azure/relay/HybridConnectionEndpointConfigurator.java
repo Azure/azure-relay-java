@@ -1,22 +1,25 @@
 package com.microsoft.azure.relay;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.websocket.ClientEndpointConfig;
 
-public class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
-	private static Map<String, List<String>> currentHeaders;
-
-	protected static Map<String, List<String>> getHeaders() {
-		return currentHeaders;
+class HybridConnectionEndpointConfigurator extends ClientEndpointConfig.Configurator {
+	private Map<String, List<String>> customHeaders;
+	
+	HybridConnectionEndpointConfigurator() {
+		this.customHeaders = new HashMap<String, List<String>>();
 	}
-
-	protected static void setHeaders(Map<String, List<String>> headers) {
-		currentHeaders = headers;
+	
+	void addHeaders(Map<String, List<String>> headers) {
+		if (headers != null && !headers.isEmpty()) {
+			this.customHeaders.putAll(headers);
+		}
 	}
-
+	
 	@Override
 	public void beforeRequest(Map<String, List<String>> requestHeaders) {
-		requestHeaders.putAll(currentHeaders);
+		requestHeaders.putAll(customHeaders);
 	}
 }

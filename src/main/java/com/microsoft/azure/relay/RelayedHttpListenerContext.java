@@ -1,5 +1,6 @@
 package com.microsoft.azure.relay;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -14,10 +15,10 @@ import org.eclipse.jetty.http.HttpStatus;
 public class RelayedHttpListenerContext {
 	private static final Duration ACCEPT_TIMEOUT = Duration.ofSeconds(20);
 	private String cachedToString;
-	private RelayedHttpListenerRequest request;
-	private RelayedHttpListenerResponse response;
-	private TrackingContext trackingContext;
-	private HybridConnectionListener listener;
+	private final RelayedHttpListenerRequest request;
+	private final RelayedHttpListenerResponse response;
+	private final TrackingContext trackingContext;
+	private final HybridConnectionListener listener;
 
 	/**
 	 * @return Returns the request object that resembles the http request object in
@@ -69,7 +70,7 @@ public class RelayedHttpListenerContext {
 		}
 	}
 
-	protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) throws CompletionException {
+	protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) {
 		// TODO: subprotocol
 		// If we are accepting a sub-protocol handle that here
 //        String subProtocol = this.response.getHeaders().get(HybridConnectionConstants.Headers.SEC_WEBSOCKET_PROTOCOL);
@@ -77,32 +78,30 @@ public class RelayedHttpListenerContext {
 //            clientWebSocket.Options.AddSubProtocol(subProtocol);
 //        }
 
-		ClientWebSocket webSocket = new ClientWebSocket();
-		return CompletableFutureUtil.timedSupplyAsync(ACCEPT_TIMEOUT, () -> {
-			webSocket.connectAsync(rendezvousUri).join();
-			return webSocket;
-		});
+		ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext);
+		return webSocket.connectAsync(rendezvousUri, ACCEPT_TIMEOUT).thenApply(result -> webSocket);
 	}
 
-	protected CompletableFuture<Void> rejectAsync(URI rendezvousUri)
-			throws URISyntaxException, UnsupportedEncodingException, CompletionException {
+	protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) {
+		
 		if (this.response.getStatusCode() == HttpStatus.CONTINUE_100) {
 			this.response.setStatusCode(HttpStatus.BAD_REQUEST_400);
 			this.response.setStatusDescription("Rejected by user code");
 		}
-
-		StringBuilder builder = new StringBuilder(rendezvousUri.toString());
-		builder.append("&").append(HybridConnectionConstants.STATUS_CODE).append("=")
-				.append(this.response.getStatusCode());
-		builder.append("&").append(HybridConnectionConstants.STATUS_DESCRIPTION).append("=")
-				.append(URLEncoder.encode(this.response.getStatusDescription(), StringUtil.UTF8.name()));
-		URI rejectURI = new URI(builder.toString());
-
-		ClientWebSocket webSocket = new ClientWebSocket();
-
-		return CompletableFutureUtil.timedRunAsync(ACCEPT_TIMEOUT, () -> {
-			webSocket.connectAsync(rejectURI).join();
-		}).thenCompose((connectionRes) -> webSocket.closeAsync());
+		
+		try {
+			StringBuilder builder = new StringBuilder(rendezvousUri.toString());
+			builder.append("&").append(HybridConnectionConstants.STATUS_CODE).append("=")
+					.append(this.response.getStatusCode());
+			builder.append("&").append(HybridConnectionConstants.STATUS_DESCRIPTION).append("=")
+					.append(URLEncoder.encode(this.response.getStatusDescription(), StringUtil.UTF8.name()));
+			URI rejectURI = new URI(builder.toString());
+			
+			ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext);
+			return webSocket.connectAsync(rejectURI, ACCEPT_TIMEOUT).thenCompose((result) -> webSocket.closeAsync());
+		} catch (IOException | URISyntaxException e) {
+			return CompletableFutureUtil.fromException(e);
+		}
 	}
 
 	private void flowSubProtocol() {

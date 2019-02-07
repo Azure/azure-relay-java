@@ -6,6 +6,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -16,7 +17,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
 
@@ -30,7 +30,8 @@ public class SendReceiveTest {
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
-	private static int statusCode = HttpStatus.ACCEPTED_202;
+	private static final int STATUS_CODE = HttpStatus.ACCEPTED_202;
+	private static final String STATUS_DESCRIPTION = "OK";
 	private static int listenerReceiveCount = 0;
 	private static int senderReceiveCount = 0;
 	
@@ -64,30 +65,36 @@ public class SendReceiveTest {
 	@Before
 	public void createClient() throws URISyntaxException {
 		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
+		senderReceiveCount = 0;
+		listenerReceiveCount = 0;
 	}
 	
 	@Test
-	public void websocketSmallSendSmallResponseTest() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
-		websocketListener(smallStr, smallStr);
+	public void websocketSmallSendSmallResponseTest() {
+		CompletableFuture<Void> listenerTask = websocketListener(smallStr, smallStr);
 		websocketClient(smallStr, smallStr);
+		listenerTask.join();
 	}
 	
 	@Test
-	public void websocketSmallSendLargeResponseTest() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
-		websocketListener(smallStr, largeStr);
+	public void websocketSmallSendLargeResponseTest() {
+		CompletableFuture<Void> listenerTask = websocketListener(smallStr, largeStr);
 		websocketClient(largeStr, smallStr);
+		listenerTask.join();
 	}
 	
 	@Test
-	public void websocketLargeSendSmallResponseTest() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
-		websocketListener(largeStr, smallStr);
+	public void websocketLargeSendSmallResponseTest() {
+		CompletableFuture<Void> listenerTask = websocketListener(largeStr, smallStr);
 		websocketClient(smallStr, largeStr);
+		listenerTask.join();
 	}
 	
 	@Test
-	public void websocketLargeSendLargeResponseTest() throws URISyntaxException, InterruptedException, ExecutionException, IOException {
-		websocketListener(largeStr, largeStr);
+	public void websocketLargeSendLargeResponseTest() {
+		CompletableFuture<Void> listenerTask = websocketListener(largeStr, largeStr);
 		websocketClient(largeStr, largeStr);
+		listenerTask.join();
 	}
 	
 	@Test
@@ -98,23 +105,20 @@ public class SendReceiveTest {
 		
 		listener.acceptConnectionAsync().thenAcceptAsync((websocket) -> {
 			for (int i = 1; i <= timesToRepeat; i++) {
-				websocket.receiveMessageAsync().join();
+				websocket.readAsync().join();
+				websocket.writeAsync(StringUtil.toBuffer("hi")).join();
 				if (i == timesToRepeat) {
 					listenerReceiveCount.complete(i);
 				}
-				websocket.sendAsync("hi");
 			}
 		});
 		
 		client.createConnectionAsync().thenAccept((clientWebSocket) -> {
-			clientWebSocket.sendAsync("hi");
 			for (int i = 1; i <= timesToRepeat; i++) {
-				clientWebSocket.receiveMessageAsync().join();
+				clientWebSocket.writeAsync(StringUtil.toBuffer("hi")).join();
+				clientWebSocket.readAsync().join();
 				if (i == timesToRepeat) {
 					senderReceiveCount.complete(i);
-				}
-				if (i < timesToRepeat) {
-					clientWebSocket.sendAsync("hi");
 				}
 			}
 			clientWebSocket.closeAsync().join();
@@ -135,19 +139,19 @@ public class SendReceiveTest {
 		
 		for (int i = 1; i <= numberOfSenders; i++) {
 			listener.acceptConnectionAsync().thenAccept((websocket) -> {
-				websocket.receiveMessageAsync().thenRun(() -> {
+				websocket.readAsync().thenRun(() -> {
 					listenerReceiveCount++;
-					websocket.sendAsync("hi").join();
+					websocket.writeAsync(StringUtil.toBuffer("hi")).join();
 					websocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal closure from listener")).join();
 				});
 			});
 			
 			HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
 			newClient.createConnectionAsync().thenAccept((socket) -> {
-				socket.sendAsync("hi").join();
-				socket.receiveMessageAsync().thenRun(() -> {
+				socket.writeAsync(StringUtil.toBuffer("hi")).join();
+				socket.readAsync().thenRun(() -> {
 					senderReceiveCount++;
-					if (senderReceiveCount >= numberOfSenders) {
+					if (senderReceiveCount == numberOfSenders) {
 						senderReceiveTask.complete(null);
 					}
 				});
@@ -161,96 +165,102 @@ public class SendReceiveTest {
 		}
 		assertEquals("Listener did not receive expected number of messages.", numberOfSenders, listenerReceiveCount);
 		assertEquals("Sendner did not receive expected number of messages.", numberOfSenders, senderReceiveCount);
-		senderReceiveCount = 0;
-		listenerReceiveCount = 0;
 	}
 	
 	
 	@Test
-	public void httpGETAndSmallResponseTest() throws IOException, InterruptedException, ExecutionException {
+	public void httpGETAndSmallResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, emptyStr, smallStr));
         httpRequestSender("GET", smallStr, emptyStr);
 	}
 	
 	@Test
-	public void httpGETAndLargeResponseTest() throws IOException, InterruptedException, ExecutionException {
+	public void httpGETAndLargeResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, emptyStr, largeStr));
         httpRequestSender("GET", largeStr, emptyStr);
 	}
 	
 	@Test
-	public void httpSmallPOSTAndSmallResponseTest() throws IOException, InterruptedException, ExecutionException {
+	public void httpSmallPOSTAndSmallResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, smallStr, smallStr));
         httpRequestSender("POST", smallStr, smallStr);
 	}
 	
 	@Test
-	public void httpSmallPOSTAndLargeResponseTest() throws IOException, InterruptedException, ExecutionException {
+	public void httpSmallPOSTAndLargeResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, smallStr, largeStr));
         httpRequestSender("POST", largeStr, smallStr);
 	}
 	
 	@Test
-	public void httpLargePOSTAndSmallResponseTest() throws IOException, InterruptedException, ExecutionException {
+	public void httpLargePOSTAndSmallResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, largeStr, smallStr));
         httpRequestSender("POST", smallStr, largeStr);
 	}
 	
 	@Test
-	public void httpLargePOSTAndLargeResponseTest() throws IOException, InterruptedException, ExecutionException {
+	public void httpLargePOSTAndLargeResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, largeStr, largeStr));
         httpRequestSender("POST", largeStr, largeStr);
 	}
 	
-	private static void websocketClient(String msgExpected, String msgToSend) throws URISyntaxException, InterruptedException, ExecutionException, IOException {
+	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
 		CompletableFuture<Boolean> receivedReply = new CompletableFuture<Boolean>();
 		
-		client.createConnectionAsync().thenAccept((clientWebSocket) -> {
-			clientWebSocket.sendAsync(msgToSend);
-			clientWebSocket.receiveMessageAsync().thenAccept((bytesReceived) -> {
+		return client.createConnectionAsync().thenAccept((channel) -> {
+			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
+			channel.readAsync().thenAccept((bytesReceived) -> {
 				String msgReceived = new String(bytesReceived.array());
 				receivedReply.complete(true);
 				assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
 			});
-		});
-		assertTrue("Did not receive message from websocket sender.", receivedReply.join());
+		}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.join()));
 	}
 	
-	private static void websocketListener(String msgExpected, String msgToSend) {
-		CompletableFuture<ClientWebSocket> conn = listener.acceptConnectionAsync();
-		
-		conn.thenAcceptAsync((websocket) -> {
-			ByteBuffer bytesReceived = websocket.receiveMessageAsync().join();
+	private static CompletableFuture<Void> websocketListener(String msgExpected, String msgToSend) {
+		return listener.acceptConnectionAsync().thenAcceptAsync((channel) -> {
+			ByteBuffer bytesReceived = channel.readAsync().join();
 			assertEquals("Websocket listener did not receive the expected message.", msgExpected, new String(bytesReceived.array()));
-			websocket.sendAsync(msgToSend).join();
-			websocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
+			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
+			channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
 		});
 	}
 	
 	private static void httpRequestHandler(RelayedHttpListenerContext context, String msgExpected, String msgToSend) {
         // Do something with context.Request.Url, HttpMethod, Headers, InputStream...
 		RelayedHttpListenerResponse response = context.getResponse();
-        response.setStatusCode(statusCode);
-        response.setStatusDescription("OK");
-
-        String receivedText = (context.getRequest().getInputStream() != null) ? new String(context.getRequest().getInputStream().array()) : "";
+        response.setStatusCode(STATUS_CODE);
+        response.setStatusDescription(STATUS_DESCRIPTION);
+        
+        String receivedText = "";
+        if (context.getRequest().getInputStream() != null) {
+            try (Reader reader = new BufferedReader(new InputStreamReader(context.getRequest().getInputStream(), StringUtil.UTF8))) {
+                StringBuilder builder = new StringBuilder();
+                int c;
+                while ((c = reader.read()) != -1) {
+                    builder.append((char) c);
+                }
+                receivedText = builder.toString();
+            } 
+            catch (IOException e1) {
+    			fail("IO Exception when reading from HTTP");
+    		}
+        }
         assertEquals("Listener did not received the expected message from http connection.", msgExpected, receivedText);
 
         try {
 			response.getOutputStream().write((msgToSend).getBytes());
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			fail("IO Exception when sending to HTTP");
 		}
         context.getResponse().close();
 	}
 	
-	private static void httpRequestSender(String method, String msgExpected, String msgToSend) throws IOException, InterruptedException, ExecutionException {
+	private static void httpRequestSender(String method, String msgExpected, String msgToSend) throws IOException {
 		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
 		urlBuilder.replace(0, 5, "https://");
 		URL url = new URL(urlBuilder.toString());
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
-		
 		
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
 		conn.setRequestMethod(method);
@@ -267,7 +277,9 @@ public class SendReceiveTest {
 		StringBuilder builder = new StringBuilder();
 		BufferedReader inStream = new BufferedReader(new InputStreamReader(conn.getInputStream()));
 		
-		assertEquals("Http connection sender did not receive the expected response code.", statusCode, conn.getResponseCode());
+		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, conn.getResponseCode());
+		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, conn.getResponseMessage());
+		
 		while ((inputLine = inStream.readLine()) != null) {
 			builder.append(inputLine);
 		}
