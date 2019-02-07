@@ -326,8 +326,8 @@ public class HybridConnectionListener implements AutoCloseable {
 					this.isOnline = false;
 				}
 
-//				clients.forEach(client -> client.closeAsync(
-//						new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
+				clients.forEach(client -> client.closeAsync(
+						new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
 
 				// TODO: trace
 //                RelayEventSource.Log.ObjectClosed(this);
@@ -340,37 +340,6 @@ public class HybridConnectionListener implements AutoCloseable {
 			this.connectionInputQueue.dispose();
 		}
 		return this.controlConnection.closeAsync(null);
-		
-		
-		
-//		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
-//			synchronized (this.thisLock) {
-//				CompletableFuture<?>[] clients = new CompletableFuture<?>[this.connectionInputQueue.getPendingCount()];
-//				if (this.closeCalled) {
-//					return;
-//				}
-//	
-//				// TODO: trace
-//	//            RelayEventSource.Log.ObjectClosing(this);
-//				this.closeCalled = true;
-//	
-//				// If the input queue is empty this completes all pending waiters with null and prevents any new items being added to the input queue.
-//				this.connectionInputQueue.shutdown();
-//	
-//				// Close any unaccepted rendezvous. DequeueAsync won't block since we've called connectionInputQueue.Shutdown().
-//				for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
-//					clients[i] = this.connectionInputQueue.dequeueAsync().thenCompose(connection -> {
-//						if (connection != null) {
-//							return connection.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
-//						} else {
-//							return CompletableFuture.completedFuture(null);
-//						}
-//					});
-//				}
-//	
-//				this.isOnline = false;
-//			}
-//		});
 	}
 
 	@Override
