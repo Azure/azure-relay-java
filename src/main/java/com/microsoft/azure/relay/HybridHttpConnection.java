@@ -53,9 +53,14 @@ class HybridHttpConnection {
 	}
 
 	static CompletableFuture<Void> createAsync(HybridConnectionListener listener,
-			ListenerCommand.RequestCommand requestCommand, ClientWebSocket controlWebSocket) throws URISyntaxException {
+			ListenerCommand.RequestCommand requestCommand, ClientWebSocket controlWebSocket) {
 		
-		HybridHttpConnection hybridHttpConnection = new HybridHttpConnection(listener, controlWebSocket, requestCommand.getAddress());
+		HybridHttpConnection hybridHttpConnection;
+		try {
+			hybridHttpConnection = new HybridHttpConnection(listener, controlWebSocket, requestCommand.getAddress());
+		} catch (URISyntaxException e) {
+			return CompletableFutureUtil.fromException(e);
+		}
 
 		// Do only what we need to do (receive any request body from control channel) and then let this Task complete.
 		Boolean requestOverControlConnection = requestCommand.hasBody();
@@ -87,24 +92,25 @@ class HybridHttpConnection {
     }
 
 	private CompletableFuture<Void> processFirstRequestAsync(RequestCommandAndStream requestAndStream) {
-		try {
-			ListenerCommand.RequestCommand requestCommand = requestAndStream.getRequestCommand();
+		CompletableFuture<Void> processTask = new CompletableFuture<Void>();
+		ListenerCommand.RequestCommand requestCommand = requestAndStream.getRequestCommand();
 
-			if (requestCommand.hasBody() == null) {
-				// Need to rendezvous to get the real RequestCommand
-				return this.receiveRequestOverRendezvousAsync().thenAccept((realRequestAndStream) -> {
-					this.invokeRequestHandler(realRequestAndStream);
-				});
-			} else {
-				return CompletableFuture.runAsync(() -> this.invokeRequestHandler(requestAndStream));
-			}
-		} catch (Exception e)
-		// TODO: when (!Fx.IsFatal(e))
-		{
-			// TODO: trace
-//            RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
-			return this.closeAsync();
+		if (requestCommand.hasBody() == null) {
+			// Need to rendezvous to get the real RequestCommand
+			processTask = this.receiveRequestOverRendezvousAsync().thenAccept((realRequestAndStream) -> {
+				this.invokeRequestHandler(realRequestAndStream);
+			});
+		} else {
+			processTask = CompletableFuture.runAsync(() -> this.invokeRequestHandler(requestAndStream));
 		}
+		
+		return processTask.handle((result, ex) -> {
+			if (ex != null) {
+				// TODO: trace
+//	            RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
+			}
+			return ex;
+		}).thenCompose(ex -> (ex != null) ? CompletableFutureUtil.fromException(ex) : CompletableFuture.completedFuture(null));
 	}
 
 	private CompletableFuture<RequestCommandAndStream> receiveRequestBodyOverControlAsync(
@@ -136,7 +142,7 @@ class HybridHttpConnection {
 	
 				return CompletableFuture.completedFuture(null);
 			})
-			.thenApply(requestStream -> new RequestCommandAndStream(this.requestCommand, new ByteArrayInputStream(requestStream.array())));
+			.thenApply(buffer -> new RequestCommandAndStream(this.requestCommand, new ByteArrayInputStream(buffer.array())));
 	}
 
 	void invokeRequestHandler(RequestCommandAndStream requestAndStream) {

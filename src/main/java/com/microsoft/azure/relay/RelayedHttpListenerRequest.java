@@ -57,16 +57,8 @@ public final class RelayedHttpListenerRequest {
 	void setRemoteAddress(ListenerCommand.Endpoint remoteEndpoint) {
 		
 		if (remoteEndpoint != null) {
-			try {
-				InetSocketAddress inetAddress = new InetSocketAddress(remoteEndpoint.getAddress(), remoteEndpoint.getPort());
-				this.remoteEndPoint = inetAddress;
-			}
-			catch (Exception e) {
-				// TODO: trace
-//			      else {
-//			          RelayEventSource.Log.Warning(this, "Unable to parse 'remoteEndpoint.address'.");
-//			      }				
-			}
+			InetSocketAddress inetAddress = new InetSocketAddress(remoteEndpoint.getAddress(), remoteEndpoint.getPort());
+			this.remoteEndPoint = inetAddress;
 		}
 	}
 }

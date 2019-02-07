@@ -4,7 +4,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.io.IOException;
@@ -97,7 +96,7 @@ class ClientWebSocket extends Endpoint {
 	 *                             within the given timeout
 	 */
 	CompletableFuture<Void> connectAsync(URI uri, Duration timeout, ClientEndpointConfig config) {
-		if (this.isOpen() && uri.equals(this.session.getRequestURI())) {
+		if (this.isOpen()) {
 			return CompletableFutureUtil.fromException(new RuntimeIOException("This connection is already connected."));
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
@@ -161,7 +160,7 @@ class ClientWebSocket extends Endpoint {
 		
 		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
 			LinkedList<byte[]> fragments = new LinkedList<byte[]>();
-			boolean receivedWholeMsg = true;
+			boolean receivedWholeMsg;
 			int messageSize = 0;
 			
 			do {
@@ -216,7 +215,7 @@ class ClientWebSocket extends Endpoint {
 	 */
 	CompletableFuture<Void> writeAsync(Object data, Duration timeout, WriteMode mode) {
 		if (this.isOpen()) {
-			if (!this.isOpen() || data == null) {
+			if (data == null) {
 				// TODO: Log warns sending nothing because message is null
 				return CompletableFuture.completedFuture(null);
 			}
@@ -231,18 +230,18 @@ class ClientWebSocket extends Endpoint {
 							writer.close();
 						}
 						else {
-							byte[] bytes = null;
+							ByteBuffer bytes = null;
 							
 							if (data instanceof byte[]) {
-								bytes = (byte[]) data;
+								bytes = ByteBuffer.wrap((byte[]) data);
 							} 
 							else if (data instanceof ByteBuffer) {
-								bytes = ((ByteBuffer) data).array();
+								bytes = (ByteBuffer) data;
 							}
 							else if (data instanceof String){
-								bytes = data.toString().getBytes(StringUtil.UTF8);
+								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
 							}
-							remote.sendBinary(ByteBuffer.wrap(bytes));
+							remote.sendBinary(bytes);
 						}
 					}
 					catch (IOException e) {
@@ -323,8 +322,9 @@ class ClientWebSocket extends Endpoint {
 		this.closeReason = reason;
 		if (reason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
 			this.closeTask.completeExceptionally(new RuntimeIOException("Websocket did not close properly: " + reason.toString()));
+		} else {
+			this.closeTask.complete(null);
 		}
-		this.closeTask.complete(null);
 	}
 
 	@OnError
@@ -335,12 +335,10 @@ class ClientWebSocket extends Endpoint {
 	class MessageFragment {
 		private final byte[] bytes;
 		private final boolean ended;
-		private int position;
 
 		MessageFragment(byte[] bytes, boolean ended) {
 			this.bytes = bytes;
 			this.ended = ended;
-			this.position = 0;
 		}
 
 		byte[] getBytes() {
@@ -349,18 +347,6 @@ class ClientWebSocket extends Endpoint {
 
 		boolean isEnd() {
 			return this.ended;
-		}
-		
-		int length() {
-			return this.bytes.length;
-		}
-		
-		int getPosition() {
-			return this.position;
-		}
-		
-		void setPosition(int pos) {
-			this.position = pos;
 		}
 	}
 }

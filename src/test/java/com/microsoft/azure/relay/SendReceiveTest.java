@@ -71,26 +71,30 @@ public class SendReceiveTest {
 	
 	@Test
 	public void websocketSmallSendSmallResponseTest() {
-		websocketListener(smallStr, smallStr);
+		CompletableFuture<Void> listenerTask = websocketListener(smallStr, smallStr);
 		websocketClient(smallStr, smallStr);
+		listenerTask.join();
 	}
 	
 	@Test
 	public void websocketSmallSendLargeResponseTest() {
-		websocketListener(smallStr, largeStr);
+		CompletableFuture<Void> listenerTask = websocketListener(smallStr, largeStr);
 		websocketClient(largeStr, smallStr);
+		listenerTask.join();
 	}
 	
 	@Test
 	public void websocketLargeSendSmallResponseTest() {
-		websocketListener(largeStr, smallStr);
+		CompletableFuture<Void> listenerTask = websocketListener(largeStr, smallStr);
 		websocketClient(smallStr, largeStr);
+		listenerTask.join();
 	}
 	
 	@Test
 	public void websocketLargeSendLargeResponseTest() {
-		websocketListener(largeStr, largeStr);
+		CompletableFuture<Void> listenerTask = websocketListener(largeStr, largeStr);
 		websocketClient(largeStr, largeStr);
+		listenerTask.join();
 	}
 	
 	@Test
@@ -200,22 +204,21 @@ public class SendReceiveTest {
         httpRequestSender("POST", largeStr, largeStr);
 	}
 	
-	private static void websocketClient(String msgExpected, String msgToSend) {
+	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
 		CompletableFuture<Boolean> receivedReply = new CompletableFuture<Boolean>();
 		
-		client.createConnectionAsync().thenAccept((channel) -> {
+		return client.createConnectionAsync().thenAccept((channel) -> {
 			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
 			channel.readAsync().thenAccept((bytesReceived) -> {
 				String msgReceived = new String(bytesReceived.array());
 				receivedReply.complete(true);
 				assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
 			});
-		}).join();
-		assertTrue("Did not receive message from websocket sender.", receivedReply.join());
+		}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.join()));
 	}
 	
-	private static void websocketListener(String msgExpected, String msgToSend) {
-		listener.acceptConnectionAsync().thenAcceptAsync((channel) -> {
+	private static CompletableFuture<Void> websocketListener(String msgExpected, String msgToSend) {
+		return listener.acceptConnectionAsync().thenAcceptAsync((channel) -> {
 			ByteBuffer bytesReceived = channel.readAsync().join();
 			assertEquals("Websocket listener did not receive the expected message.", msgExpected, new String(bytesReceived.array()));
 			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
@@ -233,7 +236,7 @@ public class SendReceiveTest {
         if (context.getRequest().getInputStream() != null) {
             try (Reader reader = new BufferedReader(new InputStreamReader(context.getRequest().getInputStream(), StringUtil.UTF8))) {
                 StringBuilder builder = new StringBuilder();
-                int c = 0;
+                int c;
                 while ((c = reader.read()) != -1) {
                     builder.append((char) c);
                 }
@@ -272,8 +275,7 @@ public class SendReceiveTest {
 		
 		String inputLine;
 		StringBuilder builder = new StringBuilder();
-		BufferedReader inStream = null;
-		inStream = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+		BufferedReader inStream = new BufferedReader(new InputStreamReader(conn.getInputStream()));
 		
 		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, conn.getResponseCode());
 		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, conn.getResponseMessage());

@@ -255,7 +255,6 @@ public class HybridConnectionListener implements AutoCloseable {
 	 * @param timeout The timeout duration for this openAsync operation
 	 * @return A CompletableFuture which completes when the control connection is
 	 *         established with the cloud service
-	 * @throws InvalidRelayOperationException 
 	 */
 	public CompletableFuture<Void> openAsync(Duration timeout) {
 		TimeoutHelper.throwIfNegativeArgument(timeout);
@@ -398,34 +397,36 @@ public class HybridConnectionListener implements AutoCloseable {
 	}
 
 	private CompletableFuture<Void> onCommandAsync(String message, ClientWebSocket controlWebSocket) throws URISyntaxException, UnsupportedEncodingException {
-		JSONObject jsonObj = new JSONObject(message);
-		ListenerCommand listenerCommand = new ListenerCommand(jsonObj);
-
-		if (listenerCommand.getAccept() != null) {
-			return this.onAcceptCommandAsync(listenerCommand.getAccept());
-		} else if (listenerCommand.getRequest() != null) {
-			return HybridHttpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
-		} else {
-			return CompletableFutureUtil.fromException(new IllegalArgumentException("Invalid HybridConnection command was received."));
-		}
+		return CompletableFuture.supplyAsync(() -> {
+			JSONObject jsonObj = new JSONObject(message);
+			return new ListenerCommand(jsonObj);
+		}).thenCompose(listenerCommand -> {
+			if (listenerCommand.getAccept() != null) {
+				return this.onAcceptCommandAsync(listenerCommand.getAccept());
+			} else if (listenerCommand.getRequest() != null) {
+				return HybridHttpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
+			} else {
+				return CompletableFutureUtil.fromException(new IllegalArgumentException("Invalid HybridConnection command was received."));
+			}
+		});
 	}
 
-	private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand) throws URISyntaxException, UnsupportedEncodingException {
-		URI rendezvousUri = new URI(acceptCommand.getAddress());
-		URI requestUri = this.generateAcceptRequestUri(rendezvousUri);
-
-		RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(this, requestUri,
-				acceptCommand.getId(), "GET", acceptCommand.getConnectHeaders());
-		listenerContext.getRequest().setRemoteAddress(acceptCommand.getRemoteEndpoint());
-
-		Function<RelayedHttpListenerContext, Boolean> acceptHandler = this.acceptHandler;
-		// TODO: setting shouldAccept as class variable or else it must be final in the
-		// block below, which is not the case
-		boolean shouldAccept = acceptHandler == null;
-
-		// TODO: trace
-//      RelayEventSource.Log.RelayListenerRendezvousStart(listenerContext.Listener, listenerContext.TrackingContext.TrackingId, acceptCommand.Address);
+	private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand) {
 		try {
+			URI rendezvousUri = new URI(acceptCommand.getAddress());
+			URI requestUri = this.generateAcceptRequestUri(rendezvousUri);
+
+			RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(this, requestUri,
+					acceptCommand.getId(), "GET", acceptCommand.getConnectHeaders());
+			listenerContext.getRequest().setRemoteAddress(acceptCommand.getRemoteEndpoint());
+
+			Function<RelayedHttpListenerContext, Boolean> acceptHandler = this.acceptHandler;
+
+			boolean shouldAccept = acceptHandler == null;
+
+			// TODO: trace
+//	      RelayEventSource.Log.RelayListenerRendezvousStart(listenerContext.Listener, listenerContext.TrackingContext.TrackingId, acceptCommand.Address);
+			
 			if (acceptHandler != null) {
 				// Invoke and await the user's AcceptHandler method
 				try {
@@ -468,41 +469,38 @@ public class HybridConnectionListener implements AutoCloseable {
 	}
 
 	private CompletableFuture<Void> completeAcceptAsync(RelayedHttpListenerContext listenerContext, URI rendezvousUri, boolean shouldAccept) {
-		try {
-			if (shouldAccept) {
-				synchronized (this.thisLock) {
-					WebSocketChannel rendezvousConnection = new WebSocketChannel(this.trackingContext);
+		CompletableFuture<Void> completeAcceptTask = new CompletableFuture<Void>();
+		
+		if (shouldAccept) {
+			synchronized (this.thisLock) {
+				WebSocketChannel rendezvousConnection = new WebSocketChannel(this.trackingContext);
 
-					if (this.closeCalled) {
-						// TODO: trace
-//                        RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.getTrackingContext().getTrackingId(), SR.ObjectClosedOrAborted);
-						return null;
-					}
-					return rendezvousConnection.getWebSocket().connectAsync(rendezvousUri).thenRun(() -> 
+				if (this.closeCalled) {
+					// TODO: trace
+//                    RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.getTrackingContext().getTrackingId(), SR.ObjectClosedOrAborted);
+					completeAcceptTask = CompletableFuture.completedFuture(null);
+				} else {
+					completeAcceptTask = rendezvousConnection.getWebSocket().connectAsync(rendezvousUri).thenRun(() -> 
 						this.connectionInputQueue.enqueueAndDispatch(rendezvousConnection, null, false));
 				}
-			} else {
-				// TODO: trace
-//                RelayEventSource.Log.RelayListenerRendezvousRejected(
-//                    listenerContext.TrackingContext, listenerContext.Response.StatusCode, listenerContext.Response.StatusDescription);
-				return CompletableFuture.completedFuture(null).thenCompose((empty) -> {
-					try {
-						return listenerContext.rejectAsync(rendezvousUri);
-					} catch (UnsupportedEncodingException | URISyntaxException | CompletionException e) {
-						// TODO Auto-generated catch block
-						throw new RuntimeException(e.getMessage());
-					}
-				});
 			}
-		} catch (Exception exception) {
+		} else {
 			// TODO: trace
-//		when (!Fx.IsFatal(exception)) {
-//            RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, exception);
-		} finally {
+//          RelayEventSource.Log.RelayListenerRendezvousRejected(
+//              listenerContext.TrackingContext, listenerContext.Response.StatusCode, listenerContext.Response.StatusDescription);
+			completeAcceptTask = listenerContext.rejectAsync(rendezvousUri);
+		}
+		
+		return completeAcceptTask.whenComplete((result, ex) -> {
+			if (ex != null) {
+				// TODO: trace
+//				when (!Fx.IsFatal(exception)) {
+//		            RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, exception);
+//				}
+			}
 			// TODO: trace
 //        	RelayEventSource.Log.RelayListenerRendezvousStop();
-		}
-		return CompletableFuture.completedFuture(null);
+		});
 	}
 
 	/**
@@ -604,8 +602,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		}
 
 		/**
-		 * Ensures connection of the control websocket, then disconnects it from the
-		 * cloud service
+		 * Ensures connection of the control websocket, then disconnects it from the cloud service
 		 * 
 		 * @param timeout The timeout to disconnect to cloud service within
 		 * @return Returns a completableFuture which completes when websocket connection

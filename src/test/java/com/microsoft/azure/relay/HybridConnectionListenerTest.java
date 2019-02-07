@@ -18,7 +18,7 @@ import org.junit.Test;
 public class HybridConnectionListenerTest {
 	// Max # simultaneous client connections = # of cores - 1
 	// Because one thread need to be reserved for listener
-	private static final int MAX_CONNECTIONS_COUNT = Runtime.getRuntime().availableProcessors() - 1;
+	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
@@ -47,9 +47,10 @@ public class HybridConnectionListenerTest {
 	public void acceptWebSocketConnectionTest() {
 		CompletableFuture<Boolean> checkSocketConnectionTask = new CompletableFuture<Boolean>();
 		CompletableFuture<HybridConnectionChannel> conn = listener.acceptConnectionAsync();
-		client.createConnectionAsync();
+		CompletableFuture<HybridConnectionChannel> clientConnectionTask = client.createConnectionAsync();
 		conn.thenAccept((connection) -> {
 			checkSocketConnectionTask.complete(true);
+			clientConnectionTask.thenAccept(clientConnection -> clientConnection.closeAsync());
 		});
 		assertTrue("Listener failed to accept connections from sender in webSocket mode.", checkSocketConnectionTask.join());
 	}
@@ -93,8 +94,7 @@ public class HybridConnectionListenerTest {
 		CompletableFuture<?>[] clientConnections = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		
 		CompletableFuture.runAsync(() -> {
-			int listenerConnectedCount = 0;
-			while (listenerConnectedCount < MAX_CONNECTIONS_COUNT) {
+			for (int listenerConnectedCount = 0; listenerConnectedCount < MAX_CONNECTIONS_COUNT; ++listenerConnectedCount) {
 				listener.acceptConnectionAsync().join();
 				if (++listenerConnectedCount >= MAX_CONNECTIONS_COUNT) {
 					listenersConnected.complete(listenerConnectedCount);
