@@ -44,9 +44,8 @@ public class SendReceiveTest {
 	@BeforeClass
 	public static void init() throws URISyntaxException {
 		tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(TestUtil.KEY_NAME, TestUtil.KEY);
-		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
 
-		
 		// Build the large string in small chunks because hardcoding a large string may not compile
 		StringBuilder builder = new StringBuilder();
 		String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -64,7 +63,7 @@ public class SendReceiveTest {
 	
 	@Before
 	public void createClient() throws URISyntaxException {
-		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+		client = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
 	}
 	
 	@Test
@@ -143,7 +142,7 @@ public class SendReceiveTest {
 				});
 			});
 			
-			HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING), tokenProvider);
+			HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
 			newClient.createConnectionAsync().thenAccept((socket) -> {
 				socket.sendAsync("hi").join();
 				socket.receiveMessageAsync().thenRun(() -> {
@@ -247,7 +246,7 @@ public class SendReceiveTest {
 	}
 	
 	private static void httpRequestSender(String method, String msgExpected, String msgToSend) throws IOException, InterruptedException, ExecutionException {
-		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAME_SPACE + TestUtil.CONNECTION_STRING);
+		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
 		urlBuilder.replace(0, 5, "https://");
 		URL url = new URL(urlBuilder.toString());
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
