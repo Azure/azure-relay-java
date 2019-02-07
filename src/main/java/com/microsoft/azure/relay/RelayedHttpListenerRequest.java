@@ -1,15 +1,15 @@
 package com.microsoft.azure.relay;
 
+import java.io.ByteArrayInputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
 public final class RelayedHttpListenerRequest {
-	private String httpMethod;
-	private URI url;
-	private ByteBuffer inputStream;
+	private final String httpMethod;
+	private final URI url;
+	private ByteArrayInputStream inputStream;
 	private Map<String, String> headers;
 	private boolean hasEntityBody;
 	private InetSocketAddress remoteEndPoint;
@@ -18,7 +18,7 @@ public final class RelayedHttpListenerRequest {
 		return hasEntityBody;
 	}
 
-	public void setHasEntityBody(boolean hasEntityBody) {
+	void setHasEntityBody(boolean hasEntityBody) {
 		this.hasEntityBody = hasEntityBody;
 	}
 
@@ -26,11 +26,11 @@ public final class RelayedHttpListenerRequest {
 		return httpMethod;
 	}
 
-	public ByteBuffer getInputStream() {
+	public ByteArrayInputStream getInputStream() {
 		return inputStream;
 	}
 
-	public void setInputStream(ByteBuffer inputStream) {
+	void setInputStream(ByteArrayInputStream inputStream) {
 		this.inputStream = inputStream;
 	}
 
@@ -46,7 +46,7 @@ public final class RelayedHttpListenerRequest {
 		return url;
 	}
 
-	public RelayedHttpListenerRequest(URI uri, String method, Map<String, String> requestHeaders) {
+	RelayedHttpListenerRequest(URI uri, String method, Map<String, String> requestHeaders) {
 		this.httpMethod = method;
 		this.url = uri;
 		this.inputStream = null;
@@ -54,20 +54,19 @@ public final class RelayedHttpListenerRequest {
 		requestHeaders.forEach((k, v) -> this.headers.put(k, v));
 	}
 
-	protected void setRemoteAddress(ListenerCommand.Endpoint remoteEndpoint) {
-		String remoteAddress = (remoteEndpoint == null) ? null : remoteEndpoint.getAddress();
-
-		if (!StringUtil.isNullOrEmpty(remoteAddress)) {
-			InetSocketAddress inetAddress = new InetSocketAddress(remoteEndpoint.getAddress(),
-					remoteEndpoint.getPort());
-
-			if (inetAddress != null) {
+	void setRemoteAddress(ListenerCommand.Endpoint remoteEndpoint) {
+		
+		if (remoteEndpoint != null) {
+			try {
+				InetSocketAddress inetAddress = new InetSocketAddress(remoteEndpoint.getAddress(), remoteEndpoint.getPort());
 				this.remoteEndPoint = inetAddress;
 			}
-			// TODO: trace
-//            else {
-//                RelayEventSource.Log.Warning(this, "Unable to parse 'remoteEndpoint.address'.");
-//            }
+			catch (Exception e) {
+				// TODO: trace
+//			      else {
+//			          RelayEventSource.Log.Warning(this, "Unable to parse 'remoteEndpoint.address'.");
+//			      }				
+			}
 		}
 	}
 }

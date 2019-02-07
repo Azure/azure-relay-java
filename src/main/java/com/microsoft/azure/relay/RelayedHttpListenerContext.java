@@ -14,10 +14,10 @@ import org.eclipse.jetty.http.HttpStatus;
 public class RelayedHttpListenerContext {
 	private static final Duration ACCEPT_TIMEOUT = Duration.ofSeconds(20);
 	private String cachedToString;
-	private RelayedHttpListenerRequest request;
-	private RelayedHttpListenerResponse response;
-	private TrackingContext trackingContext;
-	private HybridConnectionListener listener;
+	private final RelayedHttpListenerRequest request;
+	private final RelayedHttpListenerResponse response;
+	private final TrackingContext trackingContext;
+	private final HybridConnectionListener listener;
 
 	/**
 	 * @return Returns the request object that resembles the http request object in
@@ -77,11 +77,8 @@ public class RelayedHttpListenerContext {
 //            clientWebSocket.Options.AddSubProtocol(subProtocol);
 //        }
 
-		ClientWebSocket webSocket = new ClientWebSocket();
-		return CompletableFutureUtil.timedSupplyAsync(ACCEPT_TIMEOUT, () -> {
-			webSocket.connectAsync(rendezvousUri).join();
-			return webSocket;
-		});
+		ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext);
+		return webSocket.connectAsync(rendezvousUri, ACCEPT_TIMEOUT).thenApply(result -> webSocket);
 	}
 
 	protected CompletableFuture<Void> rejectAsync(URI rendezvousUri)
@@ -98,11 +95,8 @@ public class RelayedHttpListenerContext {
 				.append(URLEncoder.encode(this.response.getStatusDescription(), StringUtil.UTF8.name()));
 		URI rejectURI = new URI(builder.toString());
 
-		ClientWebSocket webSocket = new ClientWebSocket();
-
-		return CompletableFutureUtil.timedRunAsync(ACCEPT_TIMEOUT, () -> {
-			webSocket.connectAsync(rejectURI).join();
-		}).thenCompose((connectionRes) -> webSocket.closeAsync());
+		ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext);
+		return webSocket.connectAsync(rejectURI, ACCEPT_TIMEOUT).thenCompose((result) -> webSocket.closeAsync());
 	}
 
 	private void flowSubProtocol() {
