@@ -18,7 +18,7 @@ import org.junit.Test;
 public class HybridConnectionListenerTest {
 	// Max # simultaneous client connections = # of cores - 1
 	// Because one thread need to be reserved for listener
-	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() + 1);
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
@@ -51,7 +51,8 @@ public class HybridConnectionListenerTest {
 		conn.thenAccept((connection) -> {
 			checkSocketConnectionTask.complete(true);
 			clientConnectionTask.thenAccept(clientConnection -> clientConnection.closeAsync());
-		});
+			connection.closeAsync();
+		}).join();
 		assertTrue("Listener failed to accept connections from sender in webSocket mode.", checkSocketConnectionTask.join());
 	}
 	
@@ -89,35 +90,49 @@ public class HybridConnectionListenerTest {
 	@Test
 	public void connectMultipleClientsTest() {
 		AtomicInteger clientConnectedCount = new AtomicInteger(0);
-		CompletableFuture<Integer> listenersConnected = new CompletableFuture<Integer>();
+		AtomicInteger listenersConnectedCount = new AtomicInteger(0);
+		CompletableFuture<Boolean> allClientsConnected = new CompletableFuture<Boolean>();
+		CompletableFuture<Boolean> allListenersConnected = new CompletableFuture<Boolean>();
 
+		CompletableFuture<?>[] listenerConnections = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		CompletableFuture<?>[] clientConnections = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		
-		CompletableFuture.runAsync(() -> {
-			for (int listenerConnectedCount = 0; listenerConnectedCount < MAX_CONNECTIONS_COUNT; ++listenerConnectedCount) {
-				listener.acceptConnectionAsync().join();
-				if (++listenerConnectedCount >= MAX_CONNECTIONS_COUNT) {
-					listenersConnected.complete(listenerConnectedCount);
-				}
+		CompletableFutureUtil.timedRunAsync(Duration.ofSeconds(MAX_CONNECTIONS_COUNT), () -> {
+			for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
+				listenerConnections[i] = listener.acceptConnectionAsync();
+				listenerConnections[i].thenRun(() -> {
+					System.out.println("listener accepted");
+					if (listenersConnectedCount.incrementAndGet() == MAX_CONNECTIONS_COUNT) {
+						allListenersConnected.complete(true);
+					}
+				});
 			}
 		});
-		
+
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
-			clientConnections[i] = new HybridConnectionClient(CONNECTION_URI, tokenProvider).createConnectionAsync().thenApply((connection) -> {
-				clientConnectedCount.incrementAndGet();
-				return connection;
+			clientConnections[i] = new HybridConnectionClient(CONNECTION_URI, tokenProvider).createConnectionAsync();
+			clientConnections[i].thenRun(() -> {
+				if (clientConnectedCount.incrementAndGet() == MAX_CONNECTIONS_COUNT) {
+					allClientsConnected.complete(true);
+				}
 			});
 		}
 		
-		CompletableFuture.allOf(clientConnections).thenRun(() -> {
-			assertEquals(MAX_CONNECTIONS_COUNT, clientConnectedCount.get());
-			assertEquals(MAX_CONNECTIONS_COUNT, listenersConnected.join().intValue());
-			
-			for (CompletableFuture<?> websocketFutures : clientConnections) {
-				HybridConnectionChannel websocket = (HybridConnectionChannel) websocketFutures.join();
-				assertTrue(websocket.isOpen());
-				websocket.closeAsync().join();
-			}
+		CompletableFutureUtil.timedRunAsync(null, () -> {
+			CompletableFuture.allOf(allClientsConnected, allListenersConnected).thenRun(() -> {
+				assertEquals(MAX_CONNECTIONS_COUNT, clientConnectedCount.get());
+				assertEquals(MAX_CONNECTIONS_COUNT, listenersConnectedCount.get());
+
+				for (CompletableFuture<?> listenerFuture : listenerConnections) {
+					HybridConnectionChannel connection = (HybridConnectionChannel) listenerFuture.join();
+					assertTrue(connection.isOpen());
+					connection.closeAsync();
+				}
+				for (CompletableFuture<?> clientFuture : clientConnections) {
+					HybridConnectionChannel connection = (HybridConnectionChannel) clientFuture.join();
+					connection.closeAsync();
+				}
+			}).join();
 		}).join();
 	}
 }

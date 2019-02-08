@@ -15,6 +15,7 @@ import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint {
+	private final AsyncSemaphore connectSemaphore = new AsyncSemaphore((AutoShutdownScheduledExecutor.EXECUTOR.getPoolSize() / 2 ) + 1);
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
 	private Session session;
@@ -101,7 +102,7 @@ class ClientWebSocket extends Endpoint {
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 		
-		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+		return this.connectSemaphore.lockAsync(timeout).thenAccept((lockRelease) -> {
 			try {
 				if (config != null) {
 					this.container.connectToServer(this, config, uri);
@@ -113,6 +114,8 @@ class ClientWebSocket extends Endpoint {
 					throw new RuntimeException(e.getCause());
 				}
 				throw new RuntimeIOException(e);
+			} finally {
+				lockRelease.release();
 			}
 			
 			if (this.session == null || !this.session.isOpen()) {

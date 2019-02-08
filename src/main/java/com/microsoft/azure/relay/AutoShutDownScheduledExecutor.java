@@ -22,6 +22,10 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 	private AutoShutdownScheduledExecutor(int size) {
 		corePoolSize = size;
 	}
+	
+	int getPoolSize() {
+		return this.corePoolSize;
+	}
 
 	@Override
 	public <T> Future<T> submit(Callable<T> task) {
