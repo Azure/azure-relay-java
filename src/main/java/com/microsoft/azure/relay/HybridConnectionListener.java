@@ -473,7 +473,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		
 		if (shouldAccept) {
 			synchronized (this.thisLock) {
-				WebSocketChannel rendezvousConnection = new WebSocketChannel(this.trackingContext);
+				WebSocketChannel rendezvousConnection = new WebSocketChannel(listenerContext.getTrackingContext());
 
 				if (this.closeCalled) {
 					// TODO: trace

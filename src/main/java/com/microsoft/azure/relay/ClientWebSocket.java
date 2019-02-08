@@ -165,6 +165,10 @@ class ClientWebSocket extends Endpoint {
 			
 			do {
 				MessageFragment fragment = fragmentQueue.dequeueAsync().join();
+				if (fragment == null) {
+					break;
+				}
+				
 				messageSize += fragment.getBytes().length;
 				fragments.add(fragment.getBytes());
 				receivedWholeMsg = fragment.isEnd();

@@ -7,7 +7,9 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.jetty.http.HttpStatus;
@@ -35,7 +37,9 @@ public class HybridConnectionListenerTest {
 	
 	@AfterClass
 	public static void cleanup() {
-		listener.closeAsync().join();
+		if (listener != null) {
+			listener.closeAsync().join();
+		}
 	}
 	
 	@Test
@@ -87,37 +91,105 @@ public class HybridConnectionListenerTest {
 	}
 	
 	@Test
-	public void connectMultipleClientsTest() {
+	public void connectMultipleClientsTest() throws URISyntaxException {
 		AtomicInteger clientConnectedCount = new AtomicInteger(0);
-		CompletableFuture<Integer> listenersConnected = new CompletableFuture<Integer>();
+		AtomicInteger listenerAcceptCount = new AtomicInteger(0);
 
-		CompletableFuture<?>[] clientConnections = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
-		
-		CompletableFuture.runAsync(() -> {
-			for (int listenerConnectedCount = 0; listenerConnectedCount < MAX_CONNECTIONS_COUNT; ++listenerConnectedCount) {
-				listener.acceptConnectionAsync().join();
-				if (++listenerConnectedCount >= MAX_CONNECTIONS_COUNT) {
-					listenersConnected.complete(listenerConnectedCount);
-				}
-			}
-		});
-		
+		// Set up listener to accept MAX_CONNECTIONS_COUNT connections async
+		CompletableFuture<?>[] listenerConnectFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
-			clientConnections[i] = new HybridConnectionClient(CONNECTION_URI, tokenProvider).createConnectionAsync().thenApply((connection) -> {
-				clientConnectedCount.incrementAndGet();
-				return connection;
-			});
+			int idx = i;
+			listenerConnectFutures[i] = listener.acceptConnectionAsync()
+				.thenApply(listenerConnection -> {
+					System.out.println(idx + " Listener connection " + listenerConnection.getTrackingContext().getTrackingId() + " accepted");
+					listenerAcceptCount.incrementAndGet();
+					return listenerConnection;
+				});
 		}
 		
-		CompletableFuture.allOf(clientConnections).thenRun(() -> {
-			assertEquals(MAX_CONNECTIONS_COUNT, clientConnectedCount.get());
-			assertEquals(MAX_CONNECTIONS_COUNT, listenersConnected.join().intValue());
+		// Start up MAX_CONNECTIONS_COUNT client connections async
+		CompletableFuture<?>[] clientConnectFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];		
+		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
+			int idx = i;
+			Instant start = Instant.now();
+			System.out.println(idx + " Sender being created");
+			HybridConnectionClient hybridConnectionClient = new HybridConnectionClient(new URI(CONNECTION_URI + "?foo=bar"), tokenProvider);
+			clientConnectFutures[i] = hybridConnectionClient.createConnectionAsync()
+				.thenApply((connection) -> {
+					System.out.println(idx + " Sender connected: " + connection.getTrackingContext().getTrackingId() + " after " + Duration.between(start, Instant.now()).toMillis());
+					clientConnectedCount.incrementAndGet();
+					return connection;
+				})
+				.whenComplete((result, ex) -> {
+					if (ex != null) {
+						System.out.println(idx + " Sender error: " + ex);
+					}
+				});
+		}
+		
+		CompletableFuture.allOf(clientConnectFutures).join();
+		CompletableFuture.allOf(listenerConnectFutures).join();
+		assertEquals(MAX_CONNECTIONS_COUNT, clientConnectedCount.get());
+		assertEquals(MAX_CONNECTIONS_COUNT, listenerAcceptCount.get());
+				
+		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
+			HybridConnectionChannel listenerConnection = (HybridConnectionChannel) listenerConnectFutures[i].join();
+			int idx = i;
+			listenerConnection.readAsync(Duration.ofSeconds(20))
+				.thenCompose(readBuffer -> {
+					System.out.println(idx + " Listener connection " + listenerConnection.getTrackingContext().getTrackingId() + " received " + readBuffer.remaining() + " byte(s)");
+					return listenerConnection.writeAsync(readBuffer);
+				});
+		}
 			
-			for (CompletableFuture<?> websocketFutures : clientConnections) {
-				HybridConnectionChannel websocket = (HybridConnectionChannel) websocketFutures.join();
-				assertTrue(websocket.isOpen());
-				websocket.closeAsync().join();
-			}
-		}).join();
+		CompletableFuture<?>[] clientSendFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
+		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
+			HybridConnectionChannel clientConnection = (HybridConnectionChannel) clientConnectFutures[i].join();
+			assertTrue(clientConnection.isOpen());
+			byte[] array = new byte[1];
+			array[0] = (byte)i;
+			final int idx = i;
+			clientSendFutures[i] = clientConnection.writeAsync(ByteBuffer.wrap(array))
+				.thenCompose(unused -> clientConnection.readAsync(Duration.ofSeconds(20)))
+				.thenAccept(readBuffer -> {
+					System.out.println(idx + " Sender connection " + clientConnection.getTrackingContext().getTrackingId() + " received " + readBuffer.remaining() + " byte(s)");
+					assertEquals(idx + " Sender connection bytes read", 1, readBuffer.remaining());
+					assertEquals(idx + " Sender connection byte value", idx, readBuffer.get());
+				});
+		}
+
+		CompletableFuture.allOf(clientSendFutures).join();
+		
+		// Close client side connections async
+		CompletableFuture<?>[] listenerCloseFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
+		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
+			HybridConnectionChannel listenerConnection = (HybridConnectionChannel) listenerConnectFutures[i].join();
+			int idx = i;
+			String trackingId = listenerConnection.getTrackingContext().getTrackingId();
+			listenerCloseFutures[i] = listenerConnection.readAsync(Duration.ofSeconds(20))
+				.thenCompose(readBuffer -> {
+					System.out.println(idx + " Listener connection " + trackingId + " received " + readBuffer.remaining() + " byte(s)");
+					return listenerConnection.closeAsync()
+						.whenComplete((result, ex) -> {
+							System.out.println(idx + " Listener connection " + trackingId + " closed " + ex);						
+						});
+				});
+		}
+
+		// Close client side connections async
+		CompletableFuture<?>[] clientCloseFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
+		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
+			HybridConnectionChannel clientConnection = (HybridConnectionChannel) clientConnectFutures[i].join();
+			int idx = i;
+			String trackingId = clientConnection.getTrackingContext().getTrackingId();
+			System.out.println(idx + " Sender connection " + trackingId + " closing");						
+			clientCloseFutures[i] = clientConnection.closeAsync()
+				.whenComplete((result, ex) -> {
+					System.out.println(idx + " Sender connection " + trackingId + " closed " + ex);						
+				});
+		}
+		
+		CompletableFuture.allOf(clientCloseFutures).join();
+		CompletableFuture.allOf(listenerCloseFutures).join();
 	}
 }
