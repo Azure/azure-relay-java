@@ -10,6 +10,7 @@ import java.util.concurrent.TimeoutException;
 import org.junit.*;
 
 public class InputQueueTest {
+	private static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	private static InputQueue<Integer> queue;
 	private static Integer num1 = 11;
 	private static Integer num2 = 22;
@@ -17,7 +18,7 @@ public class InputQueueTest {
 	
 	@Before
 	public void init() {
-		queue = new InputQueue<Integer>();
+		queue = new InputQueue<Integer>(EXECUTOR);
 	}
 	
 	@Test

@@ -14,12 +14,12 @@ import java.util.function.Supplier;
 final class CompletableFutureUtil {
 	static AtomicInteger tasksRunning = new AtomicInteger(0);
 
-	static CompletableFuture<Void> delayAsync(Duration delay) {
+	static CompletableFuture<Void> delayAsync(Duration delay, AutoShutdownScheduledExecutor executor) {
 		if (delay == null || delay.isZero() || delay.isNegative()) {
 			return CompletableFuture.completedFuture(null);
 		}
         CompletableFuture<Void> future = new CompletableFuture<Void>();
-        AutoShutdownScheduledExecutor.EXECUTOR.schedule(() -> {
+        executor.schedule(() -> {
         	future.complete(null);
         }, delay.toMillis(), TimeUnit.MILLISECONDS);
         return future;
@@ -31,28 +31,28 @@ final class CompletableFutureUtil {
 		return future;
 	}
 
-	static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable) {
+	static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable, AutoShutdownScheduledExecutor executor) {
 
-		return futureToCompletableFuture(timeout, runnable);
+		return futureToCompletableFuture(timeout, runnable, executor);
 	}
 
-	static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier) {
+	static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier, AutoShutdownScheduledExecutor executor) {
 		Callable<T> callable = new Callable<T>() {
 			@Override
 			public T call() throws Exception {
 				return supplier.get();
 			}
 		};
-		return futureToCompletableFuture(timeout, callable);
+		return futureToCompletableFuture(timeout, callable, executor);
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task) {
+	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task, AutoShutdownScheduledExecutor executor) {
 		TimeoutHelper.throwIfNegativeArgument(timeout);
 		CompletableFuture<T> taskCF = new CompletableFuture<T>();
 		AtomicReference<ScheduledFuture<?>> cancelFuture = new AtomicReference<ScheduledFuture<?>>(null);
 
-		Future<?> taskFuture = AutoShutdownScheduledExecutor.EXECUTOR.submit(() -> {
+		Future<?> taskFuture = executor.submit(() -> {
 			T taskResult = null;
 
 			try {
@@ -72,7 +72,7 @@ final class CompletableFutureUtil {
 		});
 
 		if (timeout != null) {
-			cancelFuture.set(AutoShutdownScheduledExecutor.EXECUTOR.schedule(() -> {
+			cancelFuture.set(executor.schedule(() -> {
 				taskCF.completeExceptionally(
 						new TimeoutException("Could not complete CompletableFuture within the timeout duration."));
 				taskFuture.cancel(true);

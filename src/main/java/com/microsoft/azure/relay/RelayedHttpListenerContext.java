@@ -78,7 +78,7 @@ public class RelayedHttpListenerContext {
 //            clientWebSocket.Options.AddSubProtocol(subProtocol);
 //        }
 
-		ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext);
+		ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext, HybridConnectionListener.EXECUTOR);
 		return webSocket.connectAsync(rendezvousUri, ACCEPT_TIMEOUT).thenApply(result -> webSocket);
 	}
 
@@ -97,7 +97,7 @@ public class RelayedHttpListenerContext {
 					.append(URLEncoder.encode(this.response.getStatusDescription(), StringUtil.UTF8.name()));
 			URI rejectURI = new URI(builder.toString());
 			
-			ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext);
+			ClientWebSocket webSocket = new ClientWebSocket(this.trackingContext, HybridConnectionListener.EXECUTOR);
 			return webSocket.connectAsync(rejectURI, ACCEPT_TIMEOUT).thenCompose((result) -> webSocket.closeAsync());
 		} catch (IOException | URISyntaxException e) {
 			return CompletableFutureUtil.fromException(e);

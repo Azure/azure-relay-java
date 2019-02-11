@@ -5,24 +5,35 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
-	public static final AutoShutdownScheduledExecutor EXECUTOR = new AutoShutdownScheduledExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));
+public class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
+	//public static final AutoShutdownScheduledExecutor EXECUTOR = Create();
+	static final ThreadFactory THREAD_FACTORY = new CustomThreadFactory("autoshutdown");
 	private final Object thisLock = new Object();
 	private final int corePoolSize;
 	private int refCount = 0;
 	private ScheduledThreadPoolExecutor innerExecutor;
 
-	private AutoShutdownScheduledExecutor(int size) {
+	AutoShutdownScheduledExecutor(int size) {
 		corePoolSize = size;
 	}
+	
+	public int getCorePoolSize() {
+		return this.corePoolSize;
+	}
 
+	static AutoShutdownScheduledExecutor Create() {
+		return new AutoShutdownScheduledExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 2));
+	}
+	
 	@Override
 	public <T> Future<T> submit(Callable<T> task) {
 		this.incrementRefCount();
@@ -171,7 +182,7 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 		synchronized (this.thisLock) {
 			refCount++;
 			if (refCount == 1) {
-				innerExecutor = new ScheduledThreadPoolExecutor(corePoolSize);
+				innerExecutor = new ScheduledThreadPoolExecutor(corePoolSize, THREAD_FACTORY);
 			}
 		}
 	}
@@ -241,6 +252,24 @@ class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 		@Override
 		public boolean isDone() {
 			return this.innerFuture.isDone();
+		}
+	}
+
+	private static class CustomThreadFactory implements ThreadFactory {
+
+		final String prefix;
+		final ThreadFactory innerFactory;
+		
+		CustomThreadFactory(String prefix) {
+			this.prefix = prefix;
+			this.innerFactory = Executors.defaultThreadFactory(); 
+		}
+		
+		@Override
+		public Thread newThread(Runnable paramRunnable) {
+			Thread thread = this.innerFactory.newThread(paramRunnable);
+			thread.setName(this.prefix + "-" + thread.getName());
+			return thread;
 		}
 	}
 }

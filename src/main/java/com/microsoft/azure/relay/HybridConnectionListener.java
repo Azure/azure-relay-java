@@ -25,6 +25,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.json.JSONObject;
 
 public class HybridConnectionListener implements AutoCloseable {
+	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	private final InputQueue<HybridConnectionChannel> connectionInputQueue;
 	private final ControlConnection controlConnection;
 	private final Object thisLock = new Object();
@@ -151,7 +152,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		this.tokenProvider = tokenProvider;
 		this.operationTimeout = RelayConstants.DEFAULT_OPERATION_TIMEOUT;
 		this.trackingContext = TrackingContext.create(this.address);
-		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>();
+		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
 		this.controlConnection = new ControlConnection(this);
 	}
 
@@ -232,7 +233,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		this.tokenProvider = builder.createTokenProvider();
 		this.operationTimeout = builder.getOperationTimeout();
 		this.trackingContext = TrackingContext.create(this.address);
-		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>();
+		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
 		this.controlConnection = new ControlConnection(this);
 	}
 
@@ -296,41 +297,42 @@ public class HybridConnectionListener implements AutoCloseable {
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
 		try {
 			CompletableFutureUtil.timedRunAsync(timeout, () -> {
-				List<HybridConnectionChannel> clients;
-				synchronized (this.thisLock) {
-					if (this.closeCalled) {
-						return;
-					}
-
-					// TODO: trace
-//                    RelayEventSource.Log.ObjectClosing(this);
-					this.closeCalled = true;
-
-					// If the input queue is empty this completes all pending waiters with null and
-					// prevents any new items being added to the input queue.
-					this.connectionInputQueue.shutdown();
-
-					// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
-					// connectionInputQueue.Shutdown().
-					clients = new ArrayList<HybridConnectionChannel>(this.connectionInputQueue.getPendingCount());
-					HybridConnectionChannel webSocket;
-					do {
-						webSocket = this.connectionInputQueue.dequeueAsync().join();
-
-						if (webSocket != null) {
-							clients.add(webSocket);
+					List<HybridConnectionChannel> clients;
+					synchronized (this.thisLock) {
+						if (this.closeCalled) {
+							return;
 						}
-					} while (webSocket != null);
-
-					this.isOnline = false;
-				}
-
-				clients.forEach(client -> client.closeAsync(
-						new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
-
-				// TODO: trace
-//                RelayEventSource.Log.ObjectClosed(this);
-			}).join();
+	
+						// TODO: trace
+	//                    RelayEventSource.Log.ObjectClosing(this);
+						this.closeCalled = true;
+	
+						// If the input queue is empty this completes all pending waiters with null and
+						// prevents any new items being added to the input queue.
+						this.connectionInputQueue.shutdown();
+	
+						// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
+						// connectionInputQueue.Shutdown().
+						clients = new ArrayList<HybridConnectionChannel>(this.connectionInputQueue.getPendingCount());
+						HybridConnectionChannel webSocket;
+						do {
+							webSocket = this.connectionInputQueue.dequeueAsync().join();
+	
+							if (webSocket != null) {
+								clients.add(webSocket);
+							}
+						} while (webSocket != null);
+	
+						this.isOnline = false;
+					}
+	
+					clients.forEach(client -> client.closeAsync(
+							new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
+	
+					// TODO: trace
+	//                RelayEventSource.Log.ObjectClosed(this);
+				},
+				EXECUTOR).join();
 		}
 		// TODO: trace
 		catch (Exception e) {
@@ -473,7 +475,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		
 		if (shouldAccept) {
 			synchronized (this.thisLock) {
-				WebSocketChannel rendezvousConnection = new WebSocketChannel(this.trackingContext);
+				WebSocketChannel rendezvousConnection = new WebSocketChannel(listenerContext.getTrackingContext(), EXECUTOR);
 
 				if (this.closeCalled) {
 					// TODO: trace
@@ -567,7 +569,7 @@ public class HybridConnectionListener implements AutoCloseable {
 			this.sendAsyncLock = new AsyncLock();
 			this.tokenRenewer = new TokenRenewer(this.listener, this.address.toString(),
 					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
-			this.webSocket = new ClientWebSocket(trackingContext);
+			this.webSocket = new ClientWebSocket(trackingContext, EXECUTOR);
 		}
 
 		/**
@@ -579,7 +581,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		 *         is established between the control websocket and the cloud service
 		 */
 		public CompletableFuture<Void> openAsync(Duration timeout) {
-			// Esstablish a WebSocket connection right now so we can detect any fatal errors
+			// Establish a WebSocket connection right now so we can detect any fatal errors
 			return CompletableFuture.runAsync(() -> {
 				CompletableFuture<Void> connectTask = null;
 				boolean success = false;
@@ -614,7 +616,7 @@ public class HybridConnectionListener implements AutoCloseable {
 				this.tokenRenewer.close();
 
 				if (this.connectAsyncTask != null) {
-					 this.sendAsyncLock.lockAsync(duration).thenCompose((lockRelease) -> {
+					 this.sendAsyncLock.acquireAsync(duration, EXECUTOR).thenCompose((lockRelease) -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");
 						
 						return this.webSocket.closeAsync(reason).whenComplete((res, ex) -> {
@@ -635,14 +637,14 @@ public class HybridConnectionListener implements AutoCloseable {
 		 * if it exists
 		 * 
 		 * @param command The Listener command to be sent
-		 * @param buffer  The messge body to be sent, null if it doesn't exist
+		 * @param buffer  The message body to be sent, null if it doesn't exist
 		 * @param timeout The timeout to send within
 		 * @return Returns a completableFuture which completes when the command and
 		 *         stream are finished sending
 		 */
 		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
 
-		    return this.sendAsyncLock.lockAsync(timeout).thenCompose((lockRelease) -> {
+		    return this.sendAsyncLock.acquireAsync(timeout, EXECUTOR).thenCompose((lockRelease) -> {
 		        CompletableFuture<Void> future = this.ensureConnectTask(timeout).thenCompose((unused) -> {
 		            String json = command.getResponse().toJsonString();
 		            return this.webSocket.writeAsync(json, timeout, WriteMode.TEXT);
@@ -697,7 +699,7 @@ public class HybridConnectionListener implements AutoCloseable {
 			try {
 				this.listener.throwIfDisposed();
 				
-				CompletableFuture<Void> delayTask = CompletableFutureUtil.delayAsync(CONNECTION_DELAY_INTERVALS[this.connectDelayIndex]);
+				CompletableFuture<Void> delayTask = CompletableFutureUtil.delayAsync(CONNECTION_DELAY_INTERVALS[this.connectDelayIndex], EXECUTOR);
 				CompletableFuture<SecurityToken> token = this.tokenRenewer.getTokenAsync();
 
 				// Set the authentication in request header

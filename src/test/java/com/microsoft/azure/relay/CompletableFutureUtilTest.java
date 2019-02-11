@@ -7,9 +7,11 @@ import org.junit.After;
 import org.junit.Test;
 
 public class CompletableFutureUtilTest {
-	private static boolean testBool = false;
+	private static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	private static final int SHORT_MS = 20;
 	private static final int LONG_MS = 40;
+	private static boolean testBool = false;
+
 	
 	@After
 	public void resetBool() {
@@ -23,7 +25,7 @@ public class CompletableFutureUtilTest {
 				Thread.sleep(SHORT_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
-		}).join();
+		}, EXECUTOR).join();
 		assertTrue(testBool);
 	}
 	
@@ -34,7 +36,7 @@ public class CompletableFutureUtilTest {
 				Thread.sleep(LONG_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
-		}).join();
+		}, EXECUTOR).join();
 		assertFalse(testBool);
 	}
 	
@@ -45,7 +47,7 @@ public class CompletableFutureUtilTest {
 				Thread.sleep(SHORT_MS);
 				testBool = true;
 			} catch (InterruptedException e) { }
-		}).join();
+		}, EXECUTOR).join();
 		assertTrue(testBool);
 	}
 	
@@ -56,7 +58,7 @@ public class CompletableFutureUtilTest {
 				Thread.sleep(SHORT_MS);
 			} catch (InterruptedException e) { }
 			return true;
-		}).join());
+		}, EXECUTOR).join());
 	}
 	
 	@Test (expected = java.util.concurrent.CompletionException.class)
@@ -66,7 +68,7 @@ public class CompletableFutureUtilTest {
 				Thread.sleep(LONG_MS);
 			} catch (InterruptedException e) { }
 			return true;
-		}).join(), true);
+		}, EXECUTOR).join(), true);
 	}
 	
 	@Test
@@ -76,6 +78,6 @@ public class CompletableFutureUtilTest {
 				Thread.sleep(SHORT_MS);
 			} catch (InterruptedException e) { }
 			return true;
-		}).join());
+		}, EXECUTOR).join());
 	}
 }

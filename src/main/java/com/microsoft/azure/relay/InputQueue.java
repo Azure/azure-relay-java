@@ -12,6 +12,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 final class InputQueue<T> {
+	private final AutoShutdownScheduledExecutor executor;
 	private final ItemQueue itemQueue;
 	private final Queue<CompletableFuture<T>> readerQueue;
 
@@ -40,7 +41,8 @@ final class InputQueue<T> {
 		this.disposeItemCallback = callback;
 	}
 
-	InputQueue() {
+	InputQueue(AutoShutdownScheduledExecutor executor) {
+		this.executor = executor;		
 		this.itemQueue = new ItemQueue();
 		this.readerQueue = new LinkedList<CompletableFuture<T>>();
 		this.queueState = QueueState.OPEN;
@@ -83,7 +85,7 @@ final class InputQueue<T> {
 		CompletableFuture<T> reader = new CompletableFuture<T>();
 
 		if (timeout != null) {
-			Future<?> cancelTask = AutoShutdownScheduledExecutor.EXECUTOR.schedule(() -> {
+			Future<?> cancelTask = executor.schedule(() -> {
 				if (this.removeReader(reader)) {
 					reader.completeExceptionally(new TimeoutException("This InputQueue item could not complete in time."));
 				}
