@@ -15,7 +15,7 @@ import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint {
-	private static final AsyncSemaphore CLIENT_THROTTLE = new AsyncSemaphore((AutoShutdownScheduledExecutor.EXECUTOR.getCorePoolSize()) + 1);
+	private static final AsyncSemaphore CLIENT_THROTTLE = new AsyncSemaphore((AutoShutdownScheduledExecutor.EXECUTOR.getCorePoolSize() / 2) + 1);
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
 	private Session session;
