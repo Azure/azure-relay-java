@@ -15,6 +15,7 @@ import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint {
+	private static final AsyncSemaphore CLIENT_THROTTLE = new AsyncSemaphore((AutoShutdownScheduledExecutor.EXECUTOR.getCorePoolSize()) + 1);
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
 	private Session session;
@@ -96,28 +97,35 @@ class ClientWebSocket extends Endpoint {
 	 *                             within the given timeout
 	 */
 	CompletableFuture<Void> connectAsync(URI uri, Duration timeout, ClientEndpointConfig config) {
+		System.out.println(Thread.currentThread().getName() + " ClientWebSocket.connectAsync() begin");
 		if (this.isOpen()) {
 			return CompletableFutureUtil.fromException(new RuntimeIOException("This connection is already connected."));
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
-		
-		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
-			try {
-				if (config != null) {
-					this.container.connectToServer(this, config, uri);
-				} else {
-					this.container.connectToServer(this, uri);
+					
+		return CLIENT_THROTTLE.lockAsync(timeout).thenCompose((lockRelease) -> {			
+			System.out.println(Thread.currentThread().getName() + " ClientWebSocket.connectAsync() acquired throttle. count: " + CLIENT_THROTTLE.getAvailableCount());
+			return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+				try {
+					System.out.println(Thread.currentThread().getName() + " ClientWebSocket.connectAsync() calling connectToServer");
+					if (config != null) {
+						this.container.connectToServer(this, config, uri);
+					} else {
+						this.container.connectToServer(this, uri);
+					}
+				} catch (DeploymentException | IOException e) {
+					if (e.getCause() instanceof UpgradeException) {
+						throw new RuntimeException(e.getCause());
+					}
+					throw new RuntimeIOException(e);
+				} finally {
+					lockRelease.release();
 				}
-			} catch (DeploymentException | IOException e) {
-				if (e.getCause() instanceof UpgradeException) {
-					throw new RuntimeException(e.getCause());
+				
+				if (this.session == null || !this.session.isOpen()) {
+					throw new RuntimeIOException("connection to the server failed.");
 				}
-				throw new RuntimeIOException(e);
-			}
-			
-			if (this.session == null || !this.session.isOpen()) {
-				throw new RuntimeIOException("connection to the server failed.");
-			}
+			});
 		});
 	}
 
@@ -167,8 +175,7 @@ class ClientWebSocket extends Endpoint {
 				MessageFragment fragment = fragmentQueue.dequeueAsync().join();
 				if (fragment == null) {
 					break;
-				}
-				
+				}				
 				messageSize += fragment.getBytes().length;
 				fragments.add(fragment.getBytes());
 				receivedWholeMsg = fragment.isEnd();

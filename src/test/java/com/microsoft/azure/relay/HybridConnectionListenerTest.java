@@ -20,7 +20,7 @@ import org.junit.Test;
 public class HybridConnectionListenerTest {
 	// Max # simultaneous client connections = # of cores - 1
 	// Because one thread need to be reserved for listener
-	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors());
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
@@ -101,7 +101,7 @@ public class HybridConnectionListenerTest {
 			int idx = i;
 			listenerConnectFutures[i] = listener.acceptConnectionAsync()
 				.thenApply(listenerConnection -> {
-					System.out.println(idx + " Listener connection " + listenerConnection.getTrackingContext().getTrackingId() + " accepted");
+					System.out.println(Thread.currentThread().getName() + " Listener connection " + idx + " " + listenerConnection.getTrackingContext().getTrackingId() + " accepted");
 					listenerAcceptCount.incrementAndGet();
 					return listenerConnection;
 				});
@@ -112,11 +112,11 @@ public class HybridConnectionListenerTest {
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
 			int idx = i;
 			Instant start = Instant.now();
-			System.out.println(idx + " Sender being created");
+			System.out.println(Thread.currentThread().getName() + " Sender" + idx + " connecting");
 			HybridConnectionClient hybridConnectionClient = new HybridConnectionClient(new URI(CONNECTION_URI + "?foo=bar"), tokenProvider);
 			clientConnectFutures[i] = hybridConnectionClient.createConnectionAsync()
-				.thenApply((connection) -> {
-					System.out.println(idx + " Sender connected: " + connection.getTrackingContext().getTrackingId() + " after " + Duration.between(start, Instant.now()).toMillis());
+				.thenApplyAsync((connection) -> {
+					System.out.println(Thread.currentThread().getName() + " Sender" + idx + " connected: " + connection.getTrackingContext().getTrackingId() + " after " + Duration.between(start, Instant.now()).toMillis());
 					clientConnectedCount.incrementAndGet();
 					return connection;
 				})

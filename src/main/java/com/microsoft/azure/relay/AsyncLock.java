@@ -1,8 +1,15 @@
 package com.microsoft.azure.relay;
 
-class AsyncLock extends AsyncSemaphore {
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
-	public AsyncLock() {
-		super(0, 1);
+class AsyncLock extends AsyncSemaphore {
+	AsyncLock() {
+		super(1);
+	}
+
+	boolean isLocked() {
+		return this.getAvailableCount() == 0;
 	}
 }

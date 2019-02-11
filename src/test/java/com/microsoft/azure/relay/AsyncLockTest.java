@@ -11,7 +11,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 
-import com.microsoft.azure.relay.AsyncLock.LockRelease;
+import com.microsoft.azure.relay.AsyncSemaphore.LockRelease;
 
 public class AsyncLockTest {
 	private static final long TIMEOUT_MS = 30;
