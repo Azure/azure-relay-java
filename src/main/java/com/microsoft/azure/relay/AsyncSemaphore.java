@@ -111,11 +111,11 @@ public class AsyncSemaphore {
 			this.remaining = count;
 		}
 
-		void release() {
+		public void release() {
 			release(1);
 		}
 
-		void release(int count) {
+		public void release(int count) {
 			synchronized (this.thisLock) {
 				if (this.remaining < count) {
 					throw new IllegalArgumentException("Cannot release more than owned.");
