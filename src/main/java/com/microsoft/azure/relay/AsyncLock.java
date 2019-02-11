@@ -1,11 +1,7 @@
 package com.microsoft.azure.relay;
 
-import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
-
 class AsyncLock extends AsyncSemaphore {
-	AsyncLock() {
+	AsyncLock(AutoShutdownScheduledExecutor executor) {
 		super(1);
 	}
 

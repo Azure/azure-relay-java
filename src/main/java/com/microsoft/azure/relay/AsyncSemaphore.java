@@ -11,7 +11,7 @@ public class AsyncSemaphore {
 	private AtomicInteger available = new AtomicInteger();
 	private int limit;
 	
-	AsyncSemaphore(int semaphoreSize) {
+	AsyncSemaphore(int semaphoreSize) {		
 		if (semaphoreSize < 1) {
 			throw new IllegalArgumentException("The size of semaphore cannot be less than 1");
 		}
@@ -27,19 +27,19 @@ public class AsyncSemaphore {
 		return this.available.get();
 	}
 
-	CompletableFuture<LockRelease> lockAsync() {
-		return this.lockAsync(null);
+	CompletableFuture<LockRelease> lockAsync(AutoShutdownScheduledExecutor executor) {
+		return this.lockAsync(1, null, executor);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(Duration timeout) {
-		return lockAsync(1, timeout);
+	CompletableFuture<LockRelease> lockAsync(Duration timeout, AutoShutdownScheduledExecutor executor) {
+		return lockAsync(1, timeout, executor);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(int count) {
-		return lockAsync(count, null);
+	CompletableFuture<LockRelease> lockAsync(int count, AutoShutdownScheduledExecutor executor) {
+		return lockAsync(count, null, executor);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(int count, Duration timeout) {
+	CompletableFuture<LockRelease> lockAsync(int count, Duration timeout, AutoShutdownScheduledExecutor executor) {
 		CompletableFuture<?>[] releases;
 		if (count > limit) {
 			return CompletableFutureUtil.fromException(
@@ -56,7 +56,7 @@ public class AsyncSemaphore {
 			
 			// If we made it here the lock is not available yet
 			if (this.waiterQueue == null) {
-				this.waiterQueue = new InputQueue<Boolean>();
+				this.waiterQueue = new InputQueue<Boolean>(executor);
 			}
 
 			releases = new CompletableFuture<?>[count];

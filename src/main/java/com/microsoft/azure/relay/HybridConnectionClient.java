@@ -15,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import javax.websocket.ClientEndpointConfig;
 
 public class HybridConnectionClient {
+	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
 	static final boolean IS_DEBUG = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()
 			.toString().indexOf("-agentlib:jdwp") > 0;
@@ -201,7 +202,7 @@ public class HybridConnectionClient {
 			URI uri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
 					this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
 					trackingContext.getTrackingId());
-			WebSocketChannel channel = new WebSocketChannel(trackingContext);
+			WebSocketChannel channel = new WebSocketChannel(trackingContext, EXECUTOR);
 			return channel.getWebSocket().connectAsync(uri, this.operationTimeout, config).thenApply(result -> channel);
 		} catch (URISyntaxException e) {
 			return CompletableFutureUtil.fromException(e);

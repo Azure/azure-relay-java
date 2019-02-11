@@ -15,14 +15,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
-	public static final AutoShutdownScheduledExecutor EXECUTOR = new AutoShutdownScheduledExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 4));
+	//public static final AutoShutdownScheduledExecutor EXECUTOR = Create();
 	static final ThreadFactory THREAD_FACTORY = new CustomThreadFactory("autoshutdown");
 	private final Object thisLock = new Object();
 	private final int corePoolSize;
 	private int refCount = 0;
 	private ScheduledThreadPoolExecutor innerExecutor;
 
-	private AutoShutdownScheduledExecutor(int size) {
+	AutoShutdownScheduledExecutor(int size) {
 		corePoolSize = size;
 	}
 	
@@ -30,6 +30,10 @@ public class AutoShutdownScheduledExecutor implements ScheduledExecutorService {
 		return this.corePoolSize;
 	}
 
+	static AutoShutdownScheduledExecutor Create() {
+		return new AutoShutdownScheduledExecutor(Math.max(Runtime.getRuntime().availableProcessors(), 2));
+	}
+	
 	@Override
 	public <T> Future<T> submit(Callable<T> task) {
 		this.incrementRefCount();

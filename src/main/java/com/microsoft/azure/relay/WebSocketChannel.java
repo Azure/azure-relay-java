@@ -10,8 +10,8 @@ public class WebSocketChannel implements HybridConnectionChannel {
 	private final ClientWebSocket websocket;
 	private final TrackingContext trackingContext;
 	
-	WebSocketChannel(TrackingContext trackingContext) {
-		this(new ClientWebSocket(trackingContext), trackingContext);
+	WebSocketChannel(TrackingContext trackingContext, AutoShutdownScheduledExecutor executor) {
+		this(new ClientWebSocket(trackingContext, executor), trackingContext);
 	}
 	
 	WebSocketChannel(ClientWebSocket websocket, TrackingContext trackingContext) {

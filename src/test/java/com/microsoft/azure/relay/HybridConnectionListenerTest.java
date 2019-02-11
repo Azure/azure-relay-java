@@ -20,7 +20,7 @@ import org.junit.Test;
 public class HybridConnectionListenerTest {
 	// Max # simultaneous client connections = # of cores - 1
 	// Because one thread need to be reserved for listener
-	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors());
+	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() * 2);
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;

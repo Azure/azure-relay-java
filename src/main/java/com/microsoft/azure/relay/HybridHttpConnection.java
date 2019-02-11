@@ -20,6 +20,7 @@ import org.json.JSONObject;
 
 class HybridHttpConnection {
 	private static final int MAX_CONTROL_CONNECTION_BODY_SIZE = 64 * 1024;
+	private final AutoShutdownScheduledExecutor executor;
 	private final HybridConnectionListener listener;
 	private final ClientWebSocket controlWebSocket;
 	private final URI rendezvousAddress;
@@ -35,15 +36,16 @@ class HybridHttpConnection {
 		return this.listener.getOperationTimeout();
 	}
 
-	protected HybridHttpConnection() {
+	protected HybridHttpConnection(AutoShutdownScheduledExecutor executor) {
+		this.executor = executor;
 		this.listener = null;
 		this.controlWebSocket = null;
 		this.rendezvousAddress = null;
 	}
 
 	private HybridHttpConnection(HybridConnectionListener listener, ClientWebSocket controlWebSocket,
-			String rendezvousAddress) throws URISyntaxException {
-		
+			String rendezvousAddress, AutoShutdownScheduledExecutor executor) throws URISyntaxException {
+		this.executor = executor;
 		this.listener = listener;
 		this.controlWebSocket = controlWebSocket;
 		this.rendezvousAddress = new URI(rendezvousAddress);
@@ -57,7 +59,7 @@ class HybridHttpConnection {
 		
 		HybridHttpConnection hybridHttpConnection;
 		try {
-			hybridHttpConnection = new HybridHttpConnection(listener, controlWebSocket, requestCommand.getAddress());
+			hybridHttpConnection = new HybridHttpConnection(listener, controlWebSocket, requestCommand.getAddress(), HybridConnectionListener.EXECUTOR);
 		} catch (URISyntaxException e) {
 			return CompletableFutureUtil.fromException(e);
 		}
@@ -246,7 +248,7 @@ class HybridHttpConnection {
 //            RelayEventSource.Log.HybridHttpCreatingRendezvousConnection(this.TrackingContext);
 			// TODO: proxy
 //            clientWebSocket.Options.Proxy = this.listener.Proxy;
-			this.rendezvousWebSocket = new ClientWebSocket(this.trackingContext);
+			this.rendezvousWebSocket = new ClientWebSocket(this.trackingContext, this.executor);
 			return this.rendezvousWebSocket.connectAsync(this.rendezvousAddress, timeout);
 		}
 		return CompletableFuture.completedFuture(null);
@@ -307,7 +309,7 @@ class HybridHttpConnection {
 			this.context = context;
 			this.trackingContext = context.getTrackingContext();
 			this.writeTimeout = this.connection.getOperationTimeout();
-			this.asyncLock = new AsyncLock();
+			this.asyncLock = new AsyncLock(this.connection.executor);
 		}
 
 		// The caller of this method must have acquired this.asyncLock
@@ -357,7 +359,7 @@ class HybridHttpConnection {
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			// TODO: trace
 //            RelayEventSource.Log.HybridHttpResponseStreamWrite(this.TrackingContext, count);
-			return this.asyncLock.lockAsync(this.writeTimeout).thenCompose((lockRelease) -> {
+			return this.asyncLock.lockAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
 				CompletableFuture<Void> flushCoreTask = null;
 
 				if (!this.responseCommandSent) {
@@ -419,7 +421,7 @@ class HybridHttpConnection {
 				// TODO: trace
 //                RelayEventSource.Log.ObjectClosing(this);
 
-			return this.asyncLock.lockAsync().thenCompose((lockRelease) -> {
+			return this.asyncLock.lockAsync(HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
 				CompletableFuture<Void> sendTask = null;
 				if (!this.responseCommandSent) {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -451,7 +453,7 @@ class HybridHttpConnection {
 		}
 
 		CompletableFuture<Void> onWriteBufferFlushTimer() {
-			return this.asyncLock.lockAsync().thenAccept((lockRelease) -> {
+			return this.asyncLock.lockAsync(HybridConnectionListener.EXECUTOR).thenAccept((lockRelease) -> {
 				this.flushCoreAsync(FlushReason.TIMER, this.writeTimeout);
 				lockRelease.release();
 			});

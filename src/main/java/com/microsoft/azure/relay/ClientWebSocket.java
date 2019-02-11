@@ -15,7 +15,7 @@ import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint {
-	private static final AsyncSemaphore CLIENT_THROTTLE = new AsyncSemaphore((AutoShutdownScheduledExecutor.EXECUTOR.getCorePoolSize() / 2) + 1);
+	private final AutoShutdownScheduledExecutor executor;
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
 	private Session session;
@@ -49,9 +49,10 @@ class ClientWebSocket extends Endpoint {
 	/**
 	 * Creates a websocket instance
 	 */
-	ClientWebSocket(TrackingContext trackingContext) {
-		this.textQueue = new InputQueue<String>();
-		this.fragmentQueue = new InputQueue<MessageFragment>();
+	ClientWebSocket(TrackingContext trackingContext, AutoShutdownScheduledExecutor executor) {
+		this.executor = executor;
+		this.textQueue = new InputQueue<String>(this.executor);
+		this.fragmentQueue = new InputQueue<MessageFragment>(this.executor);
 		this.closeReason = null;
 		this.trackingContext = trackingContext;
 	}
@@ -97,17 +98,13 @@ class ClientWebSocket extends Endpoint {
 	 *                             within the given timeout
 	 */
 	CompletableFuture<Void> connectAsync(URI uri, Duration timeout, ClientEndpointConfig config) {
-		System.out.println(Thread.currentThread().getName() + " ClientWebSocket.connectAsync() begin");
 		if (this.isOpen()) {
 			return CompletableFutureUtil.fromException(new RuntimeIOException("This connection is already connected."));
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 					
-		return CLIENT_THROTTLE.lockAsync(timeout).thenCompose((lockRelease) -> {			
-			System.out.println(Thread.currentThread().getName() + " ClientWebSocket.connectAsync() acquired throttle. count: " + CLIENT_THROTTLE.getAvailableCount());
 			return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 				try {
-					System.out.println(Thread.currentThread().getName() + " ClientWebSocket.connectAsync() calling connectToServer");
 					if (config != null) {
 						this.container.connectToServer(this, config, uri);
 					} else {
@@ -118,15 +115,13 @@ class ClientWebSocket extends Endpoint {
 						throw new RuntimeException(e.getCause());
 					}
 					throw new RuntimeIOException(e);
-				} finally {
-					lockRelease.release();
 				}
 				
 				if (this.session == null || !this.session.isOpen()) {
 					throw new RuntimeIOException("connection to the server failed.");
 				}
-			});
-		});
+			},
+			this.executor);
 	}
 
 	/**
@@ -167,30 +162,31 @@ class ClientWebSocket extends Endpoint {
 	CompletableFuture<ByteBuffer> readBinaryAsync(Duration timeout) {
 		
 		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
-			LinkedList<byte[]> fragments = new LinkedList<byte[]>();
-			boolean receivedWholeMsg;
-			int messageSize = 0;
-			
-			do {
-				MessageFragment fragment = fragmentQueue.dequeueAsync().join();
-				if (fragment == null) {
-					break;
-				}				
-				messageSize += fragment.getBytes().length;
-				fragments.add(fragment.getBytes());
-				receivedWholeMsg = fragment.isEnd();
-			} 
-			while (!receivedWholeMsg);
-
-			byte[] message = new byte[messageSize];
-			int offset = 0;
-			for (byte[] bytes : fragments) {
-				System.arraycopy(bytes, 0, message, offset, bytes.length);
-				offset += bytes.length;
-			}
-
-			return ByteBuffer.wrap(message);
-		});
+				LinkedList<byte[]> fragments = new LinkedList<byte[]>();
+				boolean receivedWholeMsg;
+				int messageSize = 0;
+				
+				do {
+					MessageFragment fragment = fragmentQueue.dequeueAsync().join();
+					if (fragment == null) {
+						break;
+					}				
+					messageSize += fragment.getBytes().length;
+					fragments.add(fragment.getBytes());
+					receivedWholeMsg = fragment.isEnd();
+				} 
+				while (!receivedWholeMsg);
+	
+				byte[] message = new byte[messageSize];
+				int offset = 0;
+				for (byte[] bytes : fragments) {
+					System.arraycopy(bytes, 0, message, offset, bytes.length);
+					offset += bytes.length;
+				}
+	
+				return ByteBuffer.wrap(message);
+			},
+			this.executor);
 	}
 	
 	/**
@@ -258,7 +254,8 @@ class ClientWebSocket extends Endpoint {
 					catch (IOException e) {
 						throw new RuntimeIOException(e);
 					}
-				});
+				},
+				this.executor);
 			}
 		}
 		else {
