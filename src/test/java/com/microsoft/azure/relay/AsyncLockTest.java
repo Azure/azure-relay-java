@@ -15,11 +15,12 @@ import com.microsoft.azure.relay.AsyncSemaphore.LockRelease;
 
 public class AsyncLockTest {
 	private static final long TIMEOUT_MS = 30;
-
+	private static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
+	
 	@Test
 	public void simpleLockAndReleaseTest() {
 		AsyncLock lock = new AsyncLock();
-		lock.lockAsync().thenAccept((lockRelease) -> {
+		lock.acquireAsync(EXECUTOR).thenAccept((lockRelease) -> {
 			assertTrue("AsyncLock is not locked when the lock was idle.", lock.isLocked());
 			lockRelease.release();
 			assertFalse("AsyncLock is still locked after release.", lock.isLocked());
@@ -30,14 +31,14 @@ public class AsyncLockTest {
 	public void timeoutLockAndReleaseTest() throws Throwable {
 		AsyncLock lock = new AsyncLock();
 		AtomicReference<LockRelease> release = new AtomicReference<AsyncLock.LockRelease>(null);
-		CompletableFuture<LockRelease> task1 = lock.lockAsync();
+		CompletableFuture<LockRelease> task1 = lock.acquireAsync(EXECUTOR);
 
 		try {
 			task1.thenAccept((lockRelease) -> {
 				release.set(lockRelease);
 				assertTrue("AsyncLock is not locked when the lock was idle.", lock.isLocked());
 
-				CompletableFuture<LockRelease> task2 = lock.lockAsync(Duration.ofMillis(TIMEOUT_MS));
+				CompletableFuture<LockRelease> task2 = lock.acquireAsync(Duration.ofMillis(TIMEOUT_MS), EXECUTOR);
 				assertFalse("AsyncLock is acquired after it was already locked.", task2.isDone());
 
 				task2.join().release();
@@ -53,7 +54,7 @@ public class AsyncLockTest {
 		AsyncLock lock = new AsyncLock();
 		CompletableFuture<Void> taskToComplete = new CompletableFuture<Void>();
 
-		CompletableFuture<Void> task1 = lock.lockAsync().thenAcceptAsync(lockRelease -> {
+		CompletableFuture<Void> task1 = lock.acquireAsync(EXECUTOR).thenAcceptAsync(lockRelease -> {
 			try {
 				Thread.sleep(TIMEOUT_MS);
 			} catch (InterruptedException e) {
@@ -62,7 +63,7 @@ public class AsyncLockTest {
 			lockRelease.release();
 		});
 
-		CompletableFuture<Void> task2 = lock.lockAsync().thenAcceptAsync(lockRelease -> {
+		CompletableFuture<Void> task2 = lock.acquireAsync(EXECUTOR).thenAcceptAsync(lockRelease -> {
 			assertTrue("Task should have been completed synchronously while waiting for lock.",
 					taskToComplete.isDone());
 			lockRelease.release();
@@ -78,8 +79,8 @@ public class AsyncLockTest {
 	@Test
 	public void ensureAsyncLockIsAsyncTest2() throws InterruptedException, ExecutionException, TimeoutException {
 		AsyncLock asyncLock = new AsyncLock();
-		CompletableFuture<LockRelease> lockFuture1 = asyncLock.lockAsync();
-		CompletableFuture<LockRelease> lockFuture2 = asyncLock.lockAsync();
+		CompletableFuture<LockRelease> lockFuture1 = asyncLock.acquireAsync(EXECUTOR);
+		CompletableFuture<LockRelease> lockFuture2 = asyncLock.acquireAsync(EXECUTOR);
 		assertTrue("First Lock should be acquired right away", lockFuture1.isDone());
 		Thread.sleep(TIMEOUT_MS);
 		assertFalse("Second Lock should not be acquired yet", lockFuture2.isDone());
@@ -97,8 +98,8 @@ public class AsyncLockTest {
 	@Test
 	public void lockTimeoutTest() throws InterruptedException, ExecutionException, TimeoutException {
 		AsyncLock asyncLock = new AsyncLock();
-		CompletableFuture<LockRelease> lockFuture1 = asyncLock.lockAsync();
-		CompletableFuture<LockRelease> lockFuture2 = asyncLock.lockAsync(Duration.ofMillis(10));
+		CompletableFuture<LockRelease> lockFuture1 = asyncLock.acquireAsync(EXECUTOR);
+		CompletableFuture<LockRelease> lockFuture2 = asyncLock.acquireAsync(Duration.ofMillis(10), EXECUTOR);
 		assertTrue("lockFuture1 should be done (completed sync)", lockFuture1.isDone());
 		assertFalse("lockFuture2 should not be done", lockFuture2.isDone());
 
@@ -114,7 +115,7 @@ public class AsyncLockTest {
 		lockFuture1.join().release();
 
 		// Acquire uncontended lock (ideally should be sync)
-		CompletableFuture<LockRelease> lockFuture3 = asyncLock.lockAsync();
+		CompletableFuture<LockRelease> lockFuture3 = asyncLock.acquireAsync(EXECUTOR);
 		LockRelease lockRelease3 = lockFuture3.get(2000, TimeUnit.MILLISECONDS);
 		lockRelease3.release();
 	}

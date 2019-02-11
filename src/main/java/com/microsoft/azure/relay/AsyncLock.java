@@ -1,11 +1,11 @@
 package com.microsoft.azure.relay;
 
 class AsyncLock extends AsyncSemaphore {
-	AsyncLock(AutoShutdownScheduledExecutor executor) {
+	AsyncLock() {
 		super(1);
 	}
 
 	boolean isLocked() {
-		return this.getAvailableCount() == 0;
+		return this.availablePermits() == 0;
 	}
 }

@@ -566,7 +566,7 @@ public class HybridConnectionListener implements AutoCloseable {
 			this.address = listener.address;
 			String rawPath = this.address.getPath();
 			this.path = (rawPath.startsWith("/")) ? rawPath.substring(1) : rawPath;
-			this.sendAsyncLock = new AsyncLock(EXECUTOR);
+			this.sendAsyncLock = new AsyncLock();
 			this.tokenRenewer = new TokenRenewer(this.listener, this.address.toString(),
 					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 			this.webSocket = new ClientWebSocket(trackingContext, EXECUTOR);
@@ -616,7 +616,7 @@ public class HybridConnectionListener implements AutoCloseable {
 				this.tokenRenewer.close();
 
 				if (this.connectAsyncTask != null) {
-					 this.sendAsyncLock.lockAsync(duration, EXECUTOR).thenCompose((lockRelease) -> {
+					 this.sendAsyncLock.acquireAsync(duration, EXECUTOR).thenCompose((lockRelease) -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");
 						
 						return this.webSocket.closeAsync(reason).whenComplete((res, ex) -> {
@@ -644,7 +644,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		 */
 		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
 
-		    return this.sendAsyncLock.lockAsync(timeout, EXECUTOR).thenCompose((lockRelease) -> {
+		    return this.sendAsyncLock.acquireAsync(timeout, EXECUTOR).thenCompose((lockRelease) -> {
 		        CompletableFuture<Void> future = this.ensureConnectTask(timeout).thenCompose((unused) -> {
 		            String json = command.getResponse().toJsonString();
 		            return this.webSocket.writeAsync(json, timeout, WriteMode.TEXT);

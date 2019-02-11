@@ -15,13 +15,14 @@ import com.microsoft.azure.relay.AsyncSemaphore.LockRelease;
 
 public class AsyncSemaphoreTest {
 	private static final Duration TIMEOUT = Duration.ofMillis(30);
+	private static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	
 	@Test (expected = java.util.concurrent.TimeoutException.class)
 	public void simpleLockAndReleaseTest() throws Throwable {
 		AsyncSemaphore sem = new AsyncSemaphore(2);
-		CompletableFuture<LockRelease> release1 = sem.lockAsync(TIMEOUT);
-		CompletableFuture<LockRelease> release2 = sem.lockAsync(TIMEOUT);
-		CompletableFuture<LockRelease> release3 = sem.lockAsync(TIMEOUT);
+		CompletableFuture<LockRelease> release1 = sem.acquireAsync(TIMEOUT, EXECUTOR);
+		CompletableFuture<LockRelease> release2 = sem.acquireAsync(TIMEOUT, EXECUTOR);
+		CompletableFuture<LockRelease> release3 = sem.acquireAsync(TIMEOUT, EXECUTOR);
 		
 		assertNotNull("release1 was not a valid release", release1.join());
 		assertNotNull("release2 was not a valid release", release2.join());
@@ -29,7 +30,7 @@ public class AsyncSemaphoreTest {
 		try {
 			release3.join();
 		} catch (CompletionException e) {
-			assertEquals("Semaphore should be unavailable", 0, sem.getAvailableCount());
+			assertEquals("Semaphore should be unavailable", 0, sem.availablePermits());
 			release1.join().release();
 			throw e.getCause();
 		}
@@ -42,14 +43,14 @@ public class AsyncSemaphoreTest {
 		boolean lockExceptionThrown = false;
 		
 		try {
-			sem.lockAsync(size + 1).join();
+			sem.acquireAsync(size + 1, EXECUTOR).join();
 		} catch (Exception e) {
 			lockExceptionThrown = true;
 		}
 		assertTrue("Should have thrown when trying to acquire " + size+1 + " when limit was " + size, lockExceptionThrown);
 		lockExceptionThrown = false;
 		
-		LockRelease release = sem.lockAsync(size).join();
+		LockRelease release = sem.acquireAsync(size, EXECUTOR).join();
 		try {
 			release.release(size + 1);
 		} catch (IllegalArgumentException e) {
@@ -64,8 +65,8 @@ public class AsyncSemaphoreTest {
 		AsyncSemaphore sem = new AsyncSemaphore(size);
 		boolean lockExceptionThrown = false;
 		
-		LockRelease release1 = sem.lockAsync(2).join();
-		CompletableFuture<LockRelease> release2 = sem.lockAsync(2);
+		LockRelease release1 = sem.acquireAsync(2, EXECUTOR).join();
+		CompletableFuture<LockRelease> release2 = sem.acquireAsync(2, EXECUTOR);
 		try {
 			release1.release(1);
 			release2.join();

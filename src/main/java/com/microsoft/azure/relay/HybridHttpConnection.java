@@ -309,7 +309,7 @@ class HybridHttpConnection {
 			this.context = context;
 			this.trackingContext = context.getTrackingContext();
 			this.writeTimeout = this.connection.getOperationTimeout();
-			this.asyncLock = new AsyncLock(this.connection.executor);
+			this.asyncLock = new AsyncLock();
 		}
 
 		// The caller of this method must have acquired this.asyncLock
@@ -359,7 +359,7 @@ class HybridHttpConnection {
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			// TODO: trace
 //            RelayEventSource.Log.HybridHttpResponseStreamWrite(this.TrackingContext, count);
-			return this.asyncLock.lockAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
+			return this.asyncLock.acquireAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
 				CompletableFuture<Void> flushCoreTask = null;
 
 				if (!this.responseCommandSent) {
@@ -421,7 +421,7 @@ class HybridHttpConnection {
 				// TODO: trace
 //                RelayEventSource.Log.ObjectClosing(this);
 
-			return this.asyncLock.lockAsync(HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
+			return this.asyncLock.acquireAsync(HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
 				CompletableFuture<Void> sendTask = null;
 				if (!this.responseCommandSent) {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -453,7 +453,7 @@ class HybridHttpConnection {
 		}
 
 		CompletableFuture<Void> onWriteBufferFlushTimer() {
-			return this.asyncLock.lockAsync(HybridConnectionListener.EXECUTOR).thenAccept((lockRelease) -> {
+			return this.asyncLock.acquireAsync(HybridConnectionListener.EXECUTOR).thenAccept((lockRelease) -> {
 				this.flushCoreAsync(FlushReason.TIMER, this.writeTimeout);
 				lockRelease.release();
 			});

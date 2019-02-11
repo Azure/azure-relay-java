@@ -3,39 +3,42 @@ package com.microsoft.azure.relay;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class AsyncSemaphore {
 	private final Object thisLock = new Object();
+	private final int limit;
 	private InputQueue<Boolean> waiterQueue;
-	private AtomicInteger available = new AtomicInteger();
-	private int limit;
+	private int permits;
 	
-	AsyncSemaphore(int semaphoreSize) {		
-		if (semaphoreSize < 1) {
-			throw new IllegalArgumentException("The size of semaphore cannot be less than 1");
+	AsyncSemaphore(int permits) {
+		this.limit = permits;
+		synchronized(this.thisLock) {
+			if (permits < 1) {
+				throw new IllegalArgumentException("The size of semaphore cannot be less than 1");
+			}
+			this.permits = permits;
 		}
-		this.available.set(semaphoreSize);
-		this.limit = semaphoreSize;
 	}
 	
 	/**
 	 * For Debug/Diagnostic purposes only.
 	 * If you rely on this for anything real it may be out of date by the time you decide what to do.
 	 */
-	int getAvailableCount() {
-		return this.available.get();
+	int availablePermits() {
+		synchronized(thisLock) {
+			return this.permits;
+		}
 	}
 
-	CompletableFuture<LockRelease> lockAsync(AutoShutdownScheduledExecutor executor) {
+	CompletableFuture<LockRelease> acquireAsync(AutoShutdownScheduledExecutor executor) {
 		return this.lockAsync(1, null, executor);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(Duration timeout, AutoShutdownScheduledExecutor executor) {
+	CompletableFuture<LockRelease> acquireAsync(Duration timeout, AutoShutdownScheduledExecutor executor) {
 		return lockAsync(1, timeout, executor);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(int count, AutoShutdownScheduledExecutor executor) {
+	CompletableFuture<LockRelease> acquireAsync(int count, AutoShutdownScheduledExecutor executor) {
 		return lockAsync(count, null, executor);
 	}
 	
@@ -47,9 +50,9 @@ public class AsyncSemaphore {
 		}
 		
 		synchronized(thisLock) {
-			int acquired = Math.min(this.getAvailableCount(), count);
+			int acquired = Math.min(this.availablePermits(), count);
 			
-			subtractCount(acquired);
+			this.permits -= acquired;
 			if (acquired == count) {
 				return CompletableFuture.completedFuture(new LockRelease(this, count));
 			}
@@ -79,21 +82,16 @@ public class AsyncSemaphore {
 				throw new CompletionException(ex.getCause());
 			} else {
 				synchronized (this.thisLock) {
-					subtractCount(count);
+					this.permits -= count;
 				}
 				return new LockRelease(this, count);
 			}
 		});
 	}
 	
-	private void subtractCount(int count) {
-		int current = this.getAvailableCount();
-		this.available.set(current - count);
-	}
-	
 	private void release(int count) {
 		synchronized (this.thisLock) {
-			this.available.addAndGet(count);
+			this.permits += count;
 
 			// If there's a waiter we signal them now
 			if (this.waiterQueue != null) {
@@ -106,11 +104,13 @@ public class AsyncSemaphore {
 
 	final class LockRelease {
 		private final AsyncSemaphore asyncSem;
-		AtomicInteger remaining = new AtomicInteger();
+		private int remaining;
 
 		private LockRelease(AsyncSemaphore sem, int count) {
 			this.asyncSem = sem;
-			this.remaining.set(count);
+			synchronized(this.asyncSem) {
+				this.remaining = count;
+			}
 		}
 
 		void release() {
@@ -118,13 +118,15 @@ public class AsyncSemaphore {
 		}
 		
 		void release(int count) {
-			if (this.remaining.get() < count) {
-				throw new IllegalArgumentException("Cannot release more than owned.");
+			synchronized(this.asyncSem) {
+				if (this.remaining < count) {
+					throw new IllegalArgumentException("Cannot release more than owned.");
+				}
+				
+				this.asyncSem.release(count);
+				this.remaining -= count;			
 			}
-			this.asyncSem.release(count);
-			
-			int current = this.remaining.get();
-			this.remaining.set(current - count);
+
 		}
 	}
 }

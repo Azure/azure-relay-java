@@ -103,25 +103,25 @@ class ClientWebSocket extends Endpoint {
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 					
-			return CompletableFutureUtil.timedRunAsync(timeout, () -> {
-				try {
-					if (config != null) {
-						this.container.connectToServer(this, config, uri);
-					} else {
-						this.container.connectToServer(this, uri);
-					}
-				} catch (DeploymentException | IOException e) {
-					if (e.getCause() instanceof UpgradeException) {
-						throw new RuntimeException(e.getCause());
-					}
-					throw new RuntimeIOException(e);
+		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+			try {
+				if (config != null) {
+					this.container.connectToServer(this, config, uri);
+				} else {
+					this.container.connectToServer(this, uri);
 				}
-				
-				if (this.session == null || !this.session.isOpen()) {
-					throw new RuntimeIOException("connection to the server failed.");
+			} catch (DeploymentException | IOException e) {
+				if (e.getCause() instanceof UpgradeException) {
+					throw new RuntimeException(e.getCause());
 				}
-			},
-			this.executor);
+				throw new RuntimeIOException(e);
+			}
+			
+			if (this.session == null || !this.session.isOpen()) {
+				throw new RuntimeIOException("connection to the server failed.");
+			}
+		},
+		this.executor);
 	}
 
 	/**
