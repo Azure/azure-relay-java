@@ -1,15 +1,16 @@
 package com.microsoft.azure.relay;
 
-import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
-
 class AsyncLock extends AsyncSemaphore {
+	
+	/**
+	 * For Debug/Diagnostic purposes only.
+	 * If you rely on this for anything real it may be out of date by the time you decide what to do.
+	 */
 	AsyncLock() {
 		super(1);
 	}
 
 	boolean isLocked() {
-		return this.getAvailableCount() == 0;
+		return this.availablePermits() == 0;
 	}
 }

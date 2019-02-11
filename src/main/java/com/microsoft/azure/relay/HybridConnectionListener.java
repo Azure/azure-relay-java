@@ -614,7 +614,7 @@ public class HybridConnectionListener implements AutoCloseable {
 				this.tokenRenewer.close();
 
 				if (this.connectAsyncTask != null) {
-					 this.sendAsyncLock.lockAsync(duration).thenCompose((lockRelease) -> {
+					 this.sendAsyncLock.acquireAsync(duration).thenCompose((lockRelease) -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");
 						
 						return this.webSocket.closeAsync(reason).whenComplete((res, ex) -> {
@@ -642,7 +642,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		 */
 		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
 
-		    return this.sendAsyncLock.lockAsync(timeout).thenCompose((lockRelease) -> {
+		    return this.sendAsyncLock.acquireAsync(timeout).thenCompose((lockRelease) -> {
 		        CompletableFuture<Void> future = this.ensureConnectTask(timeout).thenCompose((unused) -> {
 		            String json = command.getResponse().toJsonString();
 		            return this.webSocket.writeAsync(json, timeout, WriteMode.TEXT);

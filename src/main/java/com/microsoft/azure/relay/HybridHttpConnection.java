@@ -357,7 +357,7 @@ class HybridHttpConnection {
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			// TODO: trace
 //            RelayEventSource.Log.HybridHttpResponseStreamWrite(this.TrackingContext, count);
-			return this.asyncLock.lockAsync(this.writeTimeout).thenCompose((lockRelease) -> {
+			return this.asyncLock.acquireAsync(this.writeTimeout).thenCompose((lockRelease) -> {
 				CompletableFuture<Void> flushCoreTask = null;
 
 				if (!this.responseCommandSent) {
@@ -419,7 +419,7 @@ class HybridHttpConnection {
 				// TODO: trace
 //                RelayEventSource.Log.ObjectClosing(this);
 
-			return this.asyncLock.lockAsync().thenCompose((lockRelease) -> {
+			return this.asyncLock.acquireAsync().thenCompose((lockRelease) -> {
 				CompletableFuture<Void> sendTask = null;
 				if (!this.responseCommandSent) {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -451,7 +451,7 @@ class HybridHttpConnection {
 		}
 
 		CompletableFuture<Void> onWriteBufferFlushTimer() {
-			return this.asyncLock.lockAsync().thenAccept((lockRelease) -> {
+			return this.asyncLock.acquireAsync().thenAccept((lockRelease) -> {
 				this.flushCoreAsync(FlushReason.TIMER, this.writeTimeout);
 				lockRelease.release();
 			});

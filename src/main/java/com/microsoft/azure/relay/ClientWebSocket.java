@@ -102,7 +102,7 @@ class ClientWebSocket extends Endpoint {
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 		
-		return this.connectSemaphore.lockAsync(timeout).thenAccept((lockRelease) -> {
+		return this.connectSemaphore.acquireAsync(timeout).thenAccept((lockRelease) -> {
 			try {
 				if (config != null) {
 					this.container.connectToServer(this, config, uri);
