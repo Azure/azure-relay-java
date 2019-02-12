@@ -461,7 +461,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		
 		return completeAcceptTask.whenComplete((result, ex) -> {
 			if (ex != null) {
-				throw RelayLogger.throwingException((Exception) ex, this);
+				throw RelayLogger.throwingException(ex, this);
 			}
 			RelayLogger.logEvent("rendezvousStop", this);
 		});
@@ -693,10 +693,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		}
 		
 		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
-			// TODO: trace
-//            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
-//            Fx.Assert(connectTask.IsCompleted || !abort, "CloseOrAbortWebSocketAsync(abort=true) should only be called with a completed connectTask");
-
+			assert connectTask != null;
+			assert connectTask.isDone() && !connectTask.isCancelled() && !connectTask.isCompletedExceptionally();
+			
 			synchronized (this.thisLock) {
 				if (connectTask == this.connectAsyncTask) {
 					this.connectAsyncTask = null;
@@ -727,7 +726,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				}
 				
 				if (ex != null) {
-					RelayLogger.throwingException((Exception) ex, this, TraceLevel.WARNING);
+					RelayLogger.throwingException(ex, this, TraceLevel.WARNING);
 				}
 				this.onOffline(ex);
 				return null;
@@ -838,7 +837,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			listenerCommand.getRenewToken().setToken(token.toString());
 
 			this.sendCommandAndStreamAsync(listenerCommand, null, null).exceptionally((ex) -> {
-				RelayLogger.throwingException((Exception) ex, this.listener, TraceLevel.WARNING);
+				RelayLogger.throwingException(ex, this.listener, TraceLevel.WARNING);
 				return null;
 			});
 		}

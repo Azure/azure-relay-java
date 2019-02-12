@@ -112,7 +112,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		}).thenCompose(ex -> {
 			if (ex != null) {
 				return CompletableFutureUtil.fromException(
-					RelayLogger.throwingException((Exception) ex, this, TraceLevel.WARNING));
+					RelayLogger.throwingException(ex, this, TraceLevel.WARNING));
 			}
 			return CompletableFuture.completedFuture(null);
 		});

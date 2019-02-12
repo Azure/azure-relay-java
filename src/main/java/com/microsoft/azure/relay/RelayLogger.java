@@ -26,13 +26,13 @@ final class RelayLogger {
 		if (args == null || args.length == 0) {
 			LOGGER.info(String.format(Messages.get(event), details.getSource()));
 		}
-		if (args.length == 1) {
+		else if (args.length == 1) {
 			LOGGER.info(String.format(Messages.get(event), details.getSource(), args[0]));
 		}
-		if (args.length == 2) {
+		else if (args.length == 2) {
 			LOGGER.info(String.format(Messages.get(event), details.getSource(), args[0], args[1]));
 		}
-		if (args.length == 3) {
+		else if (args.length == 3) {
 			LOGGER.info(String.format(Messages.get(event), details.getSource(), args[0], args[1], args[2]));
 		}
 	}
@@ -45,15 +45,15 @@ final class RelayLogger {
 		return throwingException(new IllegalStateException("Invalid operation: " + msg), source);
 	}
 
-	public static void handleExceptionAsWarning(Exception exception, Object source) {
+	public static void handleExceptionAsWarning(Throwable exception, Object source) {
 		throwingException(exception, source, TraceLevel.WARNING);
 	}
 
-	public static RuntimeException throwingException(Exception exception, Object source) {
+	public static RuntimeException throwingException(Throwable exception, Object source) {
 		return throwingException(exception, source, TraceLevel.ERROR);
 	}
 
-	public static RuntimeException throwingException(Exception exception, Object source, TraceLevel level) {
+	public static RuntimeException throwingException(Throwable exception, Object source, TraceLevel level) {
 		TraceDetails details = prepareTrace(source);
 		String message = details.getSource() + " is throwing an Exception: ";
 

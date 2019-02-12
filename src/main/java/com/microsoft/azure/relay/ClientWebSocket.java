@@ -122,7 +122,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 				}
 			} catch (DeploymentException | IOException e) {
 				if (e.getCause() instanceof UpgradeException) {
-					throw RelayLogger.throwingException((Exception) e.getCause(), this);
+					throw RelayLogger.throwingException(e.getCause(), this);
 				}
 				throw RelayLogger.throwingException(e, this);
 			}
@@ -360,7 +360,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 
 	@OnError
 	public void onError(Session session, Throwable cause) {
-		RelayLogger.throwingException((Exception) cause, this);
+		RelayLogger.throwingException(cause, this);
 	}
 	
 	class MessageFragment {
