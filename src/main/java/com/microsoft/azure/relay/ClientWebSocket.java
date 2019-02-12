@@ -363,7 +363,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		RelayLogger.throwingException(cause, this);
 	}
 	
-	class MessageFragment {
+	private static class MessageFragment {
 		private final byte[] bytes;
 		private final boolean ended;
 
