@@ -135,7 +135,7 @@ final class RelayLogger {
 		map.put("httpResponseStreamWrite", "%s+ResponseStream: WriteAsync(count=%s)");
 		map.put("parsingUUIDFailed", "%s: Parsing TrackingId '%s' as Guid failed, created new ActivityId '%s' for trace correlation.");
 		map.put("tokenRenewScheduled", "%s: Scheduling Token renewal after %s.");
-		map.put("tokenRenewNegativeDuration", "Not renewing token because the duration left on the token is negative.");
+		map.put("tokenRenewNegativeDuration", "%s: Not renewing token because the duration left on the token is negative.");
 		map.put("getTokenStart", "%s: getToken start.");
 		map.put("getTokenStop", "%s: getToken stop. New token expires at %s.");
 		map.put("objectNotSet", "%s: %s was not set to the given value.");
