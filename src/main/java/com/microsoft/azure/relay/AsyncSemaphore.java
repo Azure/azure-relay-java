@@ -54,7 +54,7 @@ public class AsyncSemaphore {
 			
 			this.permits -= acquired;
 			if (acquired == count) {
-				return CompletableFuture.completedFuture(new LockRelease(this, count));
+				return CompletableFuture.completedFuture(new LockRelease(count));
 			}
 			
 			// If we made it here the lock is not available yet
@@ -84,7 +84,7 @@ public class AsyncSemaphore {
 				synchronized (this.thisLock) {
 					this.permits -= count;
 				}
-				return new LockRelease(this, count);
+				return new LockRelease(count);
 			}
 		});
 	}
@@ -102,31 +102,28 @@ public class AsyncSemaphore {
 		}
 	}
 
-	final class LockRelease {
-		private final AsyncSemaphore asyncSem;
+	public final class LockRelease {
+		private final Object thisLock;
 		private int remaining;
 
-		private LockRelease(AsyncSemaphore sem, int count) {
-			this.asyncSem = sem;
-			synchronized(this.asyncSem) {
-				this.remaining = count;
-			}
+		private LockRelease(int count) {
+			this.thisLock = new Object();
+			this.remaining = count;
 		}
 
-		void release() {
+		public void release() {
 			release(1);
 		}
-		
-		void release(int count) {
-			synchronized(this.asyncSem) {
+
+		public void release(int count) {
+			synchronized (this.thisLock) {
 				if (this.remaining < count) {
 					throw new IllegalArgumentException("Cannot release more than owned.");
 				}
-				
-				this.asyncSem.release(count);
-				this.remaining -= count;			
-			}
 
+				AsyncSemaphore.this.release(count);
+				this.remaining -= count;
+			}
 		}
 	}
 }

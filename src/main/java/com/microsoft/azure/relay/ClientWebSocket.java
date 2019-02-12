@@ -340,7 +340,7 @@ class ClientWebSocket extends Endpoint {
 		// TODO: trace with logger
 	}
 	
-	class MessageFragment {
+	private static class MessageFragment {
 		private final byte[] bytes;
 		private final boolean ended;
 
