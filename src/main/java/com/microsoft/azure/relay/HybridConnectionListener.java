@@ -694,7 +694,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		
 		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
 			assert connectTask != null;
-			assert connectTask.isDone() && !connectTask.isCancelled() && !connectTask.isCompletedExceptionally();
+			assert connectTask.isDone();
 			
 			synchronized (this.thisLock) {
 				if (connectTask == this.connectAsyncTask) {
@@ -770,7 +770,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				}
 				while (keepGoing);
 			} catch (Exception exception) {
-				RelayLogger.throwingException(exception, this.listener, TraceLevel.WARNING);
+				RelayLogger.handledExceptionAsWarning(exception, this.listener);
 				this.closeOrAbortWebSocketAsync(connectTask, null);
 				keepGoing = this.onDisconnect(exception);
 			}

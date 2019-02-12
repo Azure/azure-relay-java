@@ -45,7 +45,7 @@ final class RelayLogger {
 		return throwingException(new IllegalStateException("Invalid operation: " + msg), source);
 	}
 
-	public static void handleExceptionAsWarning(Throwable exception, Object source) {
+	public static void handledExceptionAsWarning(Throwable exception, Object source) {
 		throwingException(exception, source, TraceLevel.WARNING);
 	}
 
@@ -76,7 +76,7 @@ final class RelayLogger {
 			break;
 		}
 
-		// This allows "throw ServiceBusEventSource.Log.ThrowingException(..."
+		// This allows "throw RelayLogger.throwingException(..."
 		return (exception instanceof RuntimeException) ? (RuntimeException) exception : new RuntimeException(exception);
 	}
 
@@ -147,5 +147,31 @@ final class RelayLogger {
 
 		Messages = Collections.unmodifiableMap(map);
 		return true;
+	}
+	
+	private static class TraceDetails {
+		private String source;
+		private TrackingContext trackingContext;
+
+		protected TraceDetails(String source, TrackingContext trackingContext) {
+			this.setSource(source);
+			this.setTrackingContext(trackingContext);
+		}
+
+		protected String getSource() {
+			return source;
+		}
+
+		protected void setSource(String source) {
+			this.source = source;
+		}
+
+		protected TrackingContext getTrackingContext() {
+			return trackingContext;
+		}
+
+		protected void setTrackingContext(TrackingContext trackingContext) {
+			this.trackingContext = trackingContext;
+		}
 	}
 }

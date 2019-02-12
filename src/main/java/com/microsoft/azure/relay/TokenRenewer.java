@@ -39,7 +39,7 @@ class TokenRenewer {
 		return this.listener.getTokenProvider()
 			.getTokenAsync(this.appliesTo, this.tokenValidFor)
 			.thenApply((token) -> {
-				RelayLogger.logEvent("getTokenStop", this, token.getExpiresAtUtc().toString());
+				RelayLogger.logEvent("getTokenStop", this.listener, token.getExpiresAtUtc().toString());
 
 				if (raiseTokenRenewedEvent && this.onTokenRenewed != null) {
 					this.onTokenRenewed.accept(token);
@@ -57,14 +57,14 @@ class TokenRenewer {
 		try {
 			this.getTokenAsync(true);
 		} catch (Exception exception) {
-			RelayLogger.throwingException(exception, this);
+			RelayLogger.handledExceptionAsWarning(exception, this);
 		}
 	}
 
 	private void scheduleRenewTimer(SecurityToken token) {
 		Duration interval = Duration.between(Instant.now(), token.getExpiresAtUtc());
 		if (interval.isNegative()) {
-			RelayLogger.logEvent("tokenRenewNegativeDuration", this);
+			RelayLogger.logEvent("tokenRenewNegativeDuration", this.listener);
 			return;
 		}
 
@@ -72,7 +72,7 @@ class TokenRenewer {
 		interval = interval.compareTo(RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL) < 0 ? 
 				RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL : interval;
 
-		RelayLogger.logEvent("tokenRenewRescheduled", this, interval.toString());
+		RelayLogger.logEvent("tokenRenewScheduled", this, interval.toString());
 		this.renewTimer.schedule(new TimerTask() {
 			@Override
 			public void run() {
