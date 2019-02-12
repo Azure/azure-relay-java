@@ -14,11 +14,13 @@ import java.util.concurrent.CompletableFuture;
 
 import javax.websocket.ClientEndpointConfig;
 
-public class HybridConnectionClient {
+public class HybridConnectionClient implements RelayTraceSource {
 	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
 	static final boolean IS_DEBUG = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()
 			.toString().indexOf("-agentlib:jdwp") > 0;
+	private String cachedString;
+	private TrackingContext trackingContext;
 
 	/**
 	 * The address on which this HybridConnection will connect to. This address
@@ -26,9 +28,6 @@ public class HybridConnectionClient {
 	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
 	 */
 	private URI address;
-
-	// Gets or sets proxy information for connecting to ServiceBus.
-//	private Proxy proxy;
 
 	/**
 	 * The TokenProvider for authenticating this HybridConnection listener.
@@ -63,6 +62,10 @@ public class HybridConnectionClient {
 
 	public void setOperationTimeout(Duration operationTimeout) {
 		this.operationTimeout = operationTimeout;
+	}
+	
+	public TrackingContext getTrackingContext() {
+		return this.trackingContext;
 	}
 
 	/**
@@ -171,6 +174,14 @@ public class HybridConnectionClient {
 				tokenProvider, tokenProvider != null);
 	}
 
+	@Override
+	public String toString() {
+		if (this.cachedString == null) {
+			this.cachedString = this.getClass().getSimpleName() + "(" + this.trackingContext + ")";
+		}
+		return this.cachedString;
+	}
+	
 	/**
 	 * Establishes a new send-side HybridConnection and returns the websocket with
 	 * established connections.
@@ -180,12 +191,8 @@ public class HybridConnectionClient {
 	 */
 	@SuppressWarnings("resource")
 	public CompletableFuture<HybridConnectionChannel> createConnectionAsync() {
-		// TODO: trace
-		TrackingContext trackingContext = createTrackingContext(this.address);
-//         String traceSource = nameof(HybridConnectionClient) + "(" + trackingContext + ")";
-
-		// TODO: trace
-//         RelayEventSource.Log.ObjectConnecting(traceSource, trackingContext); 
+		this.trackingContext = createTrackingContext(this.address);
+		RelayLogger.logEvent("connecting", this);
 
 		String audience = HybridConnectionUtil.getAudience(this.address);
 		CompletableFuture<SecurityToken> token = this.tokenProvider.getTokenAsync(audience,
@@ -226,7 +233,6 @@ public class HybridConnectionClient {
 				}
 			}
 		}
-
 		return TrackingContext.create(address);
 	}
 
@@ -234,17 +240,12 @@ public class HybridConnectionClient {
 			boolean tokenProviderRequired) {
 
 		if (address == null) {
-			// TODO: trace
-//             throw RelayEventSource.Log.ArgumentNull(nameof(address), this);
-			throw new IllegalArgumentException("cannot initiate hybrid connection client with null uri");
-
+			throw RelayLogger.argumentNull("address", this);
 		} else if (!address.getScheme().equals(RelayConstants.HYBRID_CONNECTION_SCHEME)) {
-//			throw RelayEventSource.Log.Argument(nameof(address), SR.GetString(SR.InvalidUriScheme, address.Scheme, RelayConstants.HybridConnectionScheme), this);
-			throw new IllegalArgumentException("cannot initiate hybrid connection client with invalid uri scheme");
-
+			throw RelayLogger.throwingException(
+					new IllegalArgumentException("cannot initiate HybridConnection client with invalid uri scheme"), this);
 		} else if (tokenProviderRequired && tokenProvider == null) {
-//			throw RelayEventSource.Log.ArgumentNull(nameof(tokenProvider), this);
-			throw new IllegalArgumentException("cannot initiate hybrid connection client with null token provider");
+			throw RelayLogger.argumentNull("tokenProvider", this);
 		}
 
 		this.address = address;

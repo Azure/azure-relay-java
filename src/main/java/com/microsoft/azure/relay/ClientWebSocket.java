@@ -14,7 +14,7 @@ import javax.websocket.*;
 import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
-class ClientWebSocket extends Endpoint {
+class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	private final AutoShutdownScheduledExecutor executor;
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
@@ -24,9 +24,18 @@ class ClientWebSocket extends Endpoint {
 	private InputQueue<MessageFragment> fragmentQueue;
 	private InputQueue<String> textQueue;
 	private CompletableFuture<Void> closeTask;
+	private String cachedString;
 	
-	TrackingContext getTrackingContext() {
+	public TrackingContext getTrackingContext() {
 		return trackingContext;
+	}
+	
+	@Override
+	public String toString() {
+		if (this.cachedString == null) {
+			this.cachedString = this.getClass().getSimpleName() + "(" + this.trackingContext + ")";
+		}
+		return this.cachedString;
 	}
 	
 	CloseReason getCloseReason() {
@@ -102,8 +111,9 @@ class ClientWebSocket extends Endpoint {
 			return CompletableFutureUtil.fromException(new RuntimeIOException("This connection is already connected."));
 		}
 		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
-					
+
 		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+			RelayLogger.logEvent("connecting", this);
 			try {
 				if (config != null) {
 					this.container.connectToServer(this, config, uri);
@@ -112,13 +122,13 @@ class ClientWebSocket extends Endpoint {
 				}
 			} catch (DeploymentException | IOException e) {
 				if (e.getCause() instanceof UpgradeException) {
-					throw new RuntimeException(e.getCause());
+					throw RelayLogger.throwingException((Exception) e.getCause(), this);
 				}
-				throw new RuntimeIOException(e);
+				throw RelayLogger.throwingException(e, this);
 			}
 			
 			if (this.session == null || !this.session.isOpen()) {
-				throw new RuntimeIOException("connection to the server failed.");
+				throw RelayLogger.throwingException(new RuntimeIOException("connection to the server failed."), this);
 			}
 		},
 		this.executor);
@@ -140,7 +150,10 @@ class ClientWebSocket extends Endpoint {
 	 * @return Returns a CompletableFuture which completes when websocket receives text messages
 	 */
 	CompletableFuture<String> readTextAsync() {
-		return this.textQueue.dequeueAsync();
+		return this.textQueue.dequeueAsync().thenApply(text -> {
+			RelayLogger.logEvent("receivedText", this, String.valueOf(text.length()));
+			return text;
+		});
 	}
 	
 	/**
@@ -184,6 +197,7 @@ class ClientWebSocket extends Endpoint {
 					offset += bytes.length;
 				}
 	
+				RelayLogger.logEvent("receivedBytes", this, String.valueOf(message.length));
 				return ByteBuffer.wrap(message);
 			},
 			this.executor);
@@ -232,13 +246,17 @@ class ClientWebSocket extends Endpoint {
 					
 					try {
 						if (mode.equals(WriteMode.TEXT)) {
+							String text = data.toString();
+							RelayLogger.logEvent("writingBytes", this, "text");
 							Writer writer = remote.getSendWriter();
-							writer.write(data.toString());
+							writer.write(text);
 							writer.close();
+							RelayLogger.logEvent("doneWritingBytes", this, String.valueOf(text.length()));
 						}
 						else {
 							ByteBuffer bytes = null;
 							
+							RelayLogger.logEvent("writingBytes", this, "binary");
 							if (data instanceof byte[]) {
 								bytes = ByteBuffer.wrap((byte[]) data);
 							} 
@@ -248,11 +266,13 @@ class ClientWebSocket extends Endpoint {
 							else if (data instanceof String){
 								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
 							}
+							int bytesToSend = bytes.remaining();
 							remote.sendBinary(bytes);
+							RelayLogger.logEvent("doneWritingBytes", this, String.valueOf(bytesToSend));
 						}
 					}
 					catch (IOException e) {
-						throw new RuntimeIOException(e);
+						throw RelayLogger.throwingException(e, this);
 					}
 				},
 				this.executor);
@@ -280,6 +300,7 @@ class ClientWebSocket extends Endpoint {
 	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
 	 */
 	CompletableFuture<Void> closeAsync(CloseReason reason) {
+		RelayLogger.logEvent("closing", this);
 		this.fragmentQueue.shutdown();
 		this.textQueue.shutdown();
 		
@@ -301,6 +322,7 @@ class ClientWebSocket extends Endpoint {
 	
 	@OnOpen
 	public void onOpen(Session session, EndpointConfig config) {
+		RelayLogger.logEvent("connected", this);
 		this.closeReason = null;
 		this.session = session;
 		session.setMaxBinaryMessageBufferSize(this.maxMessageBufferSize);
@@ -324,6 +346,7 @@ class ClientWebSocket extends Endpoint {
 	
 	@OnClose
 	public void onClose(Session session, CloseReason reason) {
+		RelayLogger.logEvent("closed", this);
 		this.textQueue.shutdown();
 		this.fragmentQueue.shutdown();
 		
@@ -337,7 +360,7 @@ class ClientWebSocket extends Endpoint {
 
 	@OnError
 	public void onError(Session session, Throwable cause) {
-		// TODO: trace with logger
+		RelayLogger.throwingException((Exception) cause, this);
 	}
 	
 	class MessageFragment {
