@@ -400,8 +400,7 @@ final class InputQueue<T> {
 
 		T getValueWithException() {
 			if (this.exception != null) {
-				// TODO: trace
-//                throw RelayEventSource.Log.ThrowingException(this.exception, this, EventLevel.Informational);
+				throw RelayLogger.throwingException(this.exception, this, TraceLevel.WARNING);
 			}
 
 			return this.value;
@@ -458,19 +457,17 @@ final class InputQueue<T> {
 		}
 
 		void makePendingItemAvailable() {
-			// TODO: trace
-//            if (pendingCount == 0) {
-//                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any pending items"), this);
-//            }
+            if (pendingCount == 0) {
+            	throw RelayLogger.invalidOperation("ItemQueue does not contain any pending items", this);
+            }
 
 			this.pendingCount--;
 		}
 
 		Item dequeueItemCore() {
-			// TODO: trace
-//            if (totalCount == 0) {
-//                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException("ItemQueue does not contain any items"), this);
-//            }
+            if (totalCount == 0) {
+            	throw RelayLogger.invalidOperation("ItemQueue does not contain any items", this);
+            }
 
 			Item item = this.items[this.head];
 			this.items[this.head] = new Item();

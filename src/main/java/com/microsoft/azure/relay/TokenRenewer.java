@@ -34,13 +34,12 @@ class TokenRenewer {
 	}
 
 	private CompletableFuture<SecurityToken> getTokenAsync(boolean raiseTokenRenewedEvent) {
-			// TODO: trace
-//            RelayEventSource.Log.GetTokenStart(this.listener);
+			RelayLogger.logEvent("getTokenStart", this);
 
 		return this.listener.getTokenProvider()
 			.getTokenAsync(this.appliesTo, this.tokenValidFor)
 			.thenApply((token) -> {
-//	            RelayEventSource.Log.GetTokenStop(this.listener, token.ExpiresAtUtc);
+				RelayLogger.logEvent("getTokenStop", this.listener, token.getExpiresAtUtc().toString());
 
 				if (raiseTokenRenewedEvent && this.onTokenRenewed != null) {
 					this.onTokenRenewed.accept(token);
@@ -58,16 +57,14 @@ class TokenRenewer {
 		try {
 			this.getTokenAsync(true);
 		} catch (Exception exception) {
-			// TODO: trace
-//            RelayEventSource.Log.HandledExceptionAsWarning(thisPtr.listener, exception);
+			RelayLogger.handledExceptionAsWarning(exception, this);
 		}
 	}
 
 	private void scheduleRenewTimer(SecurityToken token) {
 		Duration interval = Duration.between(Instant.now(), token.getExpiresAtUtc());
 		if (interval.isNegative()) {
-			// TODO: RelayEventSource.Log.WcfEventWarning(Diagnostics.TraceCode.Security,
-			// this.traceSource, "Not renewing since " + interval + " < Duration.Zero!");
+			RelayLogger.logEvent("tokenRenewNegativeDuration", this.listener);
 			return;
 		}
 
@@ -75,8 +72,7 @@ class TokenRenewer {
 		interval = interval.compareTo(RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL) < 0 ? 
 				RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL : interval;
 
-		// TODO: trace
-//        RelayEventSource.Log.TokenRenewScheduled(interval, this.listener);
+		RelayLogger.logEvent("tokenRenewScheduled", this, interval.toString());
 		this.renewTimer.schedule(new TimerTask() {
 			@Override
 			public void run() {

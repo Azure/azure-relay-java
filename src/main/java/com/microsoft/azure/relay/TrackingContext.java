@@ -60,9 +60,7 @@ public class TrackingContext {
 
 		TrackingContext trackingContext = create(activityId, trackingId, address);
 		if (parseFailed) {
-			// TODO: trace
-			System.out.println("Parsing UUID failed.");
-//            RelayEventSource.Log.Info(nameof(TrackingContext), trackingContext, $"Parsing TrackingId:'{trackingId}' as Guid failed, created new ActivityId:{activityId} for trace correlation.");
+			RelayLogger.logEvent("parsingUUIDFailed", trackingContext, trackingId, activityId.toString());
 		}
 
 		return trackingContext;

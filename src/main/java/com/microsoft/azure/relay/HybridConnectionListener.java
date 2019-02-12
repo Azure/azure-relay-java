@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -24,7 +23,7 @@ import javax.websocket.CloseReason.CloseCodes;
 import org.eclipse.jetty.http.HttpStatus;
 import org.json.JSONObject;
 
-public class HybridConnectionListener implements AutoCloseable {
+public class HybridConnectionListener implements RelayTraceSource, AutoCloseable {
 	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	private final InputQueue<HybridConnectionChannel> connectionInputQueue;
 	private final ControlConnection controlConnection;
@@ -33,6 +32,7 @@ public class HybridConnectionListener implements AutoCloseable {
 	private volatile boolean closeCalled;
 	private Duration operationTimeout;
 	private int maxWebSocketBufferSize;
+	private String cachedString;
 
 	/**
 	 * Gets a value that determines whether the connection is online. True if the
@@ -115,8 +115,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		if (maxWebSocketBufferSize > 0) {
 			this.maxWebSocketBufferSize = maxWebSocketBufferSize;
 		} else {
-			// TODO: 
-			// Log warning, maxWebSocketBufferSize not set
+			RelayLogger.logEvent("objectNotSet", this, "maxWebSocketBufferSize");
 		}
 	}
 
@@ -133,19 +132,10 @@ public class HybridConnectionListener implements AutoCloseable {
 	public HybridConnectionListener(URI address, TokenProvider tokenProvider) {
 
 		if (address == null || tokenProvider == null) {
-
-			// TODO: trace
-//			throw RelayEventSource.Log.ThrowingException(
-//					new ArgumentNullException(address == null ? nameof(address) : nameof(tokenProvider)), this);
-			throw new IllegalArgumentException("address or token provider is null.");
-
+			throw RelayLogger.argumentNull("address or tokenProvider", this);
 		} else if (!address.getScheme().equals(RelayConstants.HYBRID_CONNECTION_SCHEME)) {
-
-			// TODO: trace
-//			throw RelayEventSource.Log.ThrowingException(new ArgumentException(
-//					SR.InvalidUriScheme.FormatInvariant(address.Scheme, RelayConstants.HybridConnectionScheme),
-//					nameof(address)), this);
-			throw new IllegalArgumentException("Invalid scheme. Expected: " + RelayConstants.HYBRID_CONNECTION_SCHEME + ", Actual: " + address.getScheme() + ".");
+			throw RelayLogger.throwingException(
+					new IllegalArgumentException("Invalid scheme. Expected: " + RelayConstants.HYBRID_CONNECTION_SCHEME + ", Actual: " + address.getScheme() + "."), this);
 		}
 
 		this.address = address;
@@ -201,9 +191,7 @@ public class HybridConnectionListener implements AutoCloseable {
 	HybridConnectionListener(String connectionString, String path, boolean pathFromConnectionString)
 			throws URISyntaxException {
 		if (StringUtil.isNullOrWhiteSpace(connectionString)) {
-			// TODO: trace
-//            throw RelayEventSource.Log.ArgumentNull(nameof(connectionString), this);
-			throw new IllegalArgumentException("The connectionString is null or empty.");
+			throw RelayLogger.argumentNull("connectionString", this);
 		}
 
 		RelayConnectionStringBuilder builder = new RelayConnectionStringBuilder(connectionString);
@@ -211,19 +199,14 @@ public class HybridConnectionListener implements AutoCloseable {
 
 		if (pathFromConnectionString) {
 			if (StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
-				// TODO: trace
-//                throw RelayEventSource.Log.Argument(nameof(connectionString), SR.GetString(SR.ConnectionStringMustIncludeEntityPath, nameof(HybridConnectionClient)), this);
-				throw new IllegalArgumentException("ConnectionString did not have required entityPath");
+				throw RelayLogger.argumentNull("entityPath", this);
 			}
 		} else {
 			if (StringUtil.isNullOrWhiteSpace(path)) {
-				// TODO: trace
-//                throw RelayEventSource.Log.ArgumentNull(nameof(path), this);
-				throw new IllegalArgumentException("Path parameter is required.");
+				throw RelayLogger.argumentNull("path", this);
 			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
-				// TODO: trace
-//                throw RelayEventSource.Log.Argument(nameof(connectionString), SR.GetString(SR.ConnectionStringMustNotIncludeEntityPath, nameof(HybridConnectionListener)), this);
-				throw new IllegalArgumentException("EntityPath must not appear in connectionString");
+				throw RelayLogger.throwingException(
+					new IllegalArgumentException("EntityPath must not appear in connectionString"), this);
 			}
 
 			builder.setEntityPath(path);
@@ -303,8 +286,7 @@ public class HybridConnectionListener implements AutoCloseable {
 							return;
 						}
 	
-						// TODO: trace
-	//                    RelayEventSource.Log.ObjectClosing(this);
+						RelayLogger.logEvent("closing", this);
 						this.closeCalled = true;
 	
 						// If the input queue is empty this completes all pending waiters with null and
@@ -329,14 +311,12 @@ public class HybridConnectionListener implements AutoCloseable {
 					clients.forEach(client -> client.closeAsync(
 							new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
 	
-					// TODO: trace
-	//                RelayEventSource.Log.ObjectClosed(this);
+					RelayLogger.logEvent("closed", this);
 				},
 				EXECUTOR).join();
 		}
-		// TODO: trace
 		catch (Exception e) {
-//            RelayEventSource.Log.ThrowingException(e, this);
+			throw RelayLogger.throwingException(e, this);
 		} finally {
 			this.connectionInputQueue.dispose();
 		}
@@ -359,22 +339,19 @@ public class HybridConnectionListener implements AutoCloseable {
 	public CompletableFuture<HybridConnectionChannel> acceptConnectionAsync() {
 		synchronized (this.thisLock) {
 			if (!this.openCalled) {
-				// TODO: trace
-//                throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.ObjectNotOpened), this);
-				CompletableFutureUtil.fromException(new RelayException("cannot accept connection because listener is not open."));
+				throw RelayLogger.invalidOperation("cannot accept connection because listener is not open.", this);
 			}
 		}
 		return this.connectionInputQueue.dequeueAsync();
 	}
 
-//	// <summary>
-//	// Returns a String that represents the current object. Includes a TrackingId
-//	// for end to end correlation.
-//	// </summary>
-//	public override String toString()
-//    {
-//        return this.cachedToString ?? (this.cachedToString = nameof(HybridConnectionListener) + "(" + this.TrackingContext + ")");
-//    }
+	@Override
+	public String toString() {
+		if (this.cachedString == null) {
+			this.cachedString = this.getClass().getSimpleName() + "(" + this.trackingContext + ")";
+		}
+		return this.cachedString;
+    }
 
 	CompletableFuture<Void> sendControlCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
 		return this.controlConnection.sendCommandAndStreamAsync(command, buffer, timeout);
@@ -382,18 +359,14 @@ public class HybridConnectionListener implements AutoCloseable {
 
 	void throwIfDisposed() throws RelayException {
 		if (this.closeCalled) {
-			// TODO: trace
-//			throw RelayEventSource.Log
-//					.ThrowingException(new ObjectDisposedException(this.toString(), SR.EntityClosedOrAborted), this);
-			throw new RelayException("Invalid operation. Cannot call open when it's already closed.");
+			throw RelayLogger.invalidOperation("Invalid operation. Cannot call open when it's already closed.", this);
 		}
 	}
 
 	void throwIfReadOnly() throws RelayException {
 		synchronized (this.thisLock) {
 			if (this.openCalled) {
-				throw new RelayException("Invalid operation. Cannot call open when it's already open.");
-//				throw RelayEventSource.Log.ThrowingException(new InvalidOperationException(SR.ObjectIsReadOnly),this);
+				throw RelayLogger.invalidOperation("Invalid operation. Cannot call open when it's already open.", this);
 			}
 		}
 	}
@@ -426,18 +399,13 @@ public class HybridConnectionListener implements AutoCloseable {
 
 			boolean shouldAccept = acceptHandler == null;
 
-			// TODO: trace
-//	      RelayEventSource.Log.RelayListenerRendezvousStart(listenerContext.Listener, listenerContext.TrackingContext.TrackingId, acceptCommand.Address);
+			RelayLogger.logEvent("rendezvousStart", this, acceptCommand.getAddress());
 			
 			if (acceptHandler != null) {
 				// Invoke and await the user's AcceptHandler method
 				try {
 					shouldAccept = acceptHandler.apply(listenerContext);
 				} catch (Exception userException) {
-					// TODO: trace
-//                    	when (!Fx.IsFatal(userException)) {
-//                        String description = SR.GetString(SR.AcceptHandlerException, listenerContext.TrackingContext.TrackingId);
-//                        RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, description + " " + userException);
                     listenerContext.getResponse().setStatusCode(HttpStatus.BAD_GATEWAY_502);
                     listenerContext.getResponse().setStatusDescription("The Listener's custom AcceptHandler threw an exception. See Listener logs for details. TrackingId: " + listenerContext.getTrackingContext().getTrackingId());
 					throw userException;
@@ -447,19 +415,17 @@ public class HybridConnectionListener implements AutoCloseable {
 			// Don't block the pump waiting for the rendezvous
 			return this.completeAcceptAsync(listenerContext, rendezvousUri, shouldAccept);
 		} catch (Exception exception) {
-			// TODO: trace
-//	        	when (!Fx.IsFatal(exception)) {
-//	            RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, exception);
-//	            RelayEventSource.Log.RelayListenerRendezvousStop();
+			RelayLogger.logEvent("rendezvousFailed", this, exception.toString());
+			RelayLogger.logEvent("rendezVousStop", this);
 			return CompletableFutureUtil.fromException(exception);
 		}
 	}
 
-	// <summary>
-	// Form the logical request Uri using the scheme://host:port from the listener
-	// and the path from the acceptCommand (minus "/$hc")
-	// e.g. sb://contoso.servicebus.windows.net/hybrid1?foo=bar
-	// </summary>
+	/**
+	/* Form the logical request Uri using the scheme://host:port from the listener
+	/* and the path from the acceptCommand (minus "/$hc")
+	/* e.g. sb://contoso.servicebus.windows.net/hybrid1?foo=bar
+	**/
 	private URI generateAcceptRequestUri(URI rendezvousUri) throws URISyntaxException, UnsupportedEncodingException {
 		String query = HybridConnectionUtil.filterQueryString(rendezvousUri.getQuery());
 		String path = rendezvousUri.getPath();
@@ -478,8 +444,7 @@ public class HybridConnectionListener implements AutoCloseable {
 				WebSocketChannel rendezvousConnection = new WebSocketChannel(listenerContext.getTrackingContext(), EXECUTOR);
 
 				if (this.closeCalled) {
-					// TODO: trace
-//                    RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.getTrackingContext().getTrackingId(), SR.ObjectClosedOrAborted);
+					RelayLogger.logEvent("rendezvousClose", this, rendezvousUri.toString());
 					completeAcceptTask = CompletableFuture.completedFuture(null);
 				} else {
 					completeAcceptTask = rendezvousConnection.getWebSocket().connectAsync(rendezvousUri).thenRun(() -> 
@@ -487,21 +452,18 @@ public class HybridConnectionListener implements AutoCloseable {
 				}
 			}
 		} else {
-			// TODO: trace
-//          RelayEventSource.Log.RelayListenerRendezvousRejected(
-//              listenerContext.TrackingContext, listenerContext.Response.StatusCode, listenerContext.Response.StatusDescription);
+			RelayLogger.logEvent("rendezvousRejected", 
+					this, 
+					String.valueOf(listenerContext.getResponse().getStatusCode()), 
+					listenerContext.getResponse().getStatusDescription());
 			completeAcceptTask = listenerContext.rejectAsync(rendezvousUri);
 		}
 		
 		return completeAcceptTask.whenComplete((result, ex) -> {
 			if (ex != null) {
-				// TODO: trace
-//				when (!Fx.IsFatal(exception)) {
-//		            RelayEventSource.Log.RelayListenerRendezvousFailed(this, listenerContext.TrackingContext.TrackingId, exception);
-//				}
+				throw RelayLogger.throwingException(ex, this);
 			}
-			// TODO: trace
-//        	RelayEventSource.Log.RelayListenerRendezvousStop();
+			RelayLogger.logEvent("rendezvousStop", this);
 		});
 	}
 
@@ -647,6 +609,7 @@ public class HybridConnectionListener implements AutoCloseable {
 		    return this.sendAsyncLock.acquireAsync(timeout, EXECUTOR).thenCompose((lockRelease) -> {
 		        CompletableFuture<Void> future = this.ensureConnectTask(timeout).thenCompose((unused) -> {
 		            String json = command.getResponse().toJsonString();
+		            RelayLogger.logEvent("sendCommand", this, json);
 		            return this.webSocket.writeAsync(json, timeout, WriteMode.TEXT);
 		        });
 		        
@@ -659,7 +622,6 @@ public class HybridConnectionListener implements AutoCloseable {
 		            if (ex != null) {
 		            	throw new CompletionException(ex);
 		            }
-		        	// TODO: log response written
 		            return null;
 		        });
 		    });
@@ -724,9 +686,6 @@ public class HybridConnectionListener implements AutoCloseable {
 						return this.webSocket.connectAsync(websocketUri, timeout, config);
 					}
 				}).thenRun(() -> this.onOnline());
-
-				// TODO: trace
-//	                RelayEventSource.Log.ObjectConnected(this.listener);
 			}
 			catch (Throwable e) {
 				return CompletableFutureUtil.fromException(e);
@@ -734,10 +693,9 @@ public class HybridConnectionListener implements AutoCloseable {
 		}
 		
 		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
-			// TODO: trace
-//            Fx.Assert(connectTask != null, "CloseWebSocketAsync was called with null connectTask");
-//            Fx.Assert(connectTask.IsCompleted || !abort, "CloseOrAbortWebSocketAsync(abort=true) should only be called with a completed connectTask");
-
+			assert connectTask != null;
+			assert connectTask.isDone();
+			
 			synchronized (this.thisLock) {
 				if (connectTask == this.connectAsyncTask) {
 					this.connectAsyncTask = null;
@@ -767,8 +725,9 @@ public class HybridConnectionListener implements AutoCloseable {
 					receivePumpAsync();
 				}
 				
-				// TODO: trace
-//              RelayEventSource.Log.HandledExceptionAsWarning(this.listener, e);
+				if (ex != null) {
+					RelayLogger.throwingException(ex, this, TraceLevel.WARNING);
+				}
 				this.onOffline(ex);
 				return null;
 			});
@@ -810,11 +769,8 @@ public class HybridConnectionListener implements AutoCloseable {
 					this.listener.onCommandAsync(receivedMessage, this.webSocket);
 				}
 				while (keepGoing);
-			} catch (Exception exception)
-			// TODO: when (!Fx.IsFatal(exception))
-			{
-				// TODO: trace
-				// RelayEventSource.Log.HandledExceptionAsWarning(this.listener, exception);
+			} catch (Exception exception) {
+				RelayLogger.handledExceptionAsWarning(exception, this.listener);
 				this.closeOrAbortWebSocketAsync(connectTask, null);
 				keepGoing = this.onDisconnect(exception);
 			}
@@ -832,8 +788,7 @@ public class HybridConnectionListener implements AutoCloseable {
 				this.connectDelayIndex = -1;
 			}
 
-			// TODO: trace
-//			RelayEventSource.Log.Info(this.listener,"Online");
+			RelayLogger.logEvent("connected", this.listener);
 			if (this.onlineHandler != null) {
 				this.onlineHandler.accept(this, null);
 			}
@@ -846,14 +801,10 @@ public class HybridConnectionListener implements AutoCloseable {
 				}
 				this.isOnline = false;
 			}
-
-			// TODO: trace
-			// Stop attempting to connect
-//			RelayEventSource.Log.Info(this.listener,$"Offline. {this.listener.TrackingContext}");this.Offline?.Invoke(this,EventArgs.Empty);
+			RelayLogger.logEvent("offline", this);
 		}
 
-		// Returns true if this control connection should attempt to reconnect after
-		// this exception.
+		// Returns true if this control connection should attempt to reconnect after this exception.
 		private boolean onDisconnect(Exception lastError) {
 
 			synchronized (this.thisLock) {
@@ -886,8 +837,7 @@ public class HybridConnectionListener implements AutoCloseable {
 			listenerCommand.getRenewToken().setToken(token.toString());
 
 			this.sendCommandAndStreamAsync(listenerCommand, null, null).exceptionally((ex) -> {
-				// TODO: Log exception
-//	                RelayEventSource.Log.HandledExceptionAsWarning(this.listener, exception);
+				RelayLogger.throwingException(ex, this.listener, TraceLevel.WARNING);
 				return null;
 			});
 		}
