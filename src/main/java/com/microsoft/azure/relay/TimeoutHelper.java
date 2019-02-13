@@ -105,7 +105,7 @@ class TimeoutHelper {
 
 	static void throwIfNegativeArgument(Duration timeout, String argumentName) {
 		if (timeout != null && timeout.isNegative()) {
-			RelayLogger.throwingException(new IllegalArgumentException("timeout interval cannot be negative."), TimeoutHelper.class);
+			throw RelayLogger.throwingException(new IllegalArgumentException("timeout interval cannot be negative."), TimeoutHelper.class);
 		}
 	}
 

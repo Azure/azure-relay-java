@@ -278,49 +278,39 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 *         disconnected with the cloud service
 	 */
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
-		try {
-			CompletableFutureUtil.timedRunAsync(timeout, () -> {
-					List<HybridConnectionChannel> clients;
-					synchronized (this.thisLock) {
-						if (this.closeCalled) {
-							return;
-						}
-	
-						RelayLogger.logEvent("closing", this);
-						this.closeCalled = true;
-	
-						// If the input queue is empty this completes all pending waiters with null and
-						// prevents any new items being added to the input queue.
-						this.connectionInputQueue.shutdown();
-	
-						// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
-						// connectionInputQueue.Shutdown().
-						clients = new ArrayList<HybridConnectionChannel>(this.connectionInputQueue.getPendingCount());
-						HybridConnectionChannel webSocket;
-						do {
-							webSocket = this.connectionInputQueue.dequeueAsync().join();
-	
-							if (webSocket != null) {
-								clients.add(webSocket);
-							}
-						} while (webSocket != null);
-	
-						this.isOnline = false;
-					}
-	
-					clients.forEach(client -> client.closeAsync(
-							new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally")));
-	
-					RelayLogger.logEvent("closed", this);
-				},
-				EXECUTOR).join();
-		}
-		catch (Exception e) {
-			throw RelayLogger.throwingException(e, this);
-		} finally {
+		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+			synchronized (this.thisLock) {
+				if (this.closeCalled) {
+					return;
+				}
+
+				RelayLogger.logEvent("closing", this);
+				this.closeCalled = true;
+
+				// If the input queue is empty this completes all pending waiters with null and
+				// prevents any new items being added to the input queue.
+				this.connectionInputQueue.shutdown();
+
+				// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
+				// connectionInputQueue.Shutdown().
+				for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
+					this.connectionInputQueue.dequeueAsync().thenAccept(connection -> {
+						connection.closeAsync(
+								new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
+					});
+				}
+			
+				this.isOnline = false;
+			}
+			RelayLogger.logEvent("closed", this);
+		}, EXECUTOR)
+		.whenComplete((nullResult, ex) -> {
 			this.connectionInputQueue.dispose();
-		}
-		return this.controlConnection.closeAsync(null);
+			if (ex != null) {
+				throw RelayLogger.throwingException(ex, this);
+			}
+		})
+		.thenCompose(nullResult -> this.controlConnection.closeAsync(null));
 	}
 
 	@Override
