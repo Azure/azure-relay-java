@@ -720,7 +720,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 * @throws InterruptedException
 		 */
 		private CompletableFuture<Void> receivePumpAsync() {
-			return CompletableFuture.supplyAsync(() -> receivePumpCore()).handle((keepGoing, ex) -> {
+			return receivePumpCoreAsync().handle((keepGoing, ex) -> {
 				if (keepGoing) {
 					receivePumpAsync();
 				}
@@ -741,40 +741,36 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 *         websocket is disconnected and indicates whether or not the receive
 		 *         pump should keep running.
 		 */
-		private boolean receivePumpCore() {
+		private CompletableFuture<Boolean> receivePumpCoreAsync() {
 			CompletableFuture<Void> connectTask = this.ensureConnectTask(null);
-			boolean keepGoing = true;
-			
-			try {
-				do {
-					connectTask.join();
-					String receivedMessage = this.webSocket.readTextAsync().join();
-
-					synchronized (this.thisLock) {
-						if (!this.webSocket.isOpen()) {
-							this.closeOrAbortWebSocketAsync(connectTask, this.webSocket.getCloseReason());
-							if (this.listener.closeCalled) {
-								// This is the cloud service responding to our clean shutdown.
-								keepGoing = false;
-							} 
-							else {
-								CloseReason reason = this.webSocket.getCloseReason();
-								keepGoing = this.onDisconnect(new ConnectionLostException(
-										reason.getCloseCode() + ": " + reason.getReasonPhrase()
-									));
+			return connectTask.thenCompose(nullResult -> this.webSocket.readTextAsync())
+				.thenApply(receivedMessage -> {
+					boolean keepGoing = true;
+					try {
+						synchronized (this.thisLock) {
+							if (!this.webSocket.isOpen()) {
+								this.closeOrAbortWebSocketAsync(connectTask, this.webSocket.getCloseReason());
+								if (this.listener.closeCalled) {
+									// This is the cloud service responding to our clean shutdown.
+									keepGoing = false;
+								} 
+								else {
+									CloseReason reason = this.webSocket.getCloseReason();
+									keepGoing = this.onDisconnect(new ConnectionLostException(
+											reason.getCloseCode() + ": " + reason.getReasonPhrase()
+										));
+								}
+								return keepGoing;
 							}
-							break;
 						}
+						this.listener.onCommandAsync(receivedMessage, this.webSocket);
+					} catch (Exception exception) {
+						RelayLogger.handledExceptionAsWarning(exception, this.listener);
+						this.closeOrAbortWebSocketAsync(connectTask, null);
+						keepGoing = this.onDisconnect(exception);
 					}
-					this.listener.onCommandAsync(receivedMessage, this.webSocket);
-				}
-				while (keepGoing);
-			} catch (Exception exception) {
-				RelayLogger.handledExceptionAsWarning(exception, this.listener);
-				this.closeOrAbortWebSocketAsync(connectTask, null);
-				keepGoing = this.onDisconnect(exception);
-			}
-			return keepGoing;
+					return keepGoing;
+				});
 		}
 
 		private void onOnline() {

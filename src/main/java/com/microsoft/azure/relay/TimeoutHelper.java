@@ -9,11 +9,11 @@ class TimeoutHelper {
 	private boolean deadlineSet;
 	private Duration originalTimeout;
 
-	protected TimeoutHelper(Duration timeout) {
+	TimeoutHelper(Duration timeout) {
 		this(timeout, false);
 	}
 
-	protected TimeoutHelper(Duration timeout, boolean startTimeout) {
+	TimeoutHelper(Duration timeout, boolean startTimeout) {
 		this.originalTimeout = timeout;
 		this.deadline = Instant.MAX;
 		this.deadlineSet = (timeout != null && isMaxDuration(timeout));
@@ -23,11 +23,11 @@ class TimeoutHelper {
 		}
 	}
 
-	protected Duration getOriginalTimeout() {
+	Duration getOriginalTimeout() {
 		return this.originalTimeout;
 	}
 
-	protected static Duration fromMillis(int milliseconds) {
+	static Duration fromMillis(int milliseconds) {
 		if (milliseconds >= Integer.MAX_VALUE) {
 			return RelayConstants.MAX_DURATION;
 		} else {
@@ -35,20 +35,20 @@ class TimeoutHelper {
 		}
 	}
 
-	protected static int toMillis(Duration timeout) {
+	static int toMillis(Duration timeout) {
 		long millis = timeout.toMillis();
 		return millis > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) millis;
 	}
 
-	protected static Duration min(Duration val1, Duration val2) {
+	static Duration min(Duration val1, Duration val2) {
 		return (val1.compareTo(val2) < 0) ? val1 : val2;
 	}
 
-	protected static Instant min(Instant val1, Instant val2) {
+	static Instant min(Instant val1, Instant val2) {
 		return (val1.compareTo(val2) < 0) ? val1 : val2;
 	}
 
-	protected static Instant add(Instant time, Duration timeout) {
+	static Instant add(Instant time, Duration timeout) {
 		try {
 			return time.plusNanos(timeout.toNanos());
 		}
@@ -62,7 +62,7 @@ class TimeoutHelper {
 		}
 	}
 
-	protected static Instant subtract(Instant time, Duration timeout) {
+	static Instant subtract(Instant time, Duration timeout) {
 		try {
 			return time.minusNanos(timeout.toNanos());
 		}
@@ -76,7 +76,7 @@ class TimeoutHelper {
 		}
 	}
 
-	protected Duration remainingTime() {
+	Duration remainingTime() {
 		if (!this.deadlineSet) {
 			this.setDeadline();
 			return this.originalTimeout;
@@ -88,7 +88,7 @@ class TimeoutHelper {
 		}
 	}
 
-	protected Duration elapsedTime() {
+	Duration elapsedTime() {
 		return this.originalTimeout.minus(this.remainingTime());
 	}
 
@@ -99,15 +99,13 @@ class TimeoutHelper {
 		}
 	}
 
-	protected static void throwIfNegativeArgument(Duration timeout) {
+	static void throwIfNegativeArgument(Duration timeout) {
 		throwIfNegativeArgument(timeout, "timeout");
 	}
 
-	protected static void throwIfNegativeArgument(Duration timeout, String argumentName) {
+	static void throwIfNegativeArgument(Duration timeout, String argumentName) {
 		if (timeout != null && timeout.isNegative()) {
-			throw new IllegalArgumentException("timeout interval cannot be negative.");
-			// TODO: trace
-//            throw RelayEventSource.Log.ArgumentOutOfRange(argumentName, timeout, SR.GetString(SR.TimeoutMustBeNonNegative, argumentName, timeout));
+			RelayLogger.throwingException(new IllegalArgumentException("timeout interval cannot be negative."), TimeoutHelper.class);
 		}
 	}
 

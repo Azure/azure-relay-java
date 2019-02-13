@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.io.IOException;
 import java.io.Writer;
 
@@ -173,36 +174,41 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @throws TimeoutException thrown when a complete message frame is not received within the timeout.
 	 */
 	CompletableFuture<ByteBuffer> readBinaryAsync(Duration timeout) {
-		
-		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
-				LinkedList<byte[]> fragments = new LinkedList<byte[]>();
-				boolean receivedWholeMsg;
-				int messageSize = 0;
-				
-				do {
-					MessageFragment fragment = fragmentQueue.dequeueAsync().join();
-					if (fragment == null) {
-						break;
-					}				
-					messageSize += fragment.getBytes().length;
-					fragments.add(fragment.getBytes());
-					receivedWholeMsg = fragment.isEnd();
-				} 
-				while (!receivedWholeMsg);
-	
-				byte[] message = new byte[messageSize];
-				int offset = 0;
-				for (byte[] bytes : fragments) {
-					System.arraycopy(bytes, 0, message, offset, bytes.length);
-					offset += bytes.length;
-				}
-	
-				RelayLogger.logEvent("receivedBytes", this, String.valueOf(message.length));
-				return ByteBuffer.wrap(message);
-			},
-			this.executor);
+		LinkedList<byte[]> fragments = new LinkedList<byte[]>();
+		AtomicInteger messageSize = new AtomicInteger(0);
+		return readFragmentsAsync(fragments, messageSize, timeout).thenApply((nullResult) -> {
+			byte[] message = new byte[messageSize.get()];
+			int offset = 0;
+			for (byte[] bytes : fragments) {
+				System.arraycopy(bytes, 0, message, offset, bytes.length);
+				offset += bytes.length;
+			}
+			RelayLogger.logEvent("receivedBytes", this, String.valueOf(message.length));
+			return ByteBuffer.wrap(message);
+		});
 	}
-	
+
+	private CompletableFuture<Void> readFragmentsAsync(LinkedList<byte[]> fragments, AtomicInteger messageSize, Duration timeout) {
+		TimeoutHelper timeoutHelper = (timeout != null) ? new TimeoutHelper(timeout, true) : null;
+		return fragmentQueue.dequeueAsync(timeout).thenCompose(fragment -> {
+			if (fragment == null) {
+				return CompletableFuture.completedFuture(null);
+			}
+
+			messageSize.getAndAdd(fragment.getBytes().length);
+			fragments.add(fragment.getBytes());
+
+			if (!fragment.isEnd()) {
+				if (timeout != null) {
+					return readFragmentsAsync(fragments, messageSize, timeoutHelper.remainingTime());
+				} else {
+					return readFragmentsAsync(fragments, messageSize, null);
+				}
+			}
+			return CompletableFuture.completedFuture(null);
+		});
+	}
+
 	/**
 	 * Sends the data to the remote endpoint as binary.
 	 * 
