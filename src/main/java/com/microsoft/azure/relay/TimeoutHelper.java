@@ -16,7 +16,7 @@ class TimeoutHelper {
 	TimeoutHelper(Duration timeout, boolean startTimeout) {
 		this.originalTimeout = timeout;
 		this.deadline = Instant.MAX;
-		this.deadlineSet = (timeout != null && isMaxDuration(timeout));
+		this.deadlineSet = (timeout == null || isMaxDuration(timeout));
 
 		if (startTimeout && !this.deadlineSet) {
 			this.setDeadline();
@@ -80,10 +80,9 @@ class TimeoutHelper {
 		if (!this.deadlineSet) {
 			this.setDeadline();
 			return this.originalTimeout;
-		} else if (this.deadline == Instant.MAX) {
-			return RelayConstants.MAX_DURATION;
 		} else {
-			Duration remaining = Duration.between(Instant.now(), this.deadline);
+			Duration remaining = (this.originalTimeout != null) ? 
+					Duration.between(Instant.now(), this.deadline) : RelayConstants.MAX_DURATION;
 			return (remaining.compareTo(Duration.ZERO) < 0) ? Duration.ZERO : remaining;
 		}
 	}
@@ -93,10 +92,8 @@ class TimeoutHelper {
 	}
 
 	private void setDeadline() {
-		if (!deadlineSet) {
-			this.deadline = add(Instant.now(), this.originalTimeout);
-			this.deadlineSet = true;
-		}
+		this.deadline = add(Instant.now(), this.originalTimeout);
+		this.deadlineSet = true;
 	}
 
 	static void throwIfNegativeArgument(Duration timeout) {

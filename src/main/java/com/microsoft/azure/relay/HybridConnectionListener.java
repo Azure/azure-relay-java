@@ -5,7 +5,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -277,11 +276,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * @return A CompletableFuture which completes when all connections are
 	 *         disconnected with the cloud service
 	 */
+	@SuppressWarnings("unchecked")
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
-		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
 			synchronized (this.thisLock) {
 				if (this.closeCalled) {
-					return;
+					return CompletableFuture.completedFuture(null);
 				}
 
 				RelayLogger.logEvent("closing", this);
@@ -293,17 +293,22 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 				// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
 				// connectionInputQueue.Shutdown().
+				CompletableFuture<?>[] closeTasks = new CompletableFuture<?>[this.connectionInputQueue.getPendingCount()];
 				for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
-					this.connectionInputQueue.dequeueAsync().thenAccept(connection -> {
+					closeTasks[i] = this.connectionInputQueue.dequeueAsync().thenAccept(connection -> {
 						connection.closeAsync(
 								new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
 					});
 				}
-			
-				this.isOnline = false;
+				return closeTasks;
 			}
-			RelayLogger.logEvent("closed", this);
 		}, EXECUTOR)
+		.thenCompose(closeTasks -> {
+			return CompletableFuture.allOf((CompletableFuture<Void>[]) closeTasks).thenRun(() -> {
+				this.isOnline = false;
+				RelayLogger.logEvent("closed", this);
+			});
+		})
 		.whenComplete((nullResult, ex) -> {
 			this.connectionInputQueue.dispose();
 			if (ex != null) {

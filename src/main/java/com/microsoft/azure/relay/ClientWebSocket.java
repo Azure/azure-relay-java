@@ -176,7 +176,8 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	CompletableFuture<ByteBuffer> readBinaryAsync(Duration timeout) {
 		LinkedList<byte[]> fragments = new LinkedList<byte[]>();
 		AtomicInteger messageSize = new AtomicInteger(0);
-		return readFragmentsAsync(fragments, messageSize, timeout).thenApply((nullResult) -> {
+		TimeoutHelper timeoutHelper = new TimeoutHelper(timeout, true);
+		return readFragmentsAsync(fragments, messageSize, timeoutHelper).thenApply((nullResult) -> {
 			byte[] message = new byte[messageSize.get()];
 			int offset = 0;
 			for (byte[] bytes : fragments) {
@@ -188,9 +189,8 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		});
 	}
 
-	private CompletableFuture<Void> readFragmentsAsync(LinkedList<byte[]> fragments, AtomicInteger messageSize, Duration timeout) {
-		TimeoutHelper timeoutHelper = (timeout != null) ? new TimeoutHelper(timeout, true) : null;
-		return fragmentQueue.dequeueAsync(timeout).thenCompose(fragment -> {
+	private CompletableFuture<Void> readFragmentsAsync(LinkedList<byte[]> fragments, AtomicInteger messageSize, TimeoutHelper helper) {
+		return fragmentQueue.dequeueAsync(helper.remainingTime()).thenCompose(fragment -> {
 			if (fragment == null) {
 				return CompletableFuture.completedFuture(null);
 			}
@@ -199,11 +199,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			fragments.add(fragment.getBytes());
 
 			if (!fragment.isEnd()) {
-				if (timeout != null) {
-					return readFragmentsAsync(fragments, messageSize, timeoutHelper.remainingTime());
-				} else {
-					return readFragmentsAsync(fragments, messageSize, null);
-				}
+				return readFragmentsAsync(fragments, messageSize, helper);
 			}
 			return CompletableFuture.completedFuture(null);
 		});
@@ -306,7 +302,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
 	 */
 	CompletableFuture<Void> closeAsync(CloseReason reason) {
-		RelayLogger.logEvent("closing", this);
+		RelayLogger.logEvent("clientWebSocketClosing", this, (reason != null) ? reason.getReasonPhrase() : "NONE");
 		this.fragmentQueue.shutdown();
 		this.textQueue.shutdown();
 		
@@ -352,7 +348,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	
 	@OnClose
 	public void onClose(Session session, CloseReason reason) {
-		RelayLogger.logEvent("closed", this);
+		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
 		this.textQueue.shutdown();
 		this.fragmentQueue.shutdown();
 		

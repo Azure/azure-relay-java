@@ -144,6 +144,8 @@ final class RelayLogger {
 		map.put("writingBytesFailed", "%s: writing bytes failed.");
 		map.put("receivedBytes", "%s: received bytes from remote. Total length: %s");
 		map.put("receivedText", "%s: received text from remote. Total length: %s");
+		map.put("clientWebSocketClosing", "%s: is closing. Close reason: %s");
+		map.put("clientWebSocketClosed", "%s: is closed. Close reason: %s");
 
 		Messages = Collections.unmodifiableMap(map);
 		return true;
