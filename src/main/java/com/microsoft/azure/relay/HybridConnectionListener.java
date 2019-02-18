@@ -279,29 +279,29 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	@SuppressWarnings("unchecked")
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
 		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
-			synchronized (this.thisLock) {
-				if (this.closeCalled) {
-					return CompletableFuture.completedFuture(null);
-				}
+		synchronized (this.thisLock) {
+			if (this.closeCalled) {
+				return CompletableFuture.completedFuture(null);
+			}
 
-				RelayLogger.logEvent("closing", this);
-				this.closeCalled = true;
+			RelayLogger.logEvent("closing", this);
+			this.closeCalled = true;
 
-				// If the input queue is empty this completes all pending waiters with null and
-				// prevents any new items being added to the input queue.
-				this.connectionInputQueue.shutdown();
+			// If the input queue is empty this completes all pending waiters with null and
+			// prevents any new items being added to the input queue.
+			this.connectionInputQueue.shutdown();
 
-				// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
-				// connectionInputQueue.Shutdown().
+			// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
+			// connectionInputQueue.Shutdown().
 				CompletableFuture<?>[] closeTasks = new CompletableFuture<?>[this.connectionInputQueue.getPendingCount()];
-				for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
+			for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
 					closeTasks[i] = this.connectionInputQueue.dequeueAsync().thenAccept(connection -> {
 						connection.closeAsync(
 								new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
-					});
-				}
-				return closeTasks;
+				});
 			}
+				return closeTasks;
+		}
 		}, EXECUTOR)
 		.thenCompose(closeTasks -> {
 			return CompletableFuture.allOf((CompletableFuture<Void>[]) closeTasks).thenRun(() -> {
@@ -310,10 +310,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			});
 		})
 		.whenComplete((nullResult, ex) -> {
-			this.connectionInputQueue.dispose();
-			if (ex != null) {
-				throw RelayLogger.throwingException(ex, this);
-			}
+				this.connectionInputQueue.dispose();
+				if (ex != null) {
+					throw RelayLogger.throwingException(ex, this);
+				}
 		})
 		.thenCompose(nullResult -> this.controlConnection.closeAsync(null));
 	}
@@ -716,14 +716,15 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 */
 		private CompletableFuture<Void> receivePumpAsync() {
 			return receivePumpCoreAsync().handle((keepGoing, ex) -> {
-				if (keepGoing) {
+				if (keepGoing) {				
 					receivePumpAsync();
+				} else {
+					this.onOffline(ex);
+					if (ex != null) {
+						throw RelayLogger.throwingException(ex, this, TraceLevel.WARNING);
+					}
 				}
 				
-				if (ex != null) {
-					RelayLogger.throwingException(ex, this, TraceLevel.WARNING);
-				}
-				this.onOffline(ex);
 				return null;
 			});
 		}
