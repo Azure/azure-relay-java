@@ -11,7 +11,6 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -167,7 +166,6 @@ public class SendReceiveTest {
 		assertEquals("Sendner did not receive expected number of messages.", numberOfSenders, senderReceiveCount);
 	}
 	
-	
 	@Test
 	public void httpGETAndSmallResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, emptyStr, smallStr));
@@ -218,11 +216,16 @@ public class SendReceiveTest {
 	}
 	
 	private static CompletableFuture<Void> websocketListener(String msgExpected, String msgToSend) {
-		return listener.acceptConnectionAsync().thenAcceptAsync((channel) -> {
-			ByteBuffer bytesReceived = channel.readAsync().join();
-			assertEquals("Websocket listener did not receive the expected message.", msgExpected, new String(bytesReceived.array()));
-			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
-			channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
+		return listener.acceptConnectionAsync().thenComposeAsync((channel) -> {
+			return channel.readAsync().thenAccept(bytesReceived -> {
+				assertEquals("Websocket listener did not receive the expected message.", msgExpected, new String(bytesReceived.array()));
+			})
+			.thenCompose(nullResult -> {
+				return channel.writeAsync(StringUtil.toBuffer(msgToSend));
+			})
+			.thenCompose(nullResult -> {
+				return channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
+			});
 		});
 	}
 	

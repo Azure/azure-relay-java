@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.io.IOException;
 import java.io.Writer;
 
@@ -173,36 +174,37 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @throws TimeoutException thrown when a complete message frame is not received within the timeout.
 	 */
 	CompletableFuture<ByteBuffer> readBinaryAsync(Duration timeout) {
-		
-		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
-				LinkedList<byte[]> fragments = new LinkedList<byte[]>();
-				boolean receivedWholeMsg;
-				int messageSize = 0;
-				
-				do {
-					MessageFragment fragment = fragmentQueue.dequeueAsync().join();
-					if (fragment == null) {
-						break;
-					}				
-					messageSize += fragment.getBytes().length;
-					fragments.add(fragment.getBytes());
-					receivedWholeMsg = fragment.isEnd();
-				} 
-				while (!receivedWholeMsg);
-	
-				byte[] message = new byte[messageSize];
-				int offset = 0;
-				for (byte[] bytes : fragments) {
-					System.arraycopy(bytes, 0, message, offset, bytes.length);
-					offset += bytes.length;
-				}
-	
-				RelayLogger.logEvent("receivedBytes", this, String.valueOf(message.length));
-				return ByteBuffer.wrap(message);
-			},
-			this.executor);
+		LinkedList<byte[]> fragments = new LinkedList<byte[]>();
+		AtomicInteger messageSize = new AtomicInteger(0);
+		TimeoutHelper timeoutHelper = new TimeoutHelper(timeout, true);
+		return readFragmentsAsync(fragments, messageSize, timeoutHelper).thenApply((nullResult) -> {
+			byte[] message = new byte[messageSize.get()];
+			int offset = 0;
+			for (byte[] bytes : fragments) {
+				System.arraycopy(bytes, 0, message, offset, bytes.length);
+				offset += bytes.length;
+			}
+			RelayLogger.logEvent("receivedBytes", this, String.valueOf(message.length));
+			return ByteBuffer.wrap(message);
+		});
 	}
-	
+
+	private CompletableFuture<Void> readFragmentsAsync(LinkedList<byte[]> fragments, AtomicInteger messageSize, TimeoutHelper helper) {
+		return fragmentQueue.dequeueAsync(helper.remainingTime()).thenCompose(fragment -> {
+			if (fragment == null) {
+				return CompletableFuture.completedFuture(null);
+			}
+
+			messageSize.getAndAdd(fragment.getBytes().length);
+			fragments.add(fragment.getBytes());
+
+			if (!fragment.isEnd()) {
+				return readFragmentsAsync(fragments, messageSize, helper);
+			}
+			return CompletableFuture.completedFuture(null);
+		});
+	}
+
 	/**
 	 * Sends the data to the remote endpoint as binary.
 	 * 
@@ -300,7 +302,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
 	 */
 	CompletableFuture<Void> closeAsync(CloseReason reason) {
-		RelayLogger.logEvent("closing", this);
+		RelayLogger.logEvent("clientWebSocketClosing", this, (reason != null) ? reason.getReasonPhrase() : "NONE");
 		this.fragmentQueue.shutdown();
 		this.textQueue.shutdown();
 		
@@ -346,7 +348,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	
 	@OnClose
 	public void onClose(Session session, CloseReason reason) {
-		RelayLogger.logEvent("closed", this);
+		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
 		this.textQueue.shutdown();
 		this.fragmentQueue.shutdown();
 		
