@@ -276,46 +276,42 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * @return A CompletableFuture which completes when all connections are
 	 *         disconnected with the cloud service
 	 */
-	@SuppressWarnings("unchecked")
 	public CompletableFuture<Void> closeAsync(Duration timeout) {
-		return CompletableFutureUtil.timedSupplyAsync(timeout, () -> {
-			synchronized (this.thisLock) {
-				if (this.closeCalled) {
-					return CompletableFuture.completedFuture(null);
-				}
-
-				RelayLogger.logEvent("closing", this);
-				this.closeCalled = true;
-
-				// If the input queue is empty this completes all pending waiters with null and
-				// prevents any new items being added to the input queue.
-				this.connectionInputQueue.shutdown();
-
-				// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
-				// connectionInputQueue.Shutdown().
-				CompletableFuture<?>[] closeTasks = new CompletableFuture<?>[this.connectionInputQueue.getPendingCount()];
-				for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
-					closeTasks[i] = this.connectionInputQueue.dequeueAsync().thenAccept(connection -> {
-						connection.closeAsync(
-								new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
-					});
-				}
-				return closeTasks;
+		TimeoutHelper timeoutHelper = new TimeoutHelper(timeout);
+		CompletableFuture<?>[] closeTasks;
+		synchronized (this.thisLock) {
+			if (this.closeCalled) {
+				return CompletableFuture.completedFuture(null);
 			}
-		}, EXECUTOR)
-		.thenCompose(closeTasks -> {
-			return CompletableFuture.allOf((CompletableFuture<Void>[]) closeTasks).thenRun(() -> {
+
+			RelayLogger.logEvent("closing", this);
+			this.closeCalled = true;
+
+			// If the input queue is empty this completes all pending waiters with null and
+			// prevents any new items being added to the input queue.
+			this.connectionInputQueue.shutdown();
+
+			// Close any unaccepted rendezvous. DequeueAsync won't block since we've called
+			// connectionInputQueue.Shutdown().
+			closeTasks = new CompletableFuture<?>[this.connectionInputQueue.getPendingCount()];
+			for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
+				closeTasks[i] = this.connectionInputQueue.dequeueAsync(timeoutHelper.remainingTime()).thenAccept(connection -> {
+					connection.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
+				});
+			}
+		}
+		
+		return CompletableFuture.allOf(closeTasks)
+			.thenCompose(voidResult -> this.controlConnection.closeAsync(timeoutHelper.remainingTime()))
+			.whenComplete((voidResult, ex) -> {
 				this.isOnline = false;
 				RelayLogger.logEvent("closed", this);
+
+				this.connectionInputQueue.dispose();
+				if (ex != null) {
+					throw RelayLogger.throwingException(ex, this);
+				}
 			});
-		})
-		.whenComplete((nullResult, ex) -> {
-			this.connectionInputQueue.dispose();
-			if (ex != null) {
-				throw RelayLogger.throwingException(ex, this);
-			}
-		})
-		.thenCompose(nullResult -> this.controlConnection.closeAsync(null));
 	}
 
 	@Override
@@ -466,7 +462,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * Connects, maintains, and transparently reconnects this listener's control
 	 * connection with the cloud service.
 	 */
-	final class ControlConnection implements AutoCloseable {
+	private final class ControlConnection implements AutoCloseable {
 		// Retries after 0, 1, 2, 5, 10, 30 seconds
 		final Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
 				Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30) };
