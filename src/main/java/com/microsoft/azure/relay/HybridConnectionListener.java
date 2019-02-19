@@ -719,12 +719,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				if (keepGoing) {				
 					receivePumpAsync();
 				} else {
-					this.onOffline(ex);
 					if (ex != null) {
-						throw RelayLogger.throwingException(ex, this, TraceLevel.WARNING);
-					}
+						RelayLogger.throwingException(ex, this, TraceLevel.WARNING);
+					}					
+					this.onOffline(ex);
 				}
-				
+
 				return null;
 			});
 		}
