@@ -37,7 +37,7 @@ final class RelayLogger {
 		}
 	}
 
-	static RuntimeException argumentNull(String arg, Object source) {
+	public static RuntimeException argumentNull(String arg, Object source) {
 		return throwingException(new IllegalArgumentException(arg + " is null or empty."), source, TraceLevel.ERROR);
 	}
 	
@@ -106,49 +106,48 @@ final class RelayLogger {
 		return source.toString();
 	}
 
-	private static boolean init() {
+	private static void init() {
 		DOMConfigurator.configure("resources/log4j.xml");
 
 		Map<String, String> map = new HashMap<String, String>();
-		map.put("connecting", "%s is connecting.");
-		map.put("connected", "%s is connected.");
-		map.put("closing", "%s is closing.");
-		map.put("closed", "%s is closed.");
-		map.put("offline", "%s is offline.");
-		map.put("rendezvousStart", "%s: Relay Listener Received a connection request. Rendezvous Address: %s.");
-		map.put("rendezvousFailed", "%s: Relayed Listener failed to accept client. Exception: %s.");
-		map.put("rendezvousClose", "%s: Relayed Listener has received call to close and will not accept the incoming connection. ConnectionAddress: %s");
-		map.put("rendezvousStop", "%s: Relay Listener accepted a client connection.");
-		map.put("rendezvousRejected", "%s: Relayed Listener is rejecting the client. StatusCode: %s, StatusDescription: %s.");
-		map.put("sendCommand", "%s: Response command was sent: %s");
-		map.put("httpRequestStarting", "%s: request initializing.");
-		map.put("httpReadRendezvous", "%s: reading %s from the rendezvous connection.");
-		map.put("httpRequestReceived", "%s: Request method: %s.");
-		map.put("httpInvokeUserHandler", "%s: Invoking user RequestHandler.");
-		map.put("httpUserRequestHandlerException", "%s: exception in the user's request handler.");
-		map.put("httpMissingRequestHandler", "%s: No request handler is configured on the listener.");
-		map.put("httpSendResponse", "%s: Sending the response command on the %s connection, status: %s.");
-		map.put("httpSendResponseFinished", "%s: Finished sending the response command on the %s connection, status: %s.");
-		map.put("httpSendingBytes", "%s: Sending %s bytes on the rendezvous connection");
-		map.put("httpCreateRendezvous", "%s: Creating the rendezvous connection.");
-		map.put("httpResponseStreamFlush", "%s+ResponseStream: FlushCoreAsync(reason=%s)");
-		map.put("httpResponseStreamWrite", "%s+ResponseStream: WriteAsync(count=%s)");
-		map.put("parsingUUIDFailed", "%s: Parsing TrackingId '%s' as Guid failed, created new ActivityId '%s' for trace correlation.");
-		map.put("tokenRenewScheduled", "%s: Scheduling Token renewal after %s.");
-		map.put("tokenRenewNegativeDuration", "%s: Not renewing token because the duration left on the token is negative.");
-		map.put("getTokenStart", "%s: getToken start.");
-		map.put("getTokenStop", "%s: getToken stop. New token expires at %s.");
-		map.put("objectNotSet", "%s: %s was not set to the given value.");
-		map.put("writingBytes", "%s: starting to write to remote. Writemode: %s");
-		map.put("doneWritingBytes", "%s: finished writing %s bytes to remote.");
-		map.put("writingBytesFailed", "%s: writing bytes failed.");
-		map.put("receivedBytes", "%s: received bytes from remote. Total length: %s");
-		map.put("receivedText", "%s: received text from remote. Total length: %s");
 		map.put("clientWebSocketClosing", "%s: is closing. Close reason: %s");
 		map.put("clientWebSocketClosed", "%s: is closed. Close reason: %s");
+		map.put("closing", "%s is closing.");
+		map.put("closed", "%s is closed.");
+		map.put("connecting", "%s is connecting.");
+		map.put("connected", "%s is connected.");
+		map.put("doneWritingBytes", "%s: finished writing %s bytes to remote.");
+		map.put("getTokenStart", "%s: getToken start.");
+		map.put("getTokenStop", "%s: getToken stop. New token expires at %s.");
+		map.put("httpCreateRendezvous", "%s: Creating the rendezvous connection.");
+		map.put("httpInvokeUserHandler", "%s: Invoking user RequestHandler.");
+		map.put("httpMissingRequestHandler", "%s: No request handler is configured on the listener.");
+		map.put("httpReadRendezvous", "%s: reading %s from the rendezvous connection.");
+		map.put("httpRequestReceived", "%s: Request method: %s.");
+		map.put("httpRequestStarting", "%s: request initializing.");
+		map.put("httpResponseStreamFlush", "%s+ResponseStream: FlushCoreAsync(reason=%s)");
+		map.put("httpResponseStreamWrite", "%s+ResponseStream: WriteAsync(count=%s)");
+		map.put("httpSendingBytes", "%s: Sending %s bytes on the rendezvous connection");
+		map.put("httpSendResponse", "%s: Sending the response command on the %s connection, status: %s.");
+		map.put("httpSendResponseFinished", "%s: Finished sending the response command on the %s connection, status: %s.");
+		map.put("httpUserRequestHandlerException", "%s: exception in the user's request handler.");
+		map.put("objectNotSet", "%s: %s was not set to the given value.");
+		map.put("offline", "%s is offline.");
+		map.put("parsingUUIDFailed", "%s: Parsing TrackingId '%s' as Guid failed, created new ActivityId '%s' for trace correlation.");
+		map.put("receivedBytes", "%s: received bytes from remote. Total length: %s");
+		map.put("receivedText", "%s: received text from remote. Total length: %s");
+		map.put("rendezvousClose", "%s: Relayed Listener has received call to close and will not accept the incoming connection. ConnectionAddress: %s");
+		map.put("rendezvousFailed", "%s: Relayed Listener failed to accept client. Exception: %s.");
+		map.put("rendezvousRejected", "%s: Relayed Listener is rejecting the client. StatusCode: %s, StatusDescription: %s.");
+		map.put("rendezvousStart", "%s: Relay Listener Received a connection request. Rendezvous Address: %s.");
+		map.put("rendezvousStop", "%s: Relay Listener accepted a client connection.");
+		map.put("sendCommand", "%s: Response command was sent: %s");
+		map.put("tokenRenewNegativeDuration", "%s: Not renewing token because the duration left on the token is negative.");
+		map.put("tokenRenewScheduled", "%s: Scheduling Token renewal after %s.");
+		map.put("writingBytes", "%s: starting to write to remote. Writemode: %s");
+		map.put("writingBytesFailed", "%s: writing bytes failed.");
 
 		Messages = Collections.unmodifiableMap(map);
-		return true;
 	}
 	
 	private static class TraceDetails {
