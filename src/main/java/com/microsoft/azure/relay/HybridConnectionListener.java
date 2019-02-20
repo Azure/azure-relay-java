@@ -461,9 +461,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * Connects, maintains, and transparently reconnects this listener's control
 	 * connection with the cloud service.
 	 */
-	private final class ControlConnection implements AutoCloseable {
+	private final static class ControlConnection implements AutoCloseable {
 		// Retries after 0, 1, 2, 5, 10, 30 seconds
-		final Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
+		private final static Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
 				Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30) };
 		private final HybridConnectionListener listener;
 		private final URI address;
@@ -471,14 +471,13 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private String path;
 		private final TokenRenewer tokenRenewer;
 		private final AsyncLock sendAsyncLock;
-		private CompletableFuture<Void> connectAsyncTask;
+		private CompletableFuture<ClientWebSocket> connectAsyncTask;
 		private int connectDelayIndex;
 		private boolean isOnline;
 		private Throwable lastError;
 		private BiConsumer<Object, Object[]> connectingHandler;
 		private BiConsumer<Object, Object[]> offlineHandler;
 		private BiConsumer<Object, Object[]> onlineHandler;
-		private ClientWebSocket webSocket;
 		private Object thisLock = new Object();
 
 		boolean isOnline() {
@@ -519,9 +518,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			String rawPath = this.address.getPath();
 			this.path = (rawPath.startsWith("/")) ? rawPath.substring(1) : rawPath;
 			this.sendAsyncLock = new AsyncLock();
-			this.tokenRenewer = new TokenRenewer(this.listener, this.address.toString(),
-					TokenProvider.DEFAULT_TOKEN_TIMEOUT);
-			this.webSocket = new ClientWebSocket(trackingContext, EXECUTOR);
+			this.tokenRenewer = new TokenRenewer(
+				this.listener, this.address.toString(),	TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 		}
 
 		/**
@@ -533,26 +531,21 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 *         is established between the control websocket and the cloud service
 		 */
 		public CompletableFuture<Void> openAsync(Duration timeout) {
-			// Establish a WebSocket connection right now so we can detect any fatal errors
-			return CompletableFuture.runAsync(() -> {
-				CompletableFuture<Void> connectTask = null;
-				boolean success = false;
-				
-				try {
-					// Block so we surface any errors to the user right away.
-					connectTask = this.ensureConnectTask(timeout);
-					connectTask.join();
-
+			// Establish a WebSocket connection right now so we can detect any fatal errors		
+			CompletableFuture<ClientWebSocket> connectTask = this.ensureConnectTask(timeout);
+			return connectTask.thenAccept((webSocket) -> {
 					this.tokenRenewer.setOnTokenRenewed((token) -> this.onTokenRenewed(token));
-					this.receivePumpAsync();
-					success = true;
-				} finally {
-					if (!success) {
-						this.closeOrAbortWebSocketAsync(connectTask, new CloseReason(CloseCodes.UNEXPECTED_CONDITION,
-								"closing web socket connection because something went wrong trying to connect."));			
+					this.receivePumpAsync(); // This starts pumping but doesn't wait
+				}).whenComplete(($void, err) -> {
+					if (err != null) {
+						// catch (Throwable err) {
+						RelayLogger.throwingException(err, this.listener);
+						CloseReason closeReason = new CloseReason(CloseCodes.UNEXPECTED_CONDITION,
+								"closing web socket connection because something went wrong trying to connect.");
+						this.closeOrAbortWebSocketAsync(connectTask, closeReason);
+						throw new CompletionException(err);
 					}
-				}
-			});
+				});
 		}
 
 		/**
@@ -564,24 +557,29 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 */
 		private CompletableFuture<Void> closeAsync(Duration duration) {
 			
+			CompletableFuture<ClientWebSocket> connectTask;
 			synchronized (this.thisLock) {
-				this.tokenRenewer.close();
-
-				if (this.connectAsyncTask != null) {
-					 this.sendAsyncLock.acquireAsync(duration, EXECUTOR).thenCompose((lockRelease) -> {
-						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");
-						
-						return this.webSocket.closeAsync(reason).whenComplete((res, ex) -> {
-							this.connectAsyncTask = null;
-							lockRelease.release();
-							if (ex != null) {
-								throw new RuntimeException(ex);
-							}
-						});
-					});
-				}
-				return CompletableFuture.completedFuture(null);
+				connectTask = this.connectAsyncTask;
+				this.connectAsyncTask = null;
 			}
+			
+			this.tokenRenewer.close();
+			if (connectTask != null) {
+				return connectTask.thenCompose((webSocket) -> {
+					return this.sendAsyncLock.acquireAsync(duration, EXECUTOR)
+						.thenCompose((lockRelease) -> {
+							CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
+							return webSocket.closeAsync(reason)
+									.whenComplete((res, ex) -> {
+										// finally
+										lockRelease.release();
+									});
+						});
+				});
+			}
+			
+			// TODO: Wait for ReceivePump to complete?			
+			return CompletableFuture.completedFuture(null);
 		}
 
 		/**
@@ -596,25 +594,29 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 */
 		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
 
-		    return this.sendAsyncLock.acquireAsync(timeout, EXECUTOR).thenCompose((lockRelease) -> {
-		        CompletableFuture<Void> future = this.ensureConnectTask(timeout).thenCompose((unused) -> {
-		            String json = command.getResponse().toJsonString();
-		            RelayLogger.logEvent("sendCommand", this, json);
-		            return this.webSocket.writeAsync(json, timeout, WriteMode.TEXT);
-		        });
-		        
-		        if (buffer != null) {
-		            future = future.thenCompose((unused) -> this.webSocket.writeAsync(buffer.array()));
-		        }
-
-		        return future.handle((bytesWritten, ex) -> {
-		            lockRelease.release();
-		            if (ex != null) {
-		            	throw new CompletionException(ex);
-		            }
-		            return null;
-		        });
-		    });
+			return this.ensureConnectTask(timeout)
+				.thenCompose(webSocket -> {
+					return sendAsyncLock.acquireAsync(timeout, EXECUTOR)
+						.thenCompose((lockRelease) -> {
+							String json = command.getResponse().toJsonString();
+							RelayLogger.logEvent("sendCommand", this, json);
+							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
+								.thenCompose($void -> {
+									if (buffer != null) {
+										return webSocket.writeAsync(buffer.array());
+									} else {
+										return CompletableFuture.completedFuture(null);
+									}
+								})
+								.whenComplete(($void, err) -> {
+									// finally
+									lockRelease.release();
+						            if (err != null) {
+						            	throw new CompletionException(err);
+						            }
+								});
+						});
+				});
 		}
 
 		/**
@@ -627,9 +629,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 * @throws InterruptedException Throws when interrupted during the connection
 		 *                              delay
 		 */
-		private CompletableFuture<Void> ensureConnectTask(Duration timeout) {
+		private CompletableFuture<ClientWebSocket> ensureConnectTask(Duration timeout) {
 			synchronized (this.thisLock) {
-				if (this.connectAsyncTask == null) {
+				if (this.connectAsyncTask == null || this.connectAsyncTask.isCompletedExceptionally() || this.connectAsyncTask.isCancelled()) {
 					this.connectAsyncTask = this.connectAsync(timeout);
 				}
 				return this.connectAsyncTask;
@@ -647,7 +649,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 * @throws InterruptedException Throws when interrupted during the connection
 		 *                              delay
 		 */
-		private CompletableFuture<Void> connectAsync(Duration timeout) {
+		private CompletableFuture<ClientWebSocket> connectAsync(Duration timeout) {
 			try {
 				this.listener.throwIfDisposed();
 				
@@ -671,18 +673,21 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 							this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.LISTEN,
 							trackingId);
 
-				return delayTask.thenCompose((res) -> {
-					synchronized (this.thisLock) {
-						return this.webSocket.connectAsync(websocketUri, timeout, config);
-					}
-				}).thenRun(() -> this.onOnline());
+				ClientWebSocket webSocket = new ClientWebSocket(this.listener.trackingContext, EXECUTOR);
+				return delayTask.thenCompose(($void) -> {
+					return webSocket.connectAsync(websocketUri, timeout, config)
+						.thenApply(($void2) -> {
+							this.onOnline();
+							return webSocket;
+						});
+				});
 			}
 			catch (Throwable e) {
 				return CompletableFutureUtil.fromException(e);
 			}
 		}
 		
-		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<Void> connectTask, CloseReason reason) {
+		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<ClientWebSocket> connectTask, CloseReason reason) {
 			assert connectTask != null;
 			assert connectTask.isDone();
 			
@@ -690,15 +695,19 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				if (connectTask == this.connectAsyncTask) {
 					this.connectAsyncTask = null;
 				}
-				this.isOnline = false;
-				
-				return connectTask.thenCompose((res) -> this.webSocket.closeAsync(reason));
 			}
+			
+			return connectTask.thenCompose((webSocket) -> webSocket.closeAsync(reason))
+				.exceptionally((exception) -> {
+					// catch and do not rethrow
+					RelayLogger.handledExceptionAsWarning(exception, this.listener);
+					return null;
+				});
 		}
 		
 		@Override
 		public void close() {
-			this.closeAsync(null).join();
+			this.closeAsync(RelayConstants.DEFAULT_OPERATION_TIMEOUT).join();
 		}
 
 		/**
@@ -733,35 +742,33 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 *         pump should keep running.
 		 */
 		private CompletableFuture<Boolean> receivePumpCoreAsync() {
-			CompletableFuture<Void> connectTask = this.ensureConnectTask(null);
-			return connectTask.thenCompose(nullResult -> this.webSocket.readTextAsync())
-				.thenApply(receivedMessage -> {
-					boolean keepGoing = true;
-					try {
-						synchronized (this.thisLock) {
-							if (!this.webSocket.isOpen()) {
-								this.closeOrAbortWebSocketAsync(connectTask, this.webSocket.getCloseReason());
+			CompletableFuture<ClientWebSocket> connectTask = this.ensureConnectTask(null);
+			return connectTask.thenCompose(webSocket -> {
+				return webSocket.readTextAsync()
+					.thenApply(receivedMessage -> {
+						boolean keepGoing = true;
+						try {
+							if (!webSocket.isOpen()) {
+								this.closeOrAbortWebSocketAsync(connectTask, webSocket.getCloseReason());
 								if (this.listener.closeCalled) {
 									// This is the cloud service responding to our clean shutdown.
 									keepGoing = false;
 								} 
 								else {
-									CloseReason reason = this.webSocket.getCloseReason();
-									keepGoing = this.onDisconnect(new ConnectionLostException(
-											reason.getCloseCode() + ": " + reason.getReasonPhrase()
-										));
+									CloseReason reason = webSocket.getCloseReason();
+									keepGoing = this.onDisconnect(new ConnectionLostException(reason.toString()));
 								}
 								return keepGoing;
 							}
+							this.listener.onCommandAsync(receivedMessage, webSocket);
+						} catch (Exception exception) {
+							RelayLogger.handledExceptionAsWarning(exception, this.listener);
+							this.closeOrAbortWebSocketAsync(connectTask, null);
+							keepGoing = this.onDisconnect(exception);
 						}
-						this.listener.onCommandAsync(receivedMessage, this.webSocket);
-					} catch (Exception exception) {
-						RelayLogger.handledExceptionAsWarning(exception, this.listener);
-						this.closeOrAbortWebSocketAsync(connectTask, null);
-						keepGoing = this.onDisconnect(exception);
-					}
-					return keepGoing;
+						return keepGoing;
 				});
+			});
 		}
 
 		private void onOnline() {
