@@ -304,9 +304,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		return CompletableFuture.allOf(closeTasks)
 			.thenCompose($void -> this.controlConnection.closeAsync(timeoutHelper.remainingTime()))
 			.whenComplete(($void, ex) -> {
-				this.isOnline = false;
 				this.connectionInputQueue.dispose();
 				RelayLogger.logEvent("closed", this);				
+				this.isOnline = false;
 				if (ex != null) {
 					throw RelayLogger.throwingException(ex, this);
 				}
