@@ -21,38 +21,38 @@ final class InputQueue<T> {
 
 	private Consumer<T> disposeItemCallback;
 
-	int getPendingCount() {
+	public int getPendingCount() {
 		synchronized (thisLock) {
 			return this.itemQueue.getTotalCount();
 		}
 	}
 
-	int getReadersQueueCount() {
+	public int getReadersQueueCount() {
 		synchronized (thisLock) {
 			return this.readerQueue.size();
 		}
 	}
 
-	Consumer<T> getDisposeItemCallback() {
+	public Consumer<T> getDisposeItemCallback() {
 		return this.disposeItemCallback;
 	}
 
-	void setDisposeItemCallback(Consumer<T> callback) {
+	public void setDisposeItemCallback(Consumer<T> callback) {
 		this.disposeItemCallback = callback;
 	}
 
-	InputQueue(AutoShutdownScheduledExecutor executor) {
+	public InputQueue(AutoShutdownScheduledExecutor executor) {
 		this.executor = executor;		
 		this.itemQueue = new ItemQueue();
 		this.readerQueue = new LinkedList<CompletableFuture<T>>();
 		this.queueState = QueueState.OPEN;
 	}
 
-	CompletableFuture<T> dequeueAsync() {
+	public CompletableFuture<T> dequeueAsync() {
 		return dequeueAsync(null);
 	}
 	
-	CompletableFuture<T> dequeueAsync(Duration timeout) {
+	public CompletableFuture<T> dequeueAsync(Duration timeout) {
 		Item item = null;
 
 		synchronized (thisLock) {
@@ -99,7 +99,7 @@ final class InputQueue<T> {
 	}
 
 	@SuppressWarnings("unchecked")
-	void dispatch() {
+	public void dispatch() {
 		CompletableFuture<T> reader = null;
 		CompletableFuture<T>[] outstandingReaders = null;
 		Item item = new Item();
@@ -136,7 +136,7 @@ final class InputQueue<T> {
 		}
 	}
 
-	void enqueueAndDispatch(T item) {
+	public void enqueueAndDispatch(T item) {
 		enqueueAndDispatch(item, null);
 	}
 
@@ -145,30 +145,30 @@ final class InputQueue<T> {
 	// not be notified of the item being available until the callback returns. If
 	// you are not sure if the callback will block for a long time, then first call
 	// ActionItem.Schedule to get to a "safe" thread.
-	void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
+	public void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback) {
 		enqueueAndDispatch(item, dequeuedCallback, true);
 	}
 
-	void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
+	public void enqueueAndDispatch(T item, Consumer<T> dequeuedCallback, boolean canDispatchOnThisThread) {
 		enqueueAndDispatch(new Item(item, dequeuedCallback), canDispatchOnThisThread);
 	}
 
-	boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
+	public boolean enqueueWithoutDispatch(T item, Consumer<T> dequeuedCallback) {
 		return enqueueWithoutDispatch(new Item(item, dequeuedCallback));
 	}
 
-	boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
+	public boolean enqueueWithoutDispatch(Exception exception, Consumer<T> dequeuedCallback) {
 		return enqueueWithoutDispatch(new Item(exception, dequeuedCallback));
 	}
 
-	void shutdown() {
+	public void shutdown() {
 		this.shutdown(null);
 	}
 
 	// Don't let any more items in. Differs from Close in that we keep around
 	// existing items in our itemQueue for possible future calls to Dequeue
 	@SuppressWarnings("unchecked")
-	void shutdown(Supplier<Exception> pendingExceptionGenerator) {
+	public void shutdown(Supplier<Exception> pendingExceptionGenerator) {
 		CompletableFuture<T>[] outstandingReaders = null;
 
 		synchronized (thisLock) {
@@ -201,7 +201,7 @@ final class InputQueue<T> {
 		}
 	}
 
-	void dispose() {
+	public void dispose() {
 		boolean dispose = false;
 
 		synchronized (thisLock) {
@@ -358,11 +358,11 @@ final class InputQueue<T> {
 		return false;
 	}
 
-	enum QueueState {
+	private enum QueueState {
 		OPEN, SHUTDOWN, CLOSED
 	}
 
-	class Item {
+	private class Item {
 		private Consumer<T> dequeuedCallback;
 		private Exception exception;
 		private T value;
@@ -407,7 +407,7 @@ final class InputQueue<T> {
 		}
 	}
 
-	class ItemQueue {
+	private class ItemQueue {
 		private int head;
 		private Item[] items;
 		private int pendingCount;
