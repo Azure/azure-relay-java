@@ -533,10 +533,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		public CompletableFuture<Void> openAsync(Duration timeout) {
 			// Establish a WebSocket connection right now so we can detect any fatal errors		
 			CompletableFuture<ClientWebSocket> connectTask = this.ensureConnectTask(timeout);
-			return connectTask.thenApply((webSocket) -> {
+			return connectTask.thenAccept((webSocket) -> {
 					this.tokenRenewer.setOnTokenRenewed((token) -> this.onTokenRenewed(token));
 					this.receivePumpAsync(); // This starts pumping but doesn't wait
-					return (Void)null;
 				}).whenComplete(($void, err) -> {
 					if (err != null) {
 						// catch (Throwable err) {
@@ -676,11 +675,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 				ClientWebSocket webSocket = new ClientWebSocket(this.listener.trackingContext, EXECUTOR);
 				return delayTask.thenCompose(($void) -> {
-					return webSocket.connectAsync(websocketUri, timeout, config).thenApply(($void2) -> webSocket)
-						.whenComplete((ws, err) -> {
-							if (err == null) {
-								this.onOnline();
-							}
+					return webSocket.connectAsync(websocketUri, timeout, config)
+						.thenApply(($void2) -> {
+							this.onOnline();
+							return webSocket;
 						});
 				});
 			}
@@ -701,7 +699,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			
 			return connectTask.thenCompose((webSocket) -> webSocket.closeAsync(reason))
 				.exceptionally((exception) -> {
-					// catch (Throwable exception) {
+					// catch and do not rethrow
 					RelayLogger.handledExceptionAsWarning(exception, this.listener);
 					return null;
 				});
