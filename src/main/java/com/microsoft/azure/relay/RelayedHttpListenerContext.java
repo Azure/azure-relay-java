@@ -1,15 +1,12 @@
 package com.microsoft.azure.relay;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-
 import org.eclipse.jetty.http.HttpStatus;
 
 public class RelayedHttpListenerContext {
