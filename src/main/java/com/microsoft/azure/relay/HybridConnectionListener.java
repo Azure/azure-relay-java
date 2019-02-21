@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -21,6 +22,8 @@ import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.json.JSONObject;
+
+import com.microsoft.azure.relay.AsyncSemaphore.LockRelease;
 
 public class HybridConnectionListener implements RelayTraceSource, AutoCloseable {
 	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
@@ -565,16 +568,17 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			
 			this.tokenRenewer.close();
 			if (connectTask != null) {
+				AtomicReference<LockRelease> release = new AtomicReference<LockRelease>();
 				return connectTask.thenCompose((webSocket) -> {
 					return this.sendAsyncLock.acquireAsync(duration, EXECUTOR)
 						.thenCompose((lockRelease) -> {
+							release.set(lockRelease);
 							CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
-							return webSocket.closeAsync(reason)
-									.whenComplete((res, ex) -> {
-										// finally
-										lockRelease.release();
-									});
+							return webSocket.closeAsync(reason);
 						});
+				}).whenComplete((res, ex) -> {
+					// finally
+					release.get().release();
 				});
 			}
 			
@@ -594,10 +598,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 */
 		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
 
+			AtomicReference<LockRelease> release = new AtomicReference<AsyncSemaphore.LockRelease>();
 			return this.ensureConnectTask(timeout)
 				.thenCompose(webSocket -> {
 					return sendAsyncLock.acquireAsync(timeout, EXECUTOR)
 						.thenCompose((lockRelease) -> {
+							release.set(lockRelease);
 							String json = command.getResponse().toJsonString();
 							RelayLogger.logEvent("sendCommand", this, json);
 							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
@@ -607,15 +613,14 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 									} else {
 										return CompletableFuture.completedFuture(null);
 									}
-								})
-								.whenComplete(($void, err) -> {
-									// finally
-									lockRelease.release();
-						            if (err != null) {
-						            	throw new CompletionException(err);
-						            }
 								});
 						});
+				}).whenComplete(($void, err) -> {
+					// finally
+					release.get().release();
+		            if (err != null) {
+		            	throw new CompletionException(err);
+		            }
 				});
 		}
 

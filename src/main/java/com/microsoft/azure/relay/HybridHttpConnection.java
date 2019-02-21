@@ -11,12 +11,15 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.json.JSONObject;
+
+import com.microsoft.azure.relay.AsyncSemaphore.LockRelease;
 
 class HybridHttpConnection implements RelayTraceSource {
 	private static final int MAX_CONTROL_CONNECTION_BODY_SIZE = 64 * 1024;
@@ -343,7 +346,9 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(count));
+			AtomicReference<LockRelease> release = new AtomicReference<LockRelease>();
 			return this.asyncLock.acquireAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
+				release.set(lockRelease);
 				CompletableFuture<Void> flushCoreTask = null;
 
 				if (!this.responseCommandSent) {
@@ -370,7 +375,6 @@ class HybridHttpConnection implements RelayTraceSource {
 
 							}
 							this.writeBufferStream.put(array, offset, count);
-							lockRelease.release();
 							return CompletableFuture.completedFuture(null);
 						}
 						flushReason = FlushReason.BUFFER_FULL;
@@ -385,11 +389,12 @@ class HybridHttpConnection implements RelayTraceSource {
 				if (flushCoreTask == null) {
 					flushCoreTask = CompletableFuture.completedFuture(null);
 				}
-				lockRelease.release();
 
 				return flushCoreTask.thenCompose(result -> {
 					return this.connection.sendBytesOverRendezvousAsync(buffer, this.writeTimeout);
 				});
+			}).whenComplete((res, ex) -> {
+				release.get().release();
 			});
 		}
 
@@ -404,7 +409,9 @@ class HybridHttpConnection implements RelayTraceSource {
 			}
 			RelayLogger.logEvent("closing", this);
 
+			AtomicReference<LockRelease> release = new AtomicReference<AsyncSemaphore.LockRelease>();
 			return this.asyncLock.acquireAsync(HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
+				release.set(lockRelease);
 				CompletableFuture<Void> sendTask = null;
 				if (!this.responseCommandSent) {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -423,12 +430,11 @@ class HybridHttpConnection implements RelayTraceSource {
 					sendTask = this.connection.sendBytesOverRendezvousAsync(null, this.writeTimeout);
 				}
 
-				return sendTask.thenCompose((result) -> {
-					this.closed = true;
-					lockRelease.release();
-					return closeRendezvousAsync().thenRun(() -> RelayLogger.logEvent("closed", this));
-				});
-			});
+				return sendTask;
+			}).whenComplete((nullResult, ex) -> {
+				this.closed = true;
+				release.get().release();
+			}).thenRun(() -> closeRendezvousAsync().thenRun(() -> RelayLogger.logEvent("closed", this)));
 
 		}
 
