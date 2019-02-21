@@ -343,7 +343,7 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(count));
-			return this.asyncLock.acquireAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
+			return this.asyncLock.runInsideLockAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR, () -> {
 				CompletableFuture<Void> flushCoreTask = null;
 
 				if (!this.responseCommandSent) {
@@ -370,7 +370,6 @@ class HybridHttpConnection implements RelayTraceSource {
 
 							}
 							this.writeBufferStream.put(array, offset, count);
-							lockRelease.release();
 							return CompletableFuture.completedFuture(null);
 						}
 						flushReason = FlushReason.BUFFER_FULL;
@@ -385,7 +384,6 @@ class HybridHttpConnection implements RelayTraceSource {
 				if (flushCoreTask == null) {
 					flushCoreTask = CompletableFuture.completedFuture(null);
 				}
-				lockRelease.release();
 
 				return flushCoreTask.thenCompose(result -> {
 					return this.connection.sendBytesOverRendezvousAsync(buffer, this.writeTimeout);
@@ -404,7 +402,7 @@ class HybridHttpConnection implements RelayTraceSource {
 			}
 			RelayLogger.logEvent("closing", this);
 
-			return this.asyncLock.acquireAsync(HybridConnectionListener.EXECUTOR).thenCompose((lockRelease) -> {
+			return this.asyncLock.runInsideLockAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR, () -> {
 				CompletableFuture<Void> sendTask = null;
 				if (!this.responseCommandSent) {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -425,17 +423,14 @@ class HybridHttpConnection implements RelayTraceSource {
 
 				return sendTask.thenCompose((result) -> {
 					this.closed = true;
-					lockRelease.release();
-					return closeRendezvousAsync().thenRun(() -> RelayLogger.logEvent("closed", this));
+					return closeRendezvousAsync();
 				});
 			});
-
 		}
 
 		CompletableFuture<Void> onWriteBufferFlushTimer() {
-			return this.asyncLock.acquireAsync(HybridConnectionListener.EXECUTOR).thenAccept((lockRelease) -> {
-				this.flushCoreAsync(FlushReason.TIMER, this.writeTimeout);
-				lockRelease.release();
+			return this.asyncLock.runInsideLockAsync(this.writeTimeout, HybridConnectionListener.EXECUTOR, () -> {
+				return this.flushCoreAsync(FlushReason.TIMER, this.writeTimeout);
 			});
 		}
 	}

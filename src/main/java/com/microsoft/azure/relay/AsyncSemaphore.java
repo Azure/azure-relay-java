@@ -3,6 +3,8 @@ package com.microsoft.azure.relay;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.function.Supplier;
 
 public class AsyncSemaphore {
 	private final Object thisLock = new Object();
@@ -89,6 +91,10 @@ public class AsyncSemaphore {
 		});
 	}
 	
+	public <T> CompletableFuture<T> runInsideLockAsync(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
+		return new LockScope().runInsideLockAsync(timeout, executor, supplier);
+	}
+	
 	private void release(int count) {
 		synchronized (this.thisLock) {
 			this.permits += count;
@@ -124,6 +130,25 @@ public class AsyncSemaphore {
 				AsyncSemaphore.this.release(count);
 				this.remaining -= count;
 			}
+		}
+	}
+		
+	private final class LockScope {
+		private LockRelease lockRelease;
+		
+		public <T> CompletableFuture<T> runInsideLockAsync(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
+			return acquireAsync(timeout, executor)
+				.thenCompose((lockRelease) -> {
+					this.lockRelease = lockRelease;
+					
+					// Invoke the caller supplier function
+					return supplier.get();
+				})
+				.whenComplete(($void, ex) -> {
+					if (this.lockRelease != null) {						
+						this.lockRelease.release();
+					}
+				});
 		}
 	}
 }
