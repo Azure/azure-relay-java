@@ -1,7 +1,7 @@
 package com.microsoft.azure.relay;
 
 import static org.junit.Assert.*;
-import static com.microsoft.azure.relay.TestUtil.*;
+import static com.microsoft.azure.relay.Assertions.*;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -129,7 +129,7 @@ public class AsyncLockTest {
 		assertFalse("Should not be locked to start", lock.isLocked());
 		
 		CompletableFuture<String> innerTask = new CompletableFuture<String>();
-		CompletableFuture<String> outerTask = lock.runInsideLockAsync(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			return innerTask;
 		});
@@ -150,16 +150,14 @@ public class AsyncLockTest {
 		assertTrue("Should be locked now", lock.isLocked());
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> innerTaskResult = new CompletableFuture<String>();
-		CompletableFuture<String> outerTask = lock.runInsideLockAsync(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
-			innerTaskStart.complete(null);			
-			return innerTaskResult;
+			innerTaskStart.complete(null);
+			return CompletableFuture.completedFuture(originalString);
 		});
 		
-		assertFalse(outerTask.isDone());
 		assertTrue("Should be locked now", lock.isLocked());
-		innerTaskResult.complete(originalString);
+		assertThrows(TimeoutException.class, (Executable)() -> outerTask.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 		assertThrows(TimeoutException.class, (Executable)() -> innerTaskStart.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 		
 		lockRelease.release();
@@ -177,7 +175,7 @@ public class AsyncLockTest {
 		assertTrue("Should be locked now", lock.isLocked());
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.runInsideLockAsync(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));
@@ -197,7 +195,7 @@ public class AsyncLockTest {
 	public void lockScopeUncontendedThrow() throws Throwable {
 		AsyncLock lock = new AsyncLock();	
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.runInsideLockAsync(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 public class AsyncSemaphore {
@@ -91,8 +92,49 @@ public class AsyncSemaphore {
 		});
 	}
 	
-	public <T> CompletableFuture<T> runInsideLockAsync(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
-		return new LockScope().runInsideLockAsync(timeout, executor, supplier);
+	/**
+	  * Acquire the lock without blocking, execute the given asynchronous code, 
+	  * and finally release the lock regardless if the given supplier threw during its execution
+	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
+	  * @param executor The executor that executes the given supplier code
+	  * @param supplier Code to be executed that returns a CompletionStage after obtaining the lock
+	  * @return A CompletableFuture that completes when the lock is released after returning the desired CompletableFuture from the supplier
+	  */
+	public <T> CompletableFuture<T> lockThenCompose(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
+		AtomicReference<LockRelease> lockReleaseRef = new AtomicReference<LockRelease>();
+		return acquireAsync(timeout, executor)
+			.thenCompose((lockRelease) -> {
+				lockReleaseRef.set(lockRelease);
+				
+				// Invoke the caller supplier function
+				return supplier.get();
+			})
+			.whenComplete((result, ex) -> {
+				LockRelease lockRelease = lockReleaseRef.get();
+				if (lockRelease != null) {						
+					lockRelease.release();
+				}
+			});
+	}
+	
+	/**
+	  * Acquire the lock without blocking, execute the given synchronous code, 
+	  * and finally release the lock regardless if the given supplier threw during its execution
+	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
+	  * @param executor The executor that executes the given supplier code
+	  * @param supplier Code to be executed that provides a return value after obtaining the lock
+	  * @return A CompletableFuture that completes when the lock is released after returning the desired return value from the supplier
+	  */
+	public <T> CompletableFuture<T> lockThenApply(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<T> supplier) {
+		return acquireAsync(timeout, executor)
+			.thenApply((lockRelease) -> {
+				try {
+					// Invoke the caller supplier function
+					return supplier.get();
+				} finally {
+					lockRelease.release();
+				}
+			});
 	}
 	
 	private void release(int count) {
@@ -130,25 +172,6 @@ public class AsyncSemaphore {
 				AsyncSemaphore.this.release(count);
 				this.remaining -= count;
 			}
-		}
-	}
-		
-	private final class LockScope {
-		private LockRelease lockRelease;
-		
-		public <T> CompletableFuture<T> runInsideLockAsync(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
-			return acquireAsync(timeout, executor)
-				.thenCompose((lockRelease) -> {
-					this.lockRelease = lockRelease;
-					
-					// Invoke the caller supplier function
-					return supplier.get();
-				})
-				.whenComplete(($void, ex) -> {
-					if (this.lockRelease != null) {						
-						this.lockRelease.release();
-					}
-				});
 		}
 	}
 }

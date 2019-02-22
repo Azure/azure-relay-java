@@ -566,7 +566,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			this.tokenRenewer.close();
 			if (connectTask != null) {
 				return connectTask.thenCompose((webSocket) -> {
-					return this.sendAsyncLock.runInsideLockAsync(duration, EXECUTOR, () -> {
+					return this.sendAsyncLock.lockThenCompose(duration, EXECUTOR, () -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
 						return webSocket.closeAsync(reason);
 					});
@@ -591,7 +591,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 			return this.ensureConnectTask(timeout)
 				.thenCompose(webSocket -> {
-					return sendAsyncLock.runInsideLockAsync(timeout, EXECUTOR, () -> {
+					return sendAsyncLock.lockThenCompose(timeout, EXECUTOR, () -> {
 						String json = command.getResponse().toJsonString();
 						RelayLogger.logEvent("sendCommand", this, json);
 						return webSocket.writeAsync(json, timeout, WriteMode.TEXT)

@@ -116,7 +116,7 @@ public class InputQueueTest {
 		assertFalse("future3 should not be done", future3.isDone());
 
 		try {
-			Thread.sleep(20);
+			Thread.sleep(50);
 			queue.enqueueAndDispatch(num1);
 			future2.get();
 			fail("future2.get() should have thrown.");
