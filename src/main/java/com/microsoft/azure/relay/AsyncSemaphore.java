@@ -4,17 +4,20 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 public class AsyncSemaphore {
 	private final Object thisLock = new Object();
+	private final ScheduledExecutorService executor;
 	private final int limit;
 	private InputQueue<Boolean> waiterQueue;
 	private int permits;
 	
-	AsyncSemaphore(int permits) {
+	AsyncSemaphore(int permits, ScheduledExecutorService executor) {
 		this.limit = permits;
+		this.executor = executor;
 		synchronized(this.thisLock) {
 			if (permits < 1) {
 				throw new IllegalArgumentException("The size of semaphore cannot be less than 1");
@@ -33,19 +36,19 @@ public class AsyncSemaphore {
 		}
 	}
 
-	CompletableFuture<LockRelease> acquireAsync(AutoShutdownScheduledExecutor executor) {
-		return this.lockAsync(1, null, executor);
+	CompletableFuture<LockRelease> acquireAsync() {
+		return this.lockAsync(1, null);
 	}
 	
-	CompletableFuture<LockRelease> acquireAsync(Duration timeout, AutoShutdownScheduledExecutor executor) {
-		return lockAsync(1, timeout, executor);
+	CompletableFuture<LockRelease> acquireAsync(Duration timeout) {
+		return lockAsync(1, timeout);
 	}
 	
-	CompletableFuture<LockRelease> acquireAsync(int count, AutoShutdownScheduledExecutor executor) {
-		return lockAsync(count, null, executor);
+	CompletableFuture<LockRelease> acquireAsync(int count) {
+		return lockAsync(count, null);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(int count, Duration timeout, AutoShutdownScheduledExecutor executor) {
+	CompletableFuture<LockRelease> lockAsync(int count, Duration timeout) {
 		CompletableFuture<?>[] releases;
 		if (count > limit) {
 			return CompletableFutureUtil.fromException(
@@ -96,13 +99,12 @@ public class AsyncSemaphore {
 	  * Acquire the lock without blocking, execute the given asynchronous code, 
 	  * and finally release the lock regardless if the given supplier threw during its execution
 	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
-	  * @param executor The executor that executes the given supplier code
 	  * @param supplier Code to be executed that returns a CompletionStage after obtaining the lock
 	  * @return A CompletableFuture that completes when the lock is released after returning the desired CompletableFuture from the supplier
 	  */
-	public <T> CompletableFuture<T> lockThenCompose(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
+	public <T> CompletableFuture<T> lockThenCompose(Duration timeout, Supplier<? extends CompletionStage<T>> supplier) {
 		AtomicReference<LockRelease> lockReleaseRef = new AtomicReference<LockRelease>();
-		return acquireAsync(timeout, executor)
+		return acquireAsync(timeout)
 			.thenCompose((lockRelease) -> {
 				lockReleaseRef.set(lockRelease);
 				
@@ -121,12 +123,11 @@ public class AsyncSemaphore {
 	  * Acquire the lock without blocking, execute the given synchronous code, 
 	  * and finally release the lock regardless if the given supplier threw during its execution
 	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
-	  * @param executor The executor that executes the given supplier code
 	  * @param supplier Code to be executed that provides a return value after obtaining the lock
 	  * @return A CompletableFuture that completes when the lock is released after returning the desired return value from the supplier
 	  */
-	public <T> CompletableFuture<T> lockThenApply(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<T> supplier) {
-		return acquireAsync(timeout, executor)
+	public <T> CompletableFuture<T> lockThenApply(Duration timeout, Supplier<T> supplier) {
+		return acquireAsync(timeout)
 			.thenApply((lockRelease) -> {
 				try {
 					// Invoke the caller supplier function

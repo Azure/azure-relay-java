@@ -295,7 +295,7 @@ class HybridHttpConnection implements RelayTraceSource {
 			this.context = context;
 			this.trackingContext = context.getTrackingContext();
 			this.writeTimeout = this.connection.getOperationTimeout();
-			this.asyncLock = new AsyncLock();
+			this.asyncLock = new AsyncLock(HybridConnectionListener.EXECUTOR);
 		}
 
 		// The caller of this method must have acquired this.asyncLock
@@ -343,7 +343,7 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(count));
-			return this.asyncLock.lockThenCompose(this.writeTimeout, HybridConnectionListener.EXECUTOR, () -> {
+			return this.asyncLock.lockThenCompose(this.writeTimeout, () -> {
 				CompletableFuture<Void> flushCoreTask = null;
 
 				if (!this.responseCommandSent) {
@@ -402,7 +402,7 @@ class HybridHttpConnection implements RelayTraceSource {
 			}
 			RelayLogger.logEvent("closing", this);
 
-			return this.asyncLock.lockThenCompose(this.writeTimeout, HybridConnectionListener.EXECUTOR, () -> {
+			return this.asyncLock.lockThenCompose(this.writeTimeout, () -> {
 				CompletableFuture<Void> sendTask = null;
 				if (!this.responseCommandSent) {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -429,7 +429,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		}
 
 		CompletableFuture<Void> onWriteBufferFlushTimer() {
-			return this.asyncLock.lockThenCompose(this.writeTimeout, HybridConnectionListener.EXECUTOR, () -> {
+			return this.asyncLock.lockThenCompose(this.writeTimeout, () -> {
 				return this.flushCoreAsync(FlushReason.TIMER, this.writeTimeout);
 			});
 		}
