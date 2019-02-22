@@ -566,15 +566,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			this.tokenRenewer.close();
 			if (connectTask != null) {
 				return connectTask.thenCompose((webSocket) -> {
-					return this.sendAsyncLock.acquireAsync(duration, EXECUTOR)
-						.thenCompose((lockRelease) -> {
-							CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
-							return webSocket.closeAsync(reason)
-									.whenComplete((res, ex) -> {
-										// finally
-										lockRelease.release();
-									});
-						});
+					return this.sendAsyncLock.lockThenCompose(duration, EXECUTOR, () -> {
+						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
+						return webSocket.closeAsync(reason);
+					});
 				});
 			}
 			
@@ -596,26 +591,18 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 			return this.ensureConnectTask(timeout)
 				.thenCompose(webSocket -> {
-					return sendAsyncLock.acquireAsync(timeout, EXECUTOR)
-						.thenCompose((lockRelease) -> {
-							String json = command.getResponse().toJsonString();
-							RelayLogger.logEvent("sendCommand", this, json);
-							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
-								.thenCompose($void -> {
-									if (buffer != null) {
-										return webSocket.writeAsync(buffer.array());
-									} else {
-										return CompletableFuture.completedFuture(null);
-									}
-								})
-								.whenComplete(($void, err) -> {
-									// finally
-									lockRelease.release();
-						            if (err != null) {
-						            	throw new CompletionException(err);
-						            }
-								});
-						});
+					return sendAsyncLock.lockThenCompose(timeout, EXECUTOR, () -> {
+						String json = command.getResponse().toJsonString();
+						RelayLogger.logEvent("sendCommand", this, json);
+						return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
+							.thenCompose($void -> {
+								if (buffer != null) {
+									return webSocket.writeAsync(buffer.array());
+								} else {
+									return CompletableFuture.completedFuture(null);
+								}
+							});
+					});
 				});
 		}
 
