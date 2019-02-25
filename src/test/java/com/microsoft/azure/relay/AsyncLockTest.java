@@ -129,7 +129,7 @@ public class AsyncLockTest {
 		assertFalse("Should not be locked to start", lock.isLocked());
 		
 		CompletableFuture<String> innerTask = new CompletableFuture<String>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			return innerTask;
 		});
@@ -150,7 +150,7 @@ public class AsyncLockTest {
 		assertTrue("Should be locked now", lock.isLocked());
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);
 			return CompletableFuture.completedFuture(originalString);
@@ -175,7 +175,7 @@ public class AsyncLockTest {
 		assertTrue("Should be locked now", lock.isLocked());
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));
@@ -195,7 +195,7 @@ public class AsyncLockTest {
 	public void lockScopeUncontendedThrow() throws Throwable {
 		AsyncLock lock = new AsyncLock(EXECUTOR);	
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));
@@ -213,7 +213,7 @@ public class AsyncLockTest {
 		LockRelease lockRelease = lock.acquireAsync().join();
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(Duration.ofMillis(TIMEOUT_MS), () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(Duration.ofMillis(TIMEOUT_MS), () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));

@@ -30,25 +30,25 @@ public class AsyncSemaphore {
 	 * For Debug/Diagnostic purposes only.
 	 * If you rely on this for anything real it may be out of date by the time you decide what to do.
 	 */
-	int availablePermits() {
+	public int availablePermits() {
 		synchronized(thisLock) {
 			return this.permits;
 		}
 	}
 
-	CompletableFuture<LockRelease> acquireAsync() {
-		return this.lockAsync(1, null);
+	public CompletableFuture<LockRelease> acquireAsync() {
+		return acquireAsync(1, null);
 	}
 	
-	CompletableFuture<LockRelease> acquireAsync(Duration timeout) {
-		return lockAsync(1, timeout);
+	public CompletableFuture<LockRelease> acquireAsync(Duration timeout) {
+		return acquireAsync(1, timeout);
 	}
 	
-	CompletableFuture<LockRelease> acquireAsync(int count) {
-		return lockAsync(count, null);
+	public CompletableFuture<LockRelease> acquireAsync(int count) {
+		return acquireAsync(count, null);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(int count, Duration timeout) {
+	public CompletableFuture<LockRelease> acquireAsync(int count, Duration timeout) {
 		CompletableFuture<?>[] releases;
 		if (count > limit) {
 			return CompletableFutureUtil.fromException(
@@ -102,7 +102,7 @@ public class AsyncSemaphore {
 	  * @param supplier Code to be executed that returns a CompletionStage after obtaining the lock
 	  * @return A CompletableFuture that completes when the lock is released after returning the desired CompletableFuture from the supplier
 	  */
-	public <T> CompletableFuture<T> lockThenCompose(Duration timeout, Supplier<? extends CompletionStage<T>> supplier) {
+	public <T> CompletableFuture<T> acquireThenCompose(Duration timeout, Supplier<? extends CompletionStage<T>> supplier) {
 		AtomicReference<LockRelease> lockReleaseRef = new AtomicReference<LockRelease>();
 		return acquireAsync(timeout)
 			.thenCompose((lockRelease) -> {
@@ -126,7 +126,7 @@ public class AsyncSemaphore {
 	  * @param supplier Code to be executed that provides a return value after obtaining the lock
 	  * @return A CompletableFuture that completes when the lock is released after returning the desired return value from the supplier
 	  */
-	public <T> CompletableFuture<T> lockThenApply(Duration timeout, Supplier<T> supplier) {
+	public <T> CompletableFuture<T> acquireThenApply(Duration timeout, Supplier<T> supplier) {
 		return acquireAsync(timeout)
 			.thenApply((lockRelease) -> {
 				try {
@@ -161,7 +161,7 @@ public class AsyncSemaphore {
 		}
 
 		public void release() {
-			release(1);
+			this.release(1);
 		}
 
 		public void release(int count) {
