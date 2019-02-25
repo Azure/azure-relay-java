@@ -213,16 +213,16 @@ public class AsyncLockTest {
 		LockRelease lockRelease = lock.acquireAsync().join();
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.acquireThenCompose(Duration.ofMillis(TIMEOUT_MS), () -> {
-			assertTrue("Should be locked during Inner Function", lock.isLocked());
+		CompletableFuture<Void> outerTask = lock.acquireThenCompose(Duration.ofMillis(TIMEOUT_MS), () -> {
 			innerTaskStart.complete(null);			
-			throw new CompletionException(new IOException("Test Induced Exception"));
+			fail("Acquiring the lock should have timed out, so this method should not be called.");
+			return null;
 		});
 		
 		// Ensure the code inside the scope hasn't run.
 		assertThrows(TimeoutException.class, (Executable)() -> innerTaskStart.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-		Throwable error = assertThrows(ExecutionException.class, (Executable)() -> outerTask.get(TIMEOUT_MS * 4, TimeUnit.MILLISECONDS));
+		Throwable error = assertThrows(ExecutionException.class, (Executable)() -> outerTask.get(1, TimeUnit.SECONDS));
 		assertEquals(TimeoutException.class, error.getCause().getClass());
 		
 		
