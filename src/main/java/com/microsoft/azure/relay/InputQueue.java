@@ -6,13 +6,14 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 final class InputQueue<T> {
-	private final AutoShutdownScheduledExecutor executor;
+	private final ScheduledExecutorService executor;
 	private final ItemQueue itemQueue;
 	private final Queue<CompletableFuture<T>> readerQueue;
 
@@ -41,7 +42,7 @@ final class InputQueue<T> {
 		this.disposeItemCallback = callback;
 	}
 
-	public InputQueue(AutoShutdownScheduledExecutor executor) {
+	public InputQueue(ScheduledExecutorService executor) {
 		this.executor = executor;		
 		this.itemQueue = new ItemQueue();
 		this.readerQueue = new LinkedList<CompletableFuture<T>>();

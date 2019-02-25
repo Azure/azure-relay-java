@@ -19,10 +19,10 @@ public class AsyncSemaphoreTest {
 	
 	@Test (expected = java.util.concurrent.TimeoutException.class)
 	public void simpleLockAndReleaseTest() throws Throwable {
-		AsyncSemaphore sem = new AsyncSemaphore(2);
-		CompletableFuture<LockRelease> release1 = sem.acquireAsync(TIMEOUT, EXECUTOR);
-		CompletableFuture<LockRelease> release2 = sem.acquireAsync(TIMEOUT, EXECUTOR);
-		CompletableFuture<LockRelease> release3 = sem.acquireAsync(TIMEOUT, EXECUTOR);
+		AsyncSemaphore sem = new AsyncSemaphore(2, EXECUTOR);
+		CompletableFuture<LockRelease> release1 = sem.acquireAsync(TIMEOUT);
+		CompletableFuture<LockRelease> release2 = sem.acquireAsync(TIMEOUT);
+		CompletableFuture<LockRelease> release3 = sem.acquireAsync(TIMEOUT);
 		
 		assertNotNull("release1 was not a valid release", release1.join());
 		assertNotNull("release2 was not a valid release", release2.join());
@@ -39,18 +39,18 @@ public class AsyncSemaphoreTest {
 	@Test
 	public void lockandReleaseOverLimitTest() throws Throwable {
 		int size = 3;
-		AsyncSemaphore sem = new AsyncSemaphore(size);
+		AsyncSemaphore sem = new AsyncSemaphore(size, EXECUTOR);
 		boolean lockExceptionThrown = false;
 		
 		try {
-			sem.acquireAsync(size + 1, EXECUTOR).join();
+			sem.acquireAsync(size + 1).join();
 		} catch (Exception e) {
 			lockExceptionThrown = true;
 		}
 		assertTrue("Should have thrown when trying to acquire " + size+1 + " when limit was " + size, lockExceptionThrown);
 		lockExceptionThrown = false;
 		
-		LockRelease release = sem.acquireAsync(size, EXECUTOR).join();
+		LockRelease release = sem.acquireAsync(size).join();
 		try {
 			release.release(size + 1);
 		} catch (IllegalArgumentException e) {
@@ -62,11 +62,11 @@ public class AsyncSemaphoreTest {
 	@Test
 	public void repeatedLockReleaseTest() {
 		int size = 3;
-		AsyncSemaphore sem = new AsyncSemaphore(size);
+		AsyncSemaphore sem = new AsyncSemaphore(size, EXECUTOR);
 		boolean lockExceptionThrown = false;
 		
-		LockRelease release1 = sem.acquireAsync(2, EXECUTOR).join();
-		CompletableFuture<LockRelease> release2 = sem.acquireAsync(2, EXECUTOR);
+		LockRelease release1 = sem.acquireAsync(2).join();
+		CompletableFuture<LockRelease> release2 = sem.acquireAsync(2);
 		try {
 			release1.release(1);
 			release2.join();
