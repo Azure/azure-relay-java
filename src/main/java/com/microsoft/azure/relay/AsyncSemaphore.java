@@ -8,14 +8,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-public class AsyncSemaphore {
+class AsyncSemaphore {
 	private final Object thisLock = new Object();
 	private final ScheduledExecutorService executor;
 	private final int limit;
 	private InputQueue<Boolean> waiterQueue;
 	private int permits;
 	
-	AsyncSemaphore(int permits, ScheduledExecutorService executor) {
+	public AsyncSemaphore(int permits, ScheduledExecutorService executor) {
 		this.limit = permits;
 		this.executor = executor;
 		synchronized(this.thisLock) {
