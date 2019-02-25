@@ -95,6 +95,7 @@ public class AsyncSemaphore {
 	/**
 	  * Acquire the lock without blocking, execute the given asynchronous code, 
 	  * and finally release the lock regardless if the given supplier threw during its execution
+	  * @param <T> The return type of the CompletableFuture
 	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
 	  * @param executor The executor that executes the given supplier code
 	  * @param supplier Code to be executed that returns a CompletionStage after obtaining the lock
@@ -120,6 +121,7 @@ public class AsyncSemaphore {
 	/**
 	  * Acquire the lock without blocking, execute the given synchronous code, 
 	  * and finally release the lock regardless if the given supplier threw during its execution
+	  * @param <T> The return type of the CompletableFuture
 	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
 	  * @param executor The executor that executes the given supplier code
 	  * @param supplier Code to be executed that provides a return value after obtaining the lock

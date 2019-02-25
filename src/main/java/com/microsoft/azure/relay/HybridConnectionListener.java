@@ -225,7 +225,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * 
 	 * @return A CompletableFuture which completes when the control connection is
 	 *         established with the cloud service
-	 * @throws InvalidRelayOperationException 
 	 */
 	public CompletableFuture<Void> openAsync() {
 		return this.openAsync(this.operationTimeout);
@@ -324,7 +323,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * 
 	 * @return A CompletableFuture which completes when aa websocket connection from
 	 *         the sender is connected
-	 * @throws InvalidRelayOperationException 
 	 */
 	public CompletableFuture<HybridConnectionChannel> acceptConnectionAsync() {
 		synchronized (this.thisLock) {
