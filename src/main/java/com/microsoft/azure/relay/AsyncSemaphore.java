@@ -4,17 +4,20 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-public class AsyncSemaphore {
+class AsyncSemaphore {
 	private final Object thisLock = new Object();
+	private final ScheduledExecutorService executor;
 	private final int limit;
 	private InputQueue<Boolean> waiterQueue;
 	private int permits;
 	
-	AsyncSemaphore(int permits) {
+	public AsyncSemaphore(int permits, ScheduledExecutorService executor) {
 		this.limit = permits;
+		this.executor = executor;
 		synchronized(this.thisLock) {
 			if (permits < 1) {
 				throw new IllegalArgumentException("The size of semaphore cannot be less than 1");
@@ -27,25 +30,25 @@ public class AsyncSemaphore {
 	 * For Debug/Diagnostic purposes only.
 	 * If you rely on this for anything real it may be out of date by the time you decide what to do.
 	 */
-	int availablePermits() {
+	public int availablePermits() {
 		synchronized(thisLock) {
 			return this.permits;
 		}
 	}
 
-	CompletableFuture<LockRelease> acquireAsync(AutoShutdownScheduledExecutor executor) {
-		return this.lockAsync(1, null, executor);
+	public CompletableFuture<LockRelease> acquireAsync() {
+		return acquireAsync(1, null);
 	}
 	
-	CompletableFuture<LockRelease> acquireAsync(Duration timeout, AutoShutdownScheduledExecutor executor) {
-		return lockAsync(1, timeout, executor);
+	public CompletableFuture<LockRelease> acquireAsync(Duration timeout) {
+		return acquireAsync(1, timeout);
 	}
 	
-	CompletableFuture<LockRelease> acquireAsync(int count, AutoShutdownScheduledExecutor executor) {
-		return lockAsync(count, null, executor);
+	public CompletableFuture<LockRelease> acquireAsync(int count) {
+		return acquireAsync(count, null);
 	}
 	
-	CompletableFuture<LockRelease> lockAsync(int count, Duration timeout, AutoShutdownScheduledExecutor executor) {
+	public CompletableFuture<LockRelease> acquireAsync(int count, Duration timeout) {
 		CompletableFuture<?>[] releases;
 		if (count > limit) {
 			return CompletableFutureUtil.fromException(
@@ -97,13 +100,12 @@ public class AsyncSemaphore {
 	  * and finally release the lock regardless if the given supplier threw during its execution
 	  * @param <T> The return type of the CompletableFuture
 	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
-	  * @param executor The executor that executes the given supplier code
 	  * @param supplier Code to be executed that returns a CompletionStage after obtaining the lock
 	  * @return A CompletableFuture that completes when the lock is released after returning the desired CompletableFuture from the supplier
 	  */
-	public <T> CompletableFuture<T> lockThenCompose(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<? extends CompletionStage<T>> supplier) {
+	public <T> CompletableFuture<T> acquireThenCompose(Duration timeout, Supplier<? extends CompletionStage<T>> supplier) {
 		AtomicReference<LockRelease> lockReleaseRef = new AtomicReference<LockRelease>();
-		return acquireAsync(timeout, executor)
+		return acquireAsync(timeout)
 			.thenCompose((lockRelease) -> {
 				lockReleaseRef.set(lockRelease);
 				
@@ -123,12 +125,11 @@ public class AsyncSemaphore {
 	  * and finally release the lock regardless if the given supplier threw during its execution
 	  * @param <T> The return type of the CompletableFuture
 	  * @param timeout Maximum time to wait for the lock. Throws TimeoutException if the lock is not acquired after the timeout finishes
-	  * @param executor The executor that executes the given supplier code
 	  * @param supplier Code to be executed that provides a return value after obtaining the lock
 	  * @return A CompletableFuture that completes when the lock is released after returning the desired return value from the supplier
 	  */
-	public <T> CompletableFuture<T> lockThenApply(Duration timeout, AutoShutdownScheduledExecutor executor, Supplier<T> supplier) {
-		return acquireAsync(timeout, executor)
+	public <T> CompletableFuture<T> acquireThenApply(Duration timeout, Supplier<T> supplier) {
+		return acquireAsync(timeout)
 			.thenApply((lockRelease) -> {
 				try {
 					// Invoke the caller supplier function
@@ -162,7 +163,7 @@ public class AsyncSemaphore {
 		}
 
 		public void release() {
-			release(1);
+			this.release(1);
 		}
 
 		public void release(int count) {

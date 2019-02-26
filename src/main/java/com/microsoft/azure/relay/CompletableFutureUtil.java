@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -14,7 +15,7 @@ import java.util.function.Supplier;
 final class CompletableFutureUtil {
 	static AtomicInteger tasksRunning = new AtomicInteger(0);
 
-	static CompletableFuture<Void> delayAsync(Duration delay, AutoShutdownScheduledExecutor executor) {
+	static CompletableFuture<Void> delayAsync(Duration delay, ScheduledExecutorService executor) {
 		if (delay == null || delay.isZero() || delay.isNegative()) {
 			return CompletableFuture.completedFuture(null);
 		}
@@ -31,12 +32,12 @@ final class CompletableFutureUtil {
 		return future;
 	}
 
-	static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable, AutoShutdownScheduledExecutor executor) {
+	static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable, ScheduledExecutorService executor) {
 
 		return futureToCompletableFuture(timeout, runnable, executor);
 	}
 
-	static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier, AutoShutdownScheduledExecutor executor) {
+	static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier, ScheduledExecutorService executor) {
 		Callable<T> callable = new Callable<T>() {
 			@Override
 			public T call() throws Exception {
@@ -47,7 +48,7 @@ final class CompletableFutureUtil {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task, AutoShutdownScheduledExecutor executor) {
+	private static <T> CompletableFuture<T> futureToCompletableFuture(Duration timeout, Object task, ScheduledExecutorService executor) {
 		TimeoutHelper.throwIfNegativeArgument(timeout);
 		CompletableFuture<T> taskCF = new CompletableFuture<T>();
 		AtomicReference<ScheduledFuture<?>> cancelFuture = new AtomicReference<ScheduledFuture<?>>(null);

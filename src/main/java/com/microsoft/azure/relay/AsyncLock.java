@@ -1,8 +1,10 @@
 package com.microsoft.azure.relay;
 
+import java.util.concurrent.ScheduledExecutorService;
+
 class AsyncLock extends AsyncSemaphore {
-	AsyncLock() {
-		super(1);
+	AsyncLock(ScheduledExecutorService executor) {
+		super(1, executor);
 	}
 
 	/**

@@ -21,8 +21,8 @@ public class AsyncLockTest {
 	
 	@Test
 	public void simpleLockAndReleaseTest() {
-		AsyncLock lock = new AsyncLock();
-		lock.acquireAsync(EXECUTOR).thenAccept((lockRelease) -> {
+		AsyncLock lock = new AsyncLock(EXECUTOR);
+		lock.acquireAsync().thenAccept((lockRelease) -> {
 			assertTrue("AsyncLock is not locked when the lock was idle.", lock.isLocked());
 			lockRelease.release();
 			assertFalse("AsyncLock is still locked after release.", lock.isLocked());
@@ -31,16 +31,16 @@ public class AsyncLockTest {
 
 	@Test(expected = java.util.concurrent.TimeoutException.class)
 	public void timeoutLockAndReleaseTest() throws Throwable {
-		AsyncLock lock = new AsyncLock();
+		AsyncLock lock = new AsyncLock(EXECUTOR);
 		AtomicReference<LockRelease> release = new AtomicReference<AsyncLock.LockRelease>(null);
-		CompletableFuture<LockRelease> task1 = lock.acquireAsync(EXECUTOR);
+		CompletableFuture<LockRelease> task1 = lock.acquireAsync();
 
 		try {
 			task1.thenAccept((lockRelease) -> {
 				release.set(lockRelease);
 				assertTrue("AsyncLock is not locked when the lock was idle.", lock.isLocked());
 
-				CompletableFuture<LockRelease> task2 = lock.acquireAsync(Duration.ofMillis(TIMEOUT_MS), EXECUTOR);
+				CompletableFuture<LockRelease> task2 = lock.acquireAsync(Duration.ofMillis(TIMEOUT_MS));
 				assertFalse("AsyncLock is acquired after it was already locked.", task2.isDone());
 
 				task2.join().release();
@@ -53,10 +53,10 @@ public class AsyncLockTest {
 
 	@Test
 	public void ensureAsyncLockIsAsyncTest() {
-		AsyncLock lock = new AsyncLock();
+		AsyncLock lock = new AsyncLock(EXECUTOR);
 		CompletableFuture<Void> taskToComplete = new CompletableFuture<Void>();
 
-		CompletableFuture<Void> task1 = lock.acquireAsync(EXECUTOR).thenAcceptAsync(lockRelease -> {
+		CompletableFuture<Void> task1 = lock.acquireAsync().thenAcceptAsync(lockRelease -> {
 			try {
 				Thread.sleep(TIMEOUT_MS);
 			} catch (InterruptedException e) {
@@ -65,7 +65,7 @@ public class AsyncLockTest {
 			lockRelease.release();
 		});
 
-		CompletableFuture<Void> task2 = lock.acquireAsync(EXECUTOR).thenAcceptAsync(lockRelease -> {
+		CompletableFuture<Void> task2 = lock.acquireAsync().thenAcceptAsync(lockRelease -> {
 			assertTrue("Task should have been completed synchronously while waiting for lock.",
 					taskToComplete.isDone());
 			lockRelease.release();
@@ -80,9 +80,9 @@ public class AsyncLockTest {
 
 	@Test
 	public void ensureAsyncLockIsAsyncTest2() throws InterruptedException, ExecutionException, TimeoutException {
-		AsyncLock asyncLock = new AsyncLock();
-		CompletableFuture<LockRelease> lockFuture1 = asyncLock.acquireAsync(EXECUTOR);
-		CompletableFuture<LockRelease> lockFuture2 = asyncLock.acquireAsync(EXECUTOR);
+		AsyncLock asyncLock = new AsyncLock(EXECUTOR);
+		CompletableFuture<LockRelease> lockFuture1 = asyncLock.acquireAsync();
+		CompletableFuture<LockRelease> lockFuture2 = asyncLock.acquireAsync();
 		assertTrue("First Lock should be acquired right away", lockFuture1.isDone());
 		Thread.sleep(TIMEOUT_MS);
 		assertFalse("Second Lock should not be acquired yet", lockFuture2.isDone());
@@ -99,9 +99,9 @@ public class AsyncLockTest {
 
 	@Test
 	public void lockTimeoutTest() throws InterruptedException, ExecutionException, TimeoutException {
-		AsyncLock asyncLock = new AsyncLock();
-		CompletableFuture<LockRelease> lockFuture1 = asyncLock.acquireAsync(EXECUTOR);
-		CompletableFuture<LockRelease> lockFuture2 = asyncLock.acquireAsync(Duration.ofMillis(10), EXECUTOR);
+		AsyncLock asyncLock = new AsyncLock(EXECUTOR);
+		CompletableFuture<LockRelease> lockFuture1 = asyncLock.acquireAsync();
+		CompletableFuture<LockRelease> lockFuture2 = asyncLock.acquireAsync(Duration.ofMillis(10));
 		assertTrue("lockFuture1 should be done (completed sync)", lockFuture1.isDone());
 		assertFalse("lockFuture2 should not be done", lockFuture2.isDone());
 
@@ -117,7 +117,7 @@ public class AsyncLockTest {
 		lockFuture1.join().release();
 
 		// Acquire uncontended lock (ideally should be sync)
-		CompletableFuture<LockRelease> lockFuture3 = asyncLock.acquireAsync(EXECUTOR);
+		CompletableFuture<LockRelease> lockFuture3 = asyncLock.acquireAsync();
 		LockRelease lockRelease3 = lockFuture3.get(2000, TimeUnit.MILLISECONDS);
 		lockRelease3.release();
 	}
@@ -125,11 +125,11 @@ public class AsyncLockTest {
 	@Test
 	public void lockScopeUncontended() throws Exception {
 		String originalString = "lockScopeUncontended";
-		AsyncLock lock = new AsyncLock();
+		AsyncLock lock = new AsyncLock(EXECUTOR);
 		assertFalse("Should not be locked to start", lock.isLocked());
 		
 		CompletableFuture<String> innerTask = new CompletableFuture<String>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			return innerTask;
 		});
@@ -145,12 +145,12 @@ public class AsyncLockTest {
 	@Test
 	public void lockScopeContended() throws Throwable {
 		String originalString = "lockScopeContended";
-		AsyncLock lock = new AsyncLock();
-		LockRelease lockRelease = lock.acquireAsync(EXECUTOR).join();
+		AsyncLock lock = new AsyncLock(EXECUTOR);
+		LockRelease lockRelease = lock.acquireAsync().join();
 		assertTrue("Should be locked now", lock.isLocked());
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);
 			return CompletableFuture.completedFuture(originalString);
@@ -170,12 +170,12 @@ public class AsyncLockTest {
 	
 	@Test
 	public void lockScopeContendedThrow() throws Throwable {
-		AsyncLock lock = new AsyncLock();
-		LockRelease lockRelease = lock.acquireAsync(EXECUTOR).join();
+		AsyncLock lock = new AsyncLock(EXECUTOR);
+		LockRelease lockRelease = lock.acquireAsync().join();
 		assertTrue("Should be locked now", lock.isLocked());
 		
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));
@@ -193,9 +193,9 @@ public class AsyncLockTest {
 	
 	@Test
 	public void lockScopeUncontendedThrow() throws Throwable {
-		AsyncLock lock = new AsyncLock();	
+		AsyncLock lock = new AsyncLock(EXECUTOR);	
 		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
-		CompletableFuture<String> outerTask = lock.lockThenCompose(null, EXECUTOR, () -> {
+		CompletableFuture<String> outerTask = lock.acquireThenCompose(null, () -> {
 			assertTrue("Should be locked during Inner Function", lock.isLocked());
 			innerTaskStart.complete(null);			
 			throw new CompletionException(new IOException("Test Induced Exception"));
@@ -204,6 +204,30 @@ public class AsyncLockTest {
 		innerTaskStart.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 		Throwable error = assertThrows(ExecutionException.class, (Executable)() -> outerTask.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 		assertEquals(IOException.class, error.getCause().getClass());
+		assertFalse(lock.isLocked());
+	}
+	
+	@Test
+	public void lockScopeContendedTimeout() throws Throwable {
+		AsyncLock lock = new AsyncLock(EXECUTOR);	
+		LockRelease lockRelease = lock.acquireAsync().join();
+		
+		CompletableFuture<Void> innerTaskStart = new CompletableFuture<Void>();
+		CompletableFuture<Void> outerTask = lock.acquireThenCompose(Duration.ofMillis(TIMEOUT_MS), () -> {
+			innerTaskStart.complete(null);			
+			fail("Acquiring the lock should have timed out, so this method should not be called.");
+			return null;
+		});
+		
+		// Ensure the code inside the scope hasn't run.
+		assertThrows(TimeoutException.class, (Executable)() -> innerTaskStart.get(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+
+		Throwable error = assertThrows(ExecutionException.class, (Executable)() -> outerTask.get(1, TimeUnit.SECONDS));
+		assertEquals(TimeoutException.class, error.getCause().getClass());
+		
+		
+		assertTrue(lock.isLocked());
+		lockRelease.release();
 		assertFalse(lock.isLocked());
 	}
 }

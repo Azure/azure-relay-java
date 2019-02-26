@@ -1,7 +1,6 @@
 package com.microsoft.azure.relay;
 
 import java.net.URI;
-import junit.framework.AssertionFailedError;
 
 public class TestUtil {
 	public static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
