@@ -4,7 +4,7 @@
 
   <groupId>com.microsoft.azure</groupId>
   <artifactId>azure-relay</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.0.1-PREVIEW</version>
   <packaging>maven-plugin</packaging>
   <name>azure-relay</name>
   <url>https://github.com/Azure/azure-relay-java</url>
@@ -46,20 +46,10 @@
 		<version>7.0</version>
 	</dependency>
 	<dependency>
-	    <groupId>log4j</groupId>
-	    <artifactId>log4j</artifactId>
-	    <version>${log4j-version}</version>
-	</dependency>
-	<dependency>
  	    <groupId>org.slf4j</groupId> 
  	    <artifactId>slf4j-api</artifactId> 
  	    <version>${slf4j-version}</version>
   	</dependency>
-	<dependency>
-	    <groupId>org.slf4j</groupId>
-	    <artifactId>slf4j-simple</artifactId>
-	    <version>${slf4j-version}</version>
-	</dependency>
   </dependencies>
 
   <build>
@@ -84,22 +74,6 @@
 			</execution>
 		  </executions>
 		</plugin>
-      <plugin>
-        <artifactId>maven-assembly-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <descriptorRefs>
-            <descriptorRef>jar-with-dependencies</descriptorRef>
-          </descriptorRefs>
-        </configuration>
-      </plugin>
 	</plugins>
   </build>
 </project>

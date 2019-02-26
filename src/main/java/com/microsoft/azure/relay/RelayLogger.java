@@ -6,8 +6,8 @@ import java.util.Map;
 
 import javax.resource.spi.IllegalStateException;
 
-import org.apache.log4j.Logger;
-import org.apache.log4j.xml.DOMConfigurator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class RelayLogger {
 	static final Logger LOGGER = create();
@@ -17,7 +17,7 @@ final class RelayLogger {
 	
 	private static Logger create() {
 		init();
-		return Logger.getLogger(RelayLogger.class);
+		return LoggerFactory.getLogger(RelayLogger.class);
 	}
 	
 	public static void logEvent(String event, Object source, String... args) {
@@ -58,9 +58,6 @@ final class RelayLogger {
 		String message = details.getSource() + " is throwing an Exception: ";
 
 		switch (level) {
-		case FATAL:
-			LOGGER.fatal(message, exception);
-			break;
 		case ERROR:
 			LOGGER.error(message, exception);
 			break;
@@ -107,9 +104,8 @@ final class RelayLogger {
 	}
 
 	private static void init() {
-		DOMConfigurator.configure("resources/log4j.xml");
-
 		Map<String, String> map = new HashMap<String, String>();
+		
 		map.put("clientWebSocketClosing", "%s: is closing. Close reason: %s");
 		map.put("clientWebSocketClosed", "%s: is closed. Close reason: %s");
 		map.put("closing", "%s is closing.");

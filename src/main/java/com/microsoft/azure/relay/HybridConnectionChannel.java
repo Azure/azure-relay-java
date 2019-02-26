@@ -37,7 +37,6 @@ public interface HybridConnectionChannel extends Channel {
 	 * 
 	 * @param timeout The timeout duration for this operation.
 	 * @return Returns a CompletableFuture of the bytes which completes when websocket receives the entire message.
-	 * @throws TimeoutException thrown when a complete message frame is not received within the timeout.
 	 */
 	public CompletableFuture<ByteBuffer> readAsync(Duration timeout);
 	
@@ -55,7 +54,6 @@ public interface HybridConnectionChannel extends Channel {
 	 * @param data Message to be sent.
 	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
 	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
-	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
 	public CompletableFuture<Void> writeAsync(ByteBuffer data, Duration timeout);
 }
