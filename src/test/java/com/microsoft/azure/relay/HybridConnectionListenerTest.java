@@ -38,7 +38,7 @@ public class HybridConnectionListenerTest {
 	@AfterClass
 	public static void cleanup() {
 		if (listener != null) {
-			listener.closeAsync().join();
+			listener.close();
 		}
 	}
 	
@@ -98,7 +98,6 @@ public class HybridConnectionListenerTest {
 		// Set up listener to accept MAX_CONNECTIONS_COUNT connections async
 		CompletableFuture<?>[] listenerConnectFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
-			int idx = i;
 			listenerConnectFutures[i] = listener.acceptConnectionAsync()
 				.thenApply(listenerConnection -> {
 					//System.out.println(Thread.currentThread().getName() + " Listener connection " + idx + " " + listenerConnection.getTrackingContext().getTrackingId() + " accepted");
@@ -111,7 +110,6 @@ public class HybridConnectionListenerTest {
 		CompletableFuture<?>[] clientConnectFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];		
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
 			int idx = i;
-			Instant start = Instant.now();
 			//System.out.println(Thread.currentThread().getName() + " Sender" + idx + " connecting");
 			HybridConnectionClient hybridConnectionClient = new HybridConnectionClient(new URI(CONNECTION_URI + "?foo=bar"), tokenProvider);
 			clientConnectFutures[i] = hybridConnectionClient.createConnectionAsync()
@@ -134,7 +132,6 @@ public class HybridConnectionListenerTest {
 				
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
 			HybridConnectionChannel listenerConnection = (HybridConnectionChannel) listenerConnectFutures[i].join();
-			int idx = i;
 			listenerConnection.readAsync(Duration.ofSeconds(20))
 				.thenCompose(readBuffer -> {
 					//System.out.println(idx + " Listener connection " + listenerConnection.getTrackingContext().getTrackingId() + " received " + readBuffer.remaining() + " byte(s)");
@@ -164,8 +161,6 @@ public class HybridConnectionListenerTest {
 		CompletableFuture<?>[] listenerCloseFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
 			HybridConnectionChannel listenerConnection = (HybridConnectionChannel) listenerConnectFutures[i].join();
-			int idx = i;
-			String trackingId = listenerConnection.getTrackingContext().getTrackingId();
 			listenerCloseFutures[i] = listenerConnection.readAsync(Duration.ofSeconds(20))
 				.thenCompose(readBuffer -> {
 					//System.out.println(idx + " Listener connection " + trackingId + " received " + readBuffer.remaining() + " byte(s)");
@@ -180,8 +175,6 @@ public class HybridConnectionListenerTest {
 		CompletableFuture<?>[] clientCloseFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
 			HybridConnectionChannel clientConnection = (HybridConnectionChannel) clientConnectFutures[i].join();
-			int idx = i;
-			String trackingId = clientConnection.getTrackingContext().getTrackingId();
 			//System.out.println(idx + " Sender connection " + trackingId + " closing");						
 			clientCloseFutures[i] = clientConnection.closeAsync()
 				.whenComplete((result, ex) -> {
