@@ -9,7 +9,6 @@ import javax.resource.spi.IllegalStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 final class RelayLogger {
 	static final Logger LOGGER = create();
 	private static Map<String, String> Messages;
@@ -105,9 +104,8 @@ final class RelayLogger {
 	}
 
 	private static void init() {
-//		DOMConfigurator.configure("resources/log4j.xml");
-
 		Map<String, String> map = new HashMap<String, String>();
+		
 		map.put("clientWebSocketClosing", "%s: is closing. Close reason: %s");
 		map.put("clientWebSocketClosed", "%s: is closed. Close reason: %s");
 		map.put("closing", "%s is closing.");
