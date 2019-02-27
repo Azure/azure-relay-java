@@ -12,6 +12,7 @@ import java.io.Writer;
 import javax.websocket.*;
 
 import org.eclipse.jetty.io.RuntimeIOException;
+import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint implements RelayTraceSource {
@@ -288,6 +289,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			} else {
 				this.session.close();
 			}
+			((LifeCycle) this.container).stop();
 		} 
 		catch (Throwable e) {
 			this.closeTask.completeExceptionally(e);
@@ -326,11 +328,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		this.fragmentQueue.shutdown();
 		
 		this.closeReason = reason;
-		if (reason.getCloseCode() != CloseReason.CloseCodes.NORMAL_CLOSURE) {
-			this.closeTask.completeExceptionally(new RuntimeIOException("Websocket did not close properly: " + reason.toString()));
-		} else {
-			this.closeTask.complete(null);
-		}
+		this.closeTask.complete(null);
 	}
 
 	@OnError
