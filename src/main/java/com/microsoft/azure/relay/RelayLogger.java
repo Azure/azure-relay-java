@@ -112,6 +112,7 @@ final class RelayLogger {
 		map.put("closed", "%s is closed.");
 		map.put("connecting", "%s is connecting.");
 		map.put("connected", "%s is connected.");
+		map.put("disconnect", "%s: is disconnected, should reconnect = %s");
 		map.put("doneWritingBytes", "%s: finished writing %s bytes to remote.");
 		map.put("getTokenStart", "%s: getToken start.");
 		map.put("getTokenStop", "%s: getToken stop. New token expires at %s.");

@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -32,36 +31,14 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private Duration operationTimeout;
 	private int maxWebSocketBufferSize;
 	private String cachedString;
-
-	/**
-	 * Allows installing a custom handler which can inspect request headers, control
-	 * response headers, decide whether to accept or reject a web-socket upgrade
-	 * request, and control the status code/description if rejecting. The
-	 * AcceptHandler should return true to accept a client request or false to
-	 * reject.
-	 */
 	private Function<RelayedHttpListenerContext, Boolean> acceptHandler;
-
-	/**
-	 * A handler to run upon receiving Hybrid Http Requests.
-	 */
 	private Consumer<RelayedHttpListenerContext> requestHandler;
-
-	/**
-	 * The address on which to listen for HybridConnections. This address should be
-	 * of the format "sb://contoso.servicebus.windows.net/yourhybridconnection".
-	 */
 	private URI address;
-
-	/**
-	 * The TrackingContext for this listener.
-	 */
 	private TrackingContext trackingContext;
-
-	/**
-	 * The TokenProvider for authenticating this HybridConnection listener.
-	 */
 	private TokenProvider tokenProvider;
+	private Consumer<Throwable> connectingHandler;
+	private Consumer<Throwable> offlineHandler;
+	private Runnable onlineHandler;
 
 	public boolean isOnline() {
 		return this.controlConnection.isOnline();
@@ -71,6 +48,15 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		return acceptHandler;
 	}
 
+	/**
+	 * Installing a custom handler which can inspect request headers, control response headers, 
+	 * decide whether to accept or reject a websocket upgrade request, and control the status code/description if rejecting.
+	 * If choosing to reject the websocket connection request, the response code and description can be set through the
+	 * response object of the RelayedHttpListenerContext instance provided.
+	 * 
+	 * @param acceptHandler A Function which takes in the websocket connection request context
+	 * 						and returns true/false if the request should be accepted/rejected
+	 */
 	public void setAcceptHandler(Function<RelayedHttpListenerContext, Boolean> acceptHandler) {
 		this.acceptHandler = acceptHandler;
 	}
@@ -79,18 +65,34 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		return requestHandler;
 	}
 
+	/**
+	 * Install a custom handler which will be run upon receiving a HTTP request. 
+	 * The corresponding HTTP response can be set through the response object of the given context instance.
+	 * 
+	 * @param requestHandler A Consumer which takes in the incoming HTTP request context
+	 */
 	public void setRequestHandler(Consumer<RelayedHttpListenerContext> requestHandler) {
 		this.requestHandler = requestHandler;
 	}
 
+	/**
+	 * The address on which to listen for HybridConnections. This address should be
+	 * of the format "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 */
 	public URI getAddress() {
 		return this.address;
 	}
 
+	/**
+	 * The TokenProvider for authenticating this HybridConnection listener.
+	 */
 	public TokenProvider getTokenProvider() {
 		return this.tokenProvider;
 	}
 
+	/**
+	 * The TrackingContext for this listener.
+	 */
 	public TrackingContext getTrackingContext() {
 		return this.trackingContext;
 	}
@@ -111,6 +113,57 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		}
 	}
 
+	/**
+	 * Returns the handler that will be run when the listener disconnects unexpectedly due to potential error.
+	 * The listener will attempt to reconnect after this handler runs.	
+	 */
+	public Consumer<Throwable> getConnectingHandler() {
+		return connectingHandler;
+	}
+
+	/**
+	 * Sets the handler that will be run when the listener disconnects unexpectedly due to potential error.
+	 * The listener will attempt to reconnect after this handler runs.	
+	 */
+	public void setConnectingHandler(Consumer<Throwable> onConnecting) {
+		this.connectingHandler = onConnecting;
+	}
+
+	/**
+	 * Returns the handler which will be run after the listener has become offline.
+	 * Reconnection will not be attempted after this handler.
+	 */
+	public Consumer<Throwable> getOfflineHandler() {
+		return offlineHandler;
+	}
+
+	/**
+	 * Sets the handler which will be run after the listener has become offline.
+	 * Reconnection will not be attempted after this handler.
+	 */
+	public void setOfflineHandler(Consumer<Throwable> onOffline) {
+		this.offlineHandler = onOffline;
+	}
+
+	/**
+	 * Returns the handler that will be run after the listener has established connection to the cloud service.
+	 */
+	public Runnable getOnlineHandler() {
+		return onlineHandler;
+	}
+
+	/**
+	 * Sets the handler that will be run after the listener has established connection to the cloud service.
+	 */
+	public void setOnlineHandler(Runnable onOnline) {
+		this.onlineHandler = onOnline;
+	}
+	
+	// For testing and debugging access
+	ControlConnection getControlConnection() {
+		return this.controlConnection;
+	}
+	
 	/**
 	 * Create a new HybridConnectionListener instance for accepting
 	 * HybridConnections.
@@ -447,9 +500,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * Connects, maintains, and transparently reconnects this listener's control
 	 * connection with the cloud service.
 	 */
-	private final static class ControlConnection implements AutoCloseable {
+	static final class ControlConnection implements AutoCloseable {
 		// Retries after 0, 1, 2, 5, 10, 30 seconds
-		private final static Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
+		private static final Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
 				Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30) };
 		private final HybridConnectionListener listener;
 		private final URI address;
@@ -461,9 +514,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private CompletableFuture<ClientWebSocket> connectAsyncTask;
 		private int connectDelayIndex;
 		private Throwable lastError;
-		private BiConsumer<Object, Object[]> connectingHandler;
-		private BiConsumer<Object, Object[]> offlineHandler;
-		private BiConsumer<Object, Object[]> onlineHandler;
 
 		boolean isOnline() {
 			synchronized (this.thisLock) {
@@ -473,30 +523,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 		public Throwable getLastError() {
 			return lastError;
-		}
-
-		public BiConsumer<Object, Object[]> getConnectingHandler() {
-			return connectingHandler;
-		}
-
-		public void setConnectingHandler(BiConsumer<Object, Object[]> onConnecting) {
-			this.connectingHandler = onConnecting;
-		}
-
-		public BiConsumer<Object, Object[]> getOfflineHandler() {
-			return offlineHandler;
-		}
-
-		public void setOfflineHandler(BiConsumer<Object, Object[]> onOffline) {
-			this.offlineHandler = onOffline;
-		}
-
-		public BiConsumer<Object, Object[]> getOnlineHandler() {
-			return onlineHandler;
-		}
-
-		public void setOnlineHandler(BiConsumer<Object, Object[]> onOnline) {
-			this.onlineHandler = onOnline;
 		}
 
 		ControlConnection(HybridConnectionListener listener) {
@@ -525,7 +551,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 					this.receivePumpAsync(); // This starts pumping but doesn't wait
 				}).whenComplete(($void, err) -> {
 					if (err != null) {
-						// catch (Throwable err) {
 						RelayLogger.throwingException(err, this.listener);
 						CloseReason closeReason = new CloseReason(CloseCodes.UNEXPECTED_CONDITION,
 								"closing web socket connection because something went wrong trying to connect.");
@@ -755,10 +780,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				this.lastError = null;
 				this.connectDelayIndex = -1;
 			}
-
 			RelayLogger.logEvent("connected", this.listener);
-			if (this.onlineHandler != null) {
-				this.onlineHandler.accept(this, null);
+			
+			if (this.listener.getOnlineHandler() != null) {
+				this.listener.getOnlineHandler().run();
 			}
 		}
 
@@ -767,6 +792,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				this.lastError = lastError;
 			}
 			RelayLogger.logEvent("offline", this);
+			
+			if (this.listener.getOfflineHandler() != null) {
+				this.listener.getOfflineHandler().accept(lastError);
+			}
 		}
 
 		// Returns true if this control connection should attempt to reconnect after this exception.
@@ -783,9 +812,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			// Inspect the close status/description to see if this is a terminal case
 			// or we should attempt to reconnect.
 			boolean shouldReconnect = this.shouldReconnect(lastError);
+			RelayLogger.logEvent("disconnect", this, String.valueOf(shouldReconnect));
 
-			if (shouldReconnect && this.connectingHandler != null) {
-				this.connectingHandler.accept(this, null);
+			if (shouldReconnect && this.listener.getConnectingHandler() != null) {
+				this.listener.getConnectingHandler().accept(lastError);
 			}
 
 			return shouldReconnect;
