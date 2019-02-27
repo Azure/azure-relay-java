@@ -165,9 +165,7 @@ public class HybridConnectionListenerTest {
 		CompletableFuture<?>[] clientCloseFutures = new CompletableFuture<?>[MAX_CONNECTIONS_COUNT];
 		for (int i = 0; i < MAX_CONNECTIONS_COUNT; i++) {
 			HybridConnectionChannel clientConnection = (HybridConnectionChannel) clientConnectFutures[i].join();
-			clientCloseFutures[i] = clientConnection.closeAsync()
-				.whenComplete((result, ex) -> {
-				});
+			clientCloseFutures[i] = clientConnection.closeAsync();
 		}
 		
 		CompletableFuture.allOf(clientCloseFutures).join();
