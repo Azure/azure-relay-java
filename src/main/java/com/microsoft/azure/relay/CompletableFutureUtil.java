@@ -81,4 +81,8 @@ final class CompletableFutureUtil {
 		}
 		return taskCF;
 	}
+	
+	static boolean isDoneNormally(CompletableFuture<?> cf) {
+		return cf != null && cf.isDone() && !cf.isCancelled() && !cf.isCompletedExceptionally();
+	}
 }

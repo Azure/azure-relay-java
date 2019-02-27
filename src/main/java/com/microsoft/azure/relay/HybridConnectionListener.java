@@ -34,13 +34,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private String cachedString;
 
 	/**
-	 * Gets a value that determines whether the connection is online. True if the
-	 * connection is alive and online; False if there is no connectivity towards the
-	 * Azure Service Bus from the current network location.
-	 */
-	private boolean isOnline;
-
-	/**
 	 * Allows installing a custom handler which can inspect request headers, control
 	 * response headers, decide whether to accept or reject a web-socket upgrade
 	 * request, and control the status code/description if rejecting. The
@@ -71,7 +64,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private TokenProvider tokenProvider;
 
 	public boolean isOnline() {
-		return this.isOnline;
+		return this.controlConnection.isOnline();
 	}
 
 	public Function<RelayedHttpListenerContext, Boolean> getAcceptHandler() {
@@ -251,11 +244,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			this.openCalled = true;
 		}
 
-		return this.controlConnection.openAsync(timeout).thenRun(() -> {
-			synchronized (this.thisLock) {
-				this.isOnline = true;
-			}
-		});
+		return this.controlConnection.openAsync(timeout);
 	}
 
 	/**
@@ -304,8 +293,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			.thenCompose($void -> this.controlConnection.closeAsync(timeoutHelper.remainingTime()))
 			.whenComplete(($void, ex) -> {
 				this.connectionInputQueue.dispose();
-				RelayLogger.logEvent("closed", this);				
-				this.isOnline = false;
+				RelayLogger.logEvent("closed", this);
 				if (ex != null) {
 					throw RelayLogger.throwingException(ex, this);
 				}
@@ -469,17 +457,18 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private String path;
 		private final TokenRenewer tokenRenewer;
 		private final AsyncLock sendAsyncLock;
+		private final Object thisLock = new Object();
 		private CompletableFuture<ClientWebSocket> connectAsyncTask;
 		private int connectDelayIndex;
-		private boolean isOnline;
 		private Throwable lastError;
 		private BiConsumer<Object, Object[]> connectingHandler;
 		private BiConsumer<Object, Object[]> offlineHandler;
 		private BiConsumer<Object, Object[]> onlineHandler;
-		private Object thisLock = new Object();
 
 		boolean isOnline() {
-			return isOnline;
+			synchronized (this.thisLock) {
+				return CompletableFutureUtil.isDoneNormally(connectAsyncTask) && connectAsyncTask.join().isOpen();
+			}
 		}
 
 		public Throwable getLastError() {
@@ -566,7 +555,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				return connectTask.thenCompose((webSocket) -> {
 					return this.sendAsyncLock.acquireThenCompose(duration, () -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
-						return webSocket.closeAsync(reason);
+						return webSocket.closeAsync(reason).whenComplete(($void, ex) -> {
+							this.onOffline(ex);
+						});
 					});
 				});
 			}
@@ -673,8 +664,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		}
 		
 		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<ClientWebSocket> connectTask, CloseReason reason) {
-			assert connectTask != null;
-			assert connectTask.isDone();
+			assert CompletableFutureUtil.isDoneNormally(connectTask);
 			
 			synchronized (this.thisLock) {
 				if (connectTask == this.connectAsyncTask) {
@@ -758,12 +748,11 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 		private void onOnline() {
 			synchronized (this.thisLock) {
-				if (this.isOnline) {
+				if (this.isOnline()) {
 					return;
 				}
 
 				this.lastError = null;
-				this.isOnline = true;
 				this.connectDelayIndex = -1;
 			}
 
@@ -774,11 +763,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		}
 
 		private void onOffline(Throwable lastError) {
-			synchronized (this.thisLock) {
-				if (lastError != null) {
-					this.lastError = lastError;
-				}
-				this.isOnline = false;
+			if (lastError != null) {
+				this.lastError = lastError;
 			}
 			RelayLogger.logEvent("offline", this);
 		}
@@ -788,7 +774,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 			synchronized (this.thisLock) {
 				this.lastError = lastError;
-				this.isOnline = false;
 
 				if (this.connectDelayIndex < CONNECTION_DELAY_INTERVALS.length - 1) {
 					this.connectDelayIndex++;
