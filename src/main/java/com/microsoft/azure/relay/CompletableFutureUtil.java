@@ -8,14 +8,15 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 final class CompletableFutureUtil {
-	static AtomicInteger tasksRunning = new AtomicInteger(0);
-
-	static CompletableFuture<Void> delayAsync(Duration delay, ScheduledExecutorService executor) {
+	public static boolean isDoneNormally(CompletableFuture<?> cf) {
+		return cf != null && cf.isDone() && !cf.isCancelled() && !cf.isCompletedExceptionally();
+	}
+	
+	public static CompletableFuture<Void> delayAsync(Duration delay, ScheduledExecutorService executor) {
 		if (delay == null || delay.isZero() || delay.isNegative()) {
 			return CompletableFuture.completedFuture(null);
 		}
@@ -26,18 +27,18 @@ final class CompletableFutureUtil {
         return future;
 	}
 
-	static <T> CompletableFuture<T> fromException(Throwable ex) {
+	public static <T> CompletableFuture<T> fromException(Throwable ex) {
 		CompletableFuture<T> future = new CompletableFuture<T>();
 		future.completeExceptionally(ex);
 		return future;
 	}
 
-	static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable, ScheduledExecutorService executor) {
+	public static CompletableFuture<Void> timedRunAsync(Duration timeout, Runnable runnable, ScheduledExecutorService executor) {
 
 		return futureToCompletableFuture(timeout, runnable, executor);
 	}
 
-	static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier, ScheduledExecutorService executor) {
+	public static <T> CompletableFuture<T> timedSupplyAsync(Duration timeout, Supplier<T> supplier, ScheduledExecutorService executor) {
 		Callable<T> callable = new Callable<T>() {
 			@Override
 			public T call() throws Exception {
@@ -80,9 +81,5 @@ final class CompletableFutureUtil {
 			}, timeout.toMillis(), TimeUnit.MILLISECONDS));
 		}
 		return taskCF;
-	}
-	
-	static boolean isDoneNormally(CompletableFuture<?> cf) {
-		return cf != null && cf.isDone() && !cf.isCancelled() && !cf.isCompletedExceptionally();
 	}
 }
