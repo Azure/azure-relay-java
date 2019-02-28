@@ -114,7 +114,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	}
 
 	/**
-	 * Returns the handler that will be run when the listener disconnects unexpectedly due to potential error.
+	 * Returns the handler that will be run when the listener disconnects unexpectedly.
 	 * The listener will attempt to reconnect after this handler runs.	
 	 */
 	public Consumer<Throwable> getConnectingHandler() {
@@ -122,7 +122,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	}
 
 	/**
-	 * Sets the handler that will be run when the listener disconnects unexpectedly due to potential error.
+	 * Sets the handler that will be run when the listener disconnects unexpectedly.
 	 * The listener will attempt to reconnect after this handler runs.	
 	 */
 	public void setConnectingHandler(Consumer<Throwable> onConnecting) {
@@ -524,6 +524,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		public Throwable getLastError() {
 			return lastError;
 		}
+		
+		CompletableFuture<ClientWebSocket> getConnectAsyncTask() {
+			synchronized (this.thisLock) {
+				return this.connectAsyncTask;
+			}
+		}
 
 		ControlConnection(HybridConnectionListener listener) {
 			this.listener = listener;
@@ -782,8 +788,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			}
 			RelayLogger.logEvent("connected", this.listener);
 			
-			if (this.listener.getOnlineHandler() != null) {
-				this.listener.getOnlineHandler().run();
+			Runnable onlineHandler = this.listener.getOnlineHandler();
+			if (onlineHandler != null) {
+				onlineHandler.run();
 			}
 		}
 
@@ -793,8 +800,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			}
 			RelayLogger.logEvent("offline", this);
 			
-			if (this.listener.getOfflineHandler() != null) {
-				this.listener.getOfflineHandler().accept(lastError);
+			Consumer<Throwable> offlineHandler = this.listener.getOfflineHandler();
+			if (offlineHandler != null) {
+				offlineHandler.accept(lastError);
 			}
 		}
 
@@ -814,8 +822,11 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			boolean shouldReconnect = this.shouldReconnect(lastError);
 			RelayLogger.logEvent("disconnect", this, String.valueOf(shouldReconnect));
 
-			if (shouldReconnect && this.listener.getConnectingHandler() != null) {
-				this.listener.getConnectingHandler().accept(lastError);
+			if (shouldReconnect) {
+				Consumer<Throwable> connectingHandler = this.listener.getConnectingHandler();
+				if (connectingHandler != null) {
+					connectingHandler.accept(lastError);
+				}
 			}
 
 			return shouldReconnect;
