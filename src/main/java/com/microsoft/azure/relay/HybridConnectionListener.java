@@ -359,11 +359,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	}
 	
 	/**
-	 * Asynchronously wait for a websocket connection from the sender to be
-	 * connected
+	 * Asynchronously wait for a websocket connection from the sender to be connected. When the listener closes, 
+	 * all pending CompletableFutures that are still waiting to accept a connection will complete with null.
 	 * 
-	 * @return A CompletableFuture which completes when aa websocket connection from
-	 *         the sender is connected
+	 * @return A CompletableFuture which completes when a websocket connection from the sender is established.
 	 */
 	public CompletableFuture<HybridConnectionChannel> acceptConnectionAsync() {
 		synchronized (this.thisLock) {
