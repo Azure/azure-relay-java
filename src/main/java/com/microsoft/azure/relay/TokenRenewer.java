@@ -18,7 +18,6 @@ class TokenRenewer {
 		this.listener = listener;
 		this.appliesTo = appliesTo;
 		this.tokenValidFor = tokenValidFor;
-		this.renewTimer = new Timer();
 	}
 
 	Consumer<SecurityToken> getOnTokenRenewed() {
@@ -62,6 +61,7 @@ class TokenRenewer {
 	}
 
 	private void scheduleRenewTimer(SecurityToken token) {
+		this.renewTimer = new Timer();
 		Duration interval = Duration.between(Instant.now(), token.getExpiresAtUtc());
 		if (interval.isNegative()) {
 			RelayLogger.logEvent("tokenRenewNegativeDuration", this.listener);

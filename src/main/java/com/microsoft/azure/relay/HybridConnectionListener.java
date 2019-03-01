@@ -766,7 +766,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 								}
 								return keepGoing;
 							}
-							this.listener.onCommandAsync(receivedMessage, webSocket);
+							if (receivedMessage != null) {
+								this.listener.onCommandAsync(receivedMessage, webSocket);
+							}
 						} catch (Exception exception) {
 							RelayLogger.handledExceptionAsWarning(exception, this.listener);
 							this.closeOrAbortWebSocketAsync(connectTask, null);
