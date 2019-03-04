@@ -152,7 +152,9 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 */
 	CompletableFuture<String> readTextAsync() {
 		return this.textQueue.dequeueAsync().thenApply(text -> {
-			RelayLogger.logEvent("receivedText", this, String.valueOf(text.length()));
+			if (text != null) {
+				RelayLogger.logEvent("receivedText", this, String.valueOf(text.length()));
+			}
 			return text;
 		});
 	}
@@ -277,8 +279,6 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 */
 	public CompletableFuture<Void> closeAsync(CloseReason reason) {
 		RelayLogger.logEvent("clientWebSocketClosing", this, (reason != null) ? reason.getReasonPhrase() : "NONE");
-		this.fragmentQueue.shutdown();
-		this.textQueue.shutdown();
 		
 		if (this.session == null || !this.session.isOpen()) {
 			return this.closeTask;
@@ -323,11 +323,10 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	
 	@OnClose
 	public void onClose(Session session, CloseReason reason) {
+		this.closeReason = reason;
 		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
 		this.textQueue.shutdown();
 		this.fragmentQueue.shutdown();
-		
-		this.closeReason = reason;
 		this.closeTask.complete(null);
 	}
 
