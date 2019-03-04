@@ -17,6 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.websocket.api.UpgradeException;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -28,6 +31,7 @@ public class HybridConnectionListenerTest {
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
 	private static URI CONNECTION_URI;
+	private static HybridConnectionListener listener;
 	
 	@BeforeClass
 	public static void init() throws URISyntaxException, RelayException {
@@ -36,9 +40,18 @@ public class HybridConnectionListenerTest {
 		client = new HybridConnectionClient(CONNECTION_URI, tokenProvider);
 	}
 	
+	@Before
+	public void beforeEachTest() {
+		listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
+	}
+	
+	@After
+	public void afterEachTest() {
+		listener.close();
+	}
+	
 	@Test
 	public void openAndCloseTest() {
-		HybridConnectionListener listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
 		AtomicBoolean onlineHandlerCalled = new AtomicBoolean(false);
 		AtomicBoolean offlineHandlerCalled = new AtomicBoolean(false);
 		
@@ -56,14 +69,13 @@ public class HybridConnectionListenerTest {
 		assertTrue("Listener open handler was not called", onlineHandlerCalled.get());
 		
 		listener.close();
-		assertFalse("Listner should be closed", listener.isOnline());
+		assertFalse("Listener should be closed", listener.isOnline());
 		assertTrue("Listener offline handler was not called", offlineHandlerCalled.get());
 	}
 	
 	@Test
 	public void webSocketConnectionTest() throws InterruptedException, ExecutionException, TimeoutException {
 		int waitMS = 500;
-		HybridConnectionListener listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
 		listener.openAsync(Duration.ofSeconds(15)).join();
 		
 		// Client initiates closing
@@ -96,17 +108,11 @@ public class HybridConnectionListenerTest {
 			});
 		});
 		
-		CompletableFuture.allOf(clientClosing, rendezvousClosing).whenComplete(($void, ex) -> {
-			if (ex != null) {
-				fail(ex.getMessage());
-			}	
-			listener.close();
-		}).join();
+		CompletableFuture.allOf(clientClosing, rendezvousClosing).join();
 	}
 	
 	@Test
 	public void acceptHandlerTest() throws InterruptedException, ExecutionException, TimeoutException {
-		HybridConnectionListener listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
 		AtomicInteger handlerExecuted = new AtomicInteger(0);
 		listener.openAsync().join();
 		
@@ -116,18 +122,19 @@ public class HybridConnectionListenerTest {
 			return true;
 		});
 		
-		client.createConnectionAsync().whenComplete((clientConnection, ex) -> {
-			assertTrue("clientConnection should have been accepted", clientConnection != null && clientConnection.isOpen());
-		});
-		listener.acceptConnectionAsync().whenComplete((rendezvousConnection, ex) -> {
-			assertTrue("rendezvousConnection should have been accepted", rendezvousConnection != null && rendezvousConnection.isOpen());
-			rendezvousConnection.closeAsync();
-		}).join();
+		CompletableFuture<HybridConnectionChannel> clientConnectionTask = 
+			client.createConnectionAsync().whenComplete((clientConnection, ex) -> {
+				assertTrue("clientConnection should have been accepted", clientConnection != null && clientConnection.isOpen());
+			});
+		CompletableFuture<HybridConnectionChannel> rendezvousConnectionTask = 
+			listener.acceptConnectionAsync().whenComplete((rendezvousConnection, ex) -> {
+				assertTrue("rendezvousConnection should have been accepted", rendezvousConnection != null && rendezvousConnection.isOpen());
+				rendezvousConnection.closeAsync();
+			});
+		CompletableFuture.allOf(clientConnectionTask, rendezvousConnectionTask).join();
 		
 		// Handler rejects the connection
-		AtomicReference<RelayedHttpListenerContext> httpContext = new AtomicReference<RelayedHttpListenerContext>();
 		listener.setAcceptHandler(context -> {
-			httpContext.set(context);
 			handlerExecuted.incrementAndGet();
 			return false;
 		});
@@ -136,24 +143,25 @@ public class HybridConnectionListenerTest {
 		client.createConnectionAsync().handle((clientConnection, ex) -> {
 			assertNull("clientConnection should not have been accepted", clientConnection);
 			assertNotNull("Rejection should have thrown.", ex);
-
-			RelayedHttpListenerResponse response = httpContext.get().getResponse();
-			assertEquals("The rejection response code is incorrect", HttpStatus.BAD_REQUEST_400, response.getStatusCode());
-			assertEquals("The rejection response description is incorrect", "Rejected by user code", response.getStatusDescription());
+			
+			Throwable cause = ex.getCause();
+			assertTrue("The exception should be caused by failure to upgrade", cause instanceof UpgradeException);
+			assertEquals("The response code does not match expected", HttpStatus.BAD_REQUEST_400, ((UpgradeException)cause).getResponseStatusCode());
 			assertEquals("Both handlers should have been run", 2, handlerExecuted.get());
 			
-			listener.close();
 			return null;
 		}).join();
 		
+		listener.close();
+		
 		acceptConnectionTask.whenComplete((connection, ex) -> {
 			assertNull("There shouldn't be a connection established successfully", connection);
+			assertNull("There shouldn't be an exception thrown", ex);
 		}).join();
 	}
 	
 	@Test
 	public void requestHandlerTest() throws IOException {
-		HybridConnectionListener listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
 		AtomicBoolean handlerExecuted = new AtomicBoolean(false);
 		int status = HttpStatus.ACCEPTED_202;
 		
@@ -182,13 +190,10 @@ public class HybridConnectionListenerTest {
 
 		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
 		assertTrue("Listener failed to accept connections from sender in http mode.", handlerExecuted.get());
-		
-		listener.close();
 	}
 	
 	@Test
 	public void listenerReconnectionTest() {
-		HybridConnectionListener listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
 		AtomicBoolean handlerExecuted = new AtomicBoolean(false);
 		
 		listener.setConnectingHandler((ex) -> {
@@ -198,21 +203,19 @@ public class HybridConnectionListenerTest {
 		
 		listener.openAsync(Duration.ofSeconds(15)).join();
 		ControlConnection controlConnection = listener.getControlConnection();
-		controlConnection.close(); // This bypasses listener.close(), simulating an unexptected close
+		controlConnection.close(); // This bypasses listener.close(), simulating an unexpected close
 		
-		CompletableFuture<Void> closeTask = CompletableFutureUtil.delayAsync(Duration.ofMillis(1000), EXECUTOR).thenRun(() -> {
+		CompletableFuture<Void> reconnectTask = CompletableFutureUtil.delayAsync(Duration.ofMillis(1000), EXECUTOR).thenRun(() -> {
 			assertTrue("listener should be reconnected now", listener.isOnline());
-			listener.close();
 		});
-		
+
 		assertFalse("listener should be disconnected temporarily for now", listener.isOnline());
 		assertTrue("The reconnecting handler was not called", handlerExecuted.get());
-		closeTask.join();
+		reconnectTask.join();
 	}
 	
 	@Test
 	public void connectMultipleClientsTest() throws URISyntaxException {
-		HybridConnectionListener listener = new HybridConnectionListener(CONNECTION_URI, tokenProvider);
 		listener.openAsync(Duration.ofSeconds(15)).join();
 		AtomicInteger clientConnectedCount = new AtomicInteger(0);
 		AtomicInteger listenerAcceptCount = new AtomicInteger(0);
@@ -293,6 +296,5 @@ public class HybridConnectionListenerTest {
 		
 		CompletableFuture.allOf(clientCloseFutures).join();
 		CompletableFuture.allOf(listenerCloseFutures).join();
-		listener.close();
 	}
 }
