@@ -12,10 +12,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.junit.After;
@@ -52,25 +49,25 @@ public class HybridConnectionListenerTest {
 	
 	@Test
 	public void openAndCloseTest() {
-		AtomicBoolean onlineHandlerCalled = new AtomicBoolean(false);
-		AtomicBoolean offlineHandlerCalled = new AtomicBoolean(false);
+		AtomicInteger onlineHandlerCalled = new AtomicInteger(0);
+		AtomicInteger offlineHandlerCalled = new AtomicInteger(0);
 		
 		listener.setOnlineHandler(() -> {
-			onlineHandlerCalled.set(true);
+			onlineHandlerCalled.incrementAndGet();
 		});
 		
 		listener.setOfflineHandler(ex -> {
 			assertNull("There should not have been an exception when closing the listener normally.", ex);
-			offlineHandlerCalled.set(true);
+			offlineHandlerCalled.incrementAndGet();
 		});
 		
 		listener.openAsync(Duration.ofSeconds(15)).join();
 		assertTrue("Listener failed to open.", listener.isOnline());
-		assertTrue("Listener open handler was not called", onlineHandlerCalled.get());
+		assertEquals("Listener open handler was not called exactly once", 1, onlineHandlerCalled.get());
 		
 		listener.close();
 		assertFalse("Listener should be closed", listener.isOnline());
-		assertTrue("Listener offline handler was not called", offlineHandlerCalled.get());
+		assertEquals("Listener offline handler was not called exactly once", 1, offlineHandlerCalled.get());
 	}
 	
 	@Test
@@ -162,11 +159,13 @@ public class HybridConnectionListenerTest {
 	
 	@Test
 	public void requestHandlerTest() throws IOException {
-		AtomicBoolean handlerExecuted = new AtomicBoolean(false);
+		AtomicInteger handlerExecuted = new AtomicInteger(0);
 		int status = HttpStatus.ACCEPTED_202;
 		
 		listener.setRequestHandler((context) -> {
-			handlerExecuted.set(context != null && context.getRequest() != null);
+			if (context != null && context.getRequest() != null) {
+				handlerExecuted.incrementAndGet();
+			}
 			RelayedHttpListenerResponse response = context.getResponse();
             response.setStatusCode(status);
             
@@ -189,16 +188,16 @@ public class HybridConnectionListenerTest {
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
 
 		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
-		assertTrue("Listener failed to accept connections from sender in http mode.", handlerExecuted.get());
+		assertEquals("Listener failed to accept connections exactly once from sender in http mode.", 1, handlerExecuted.get());
 	}
 	
 	@Test
 	public void listenerReconnectionTest() {
-		AtomicBoolean handlerExecuted = new AtomicBoolean(false);
+		AtomicInteger handlerExecuted = new AtomicInteger(0);
 		
 		listener.setConnectingHandler((ex) -> {
 			assertTrue("Exception should be ConnectionLostException.", ex != null && ex instanceof ConnectionLostException);
-			handlerExecuted.set(true);
+			handlerExecuted.incrementAndGet();
 		});
 		
 		listener.openAsync(Duration.ofSeconds(15)).join();
@@ -210,7 +209,7 @@ public class HybridConnectionListenerTest {
 		});
 
 		assertFalse("listener should be disconnected temporarily for now", listener.isOnline());
-		assertTrue("The reconnecting handler was not called", handlerExecuted.get());
+		assertEquals("The reconnecting handler was not called exactly once", 1, handlerExecuted.get());
 		reconnectTask.join();
 	}
 	

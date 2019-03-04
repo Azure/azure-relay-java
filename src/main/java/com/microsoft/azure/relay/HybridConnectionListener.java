@@ -585,9 +585,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				return connectTask.thenCompose((webSocket) -> {
 					return this.sendAsyncLock.acquireThenCompose(duration, () -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
-						return webSocket.closeAsync(reason).whenComplete(($void, ex) -> {
-							this.onOffline(ex);
-						});
+						return webSocket.closeAsync(reason);
 					});
 				});
 			}
