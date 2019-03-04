@@ -513,6 +513,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private CompletableFuture<ClientWebSocket> connectAsyncTask;
 		private int connectDelayIndex;
 		private Throwable lastError;
+		private boolean closeCalled;
 
 		boolean isOnline() {
 			synchronized (this.thisLock) {
@@ -524,6 +525,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			return lastError;
 		}
 		
+		// For test and debugging access only
 		CompletableFuture<ClientWebSocket> getConnectAsyncTask() {
 			synchronized (this.thisLock) {
 				return this.connectAsyncTask;
@@ -576,6 +578,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			
 			CompletableFuture<ClientWebSocket> connectTask;
 			synchronized (this.thisLock) {
+				this.closeCalled = true;
 				connectTask = this.connectAsyncTask;
 				this.connectAsyncTask = null;
 			}
@@ -753,8 +756,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 						try {
 							if (!webSocket.isOpen()) {
 								this.closeOrAbortWebSocketAsync(connectTask, webSocket.getCloseReason());
-								if (this.listener.closeCalled) {
-									// This is the cloud service responding to our clean shutdown.
+								if (this.closeCalled) {
 									keepGoing = false;
 								} 
 								else {

@@ -13,6 +13,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.junit.After;
@@ -25,16 +27,14 @@ import com.microsoft.azure.relay.HybridConnectionListener.ControlConnection;
 public class HybridConnectionListenerTest {
 	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() * 2);
 	private static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
-	private static TokenProvider tokenProvider;
-	private static HybridConnectionClient client;
 	private static URI CONNECTION_URI;
-	private static HybridConnectionListener listener;
+	private TokenProvider tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(TestUtil.KEY_NAME, TestUtil.KEY);
+	private HybridConnectionClient client = new HybridConnectionClient(CONNECTION_URI, tokenProvider);
+	private HybridConnectionListener listener;
 	
 	@BeforeClass
 	public static void init() throws URISyntaxException, RelayException {
 		CONNECTION_URI = new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
-		tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(TestUtil.KEY_NAME, TestUtil.KEY);
-		client = new HybridConnectionClient(CONNECTION_URI, tokenProvider);
 	}
 	
 	@Before
@@ -194,15 +194,18 @@ public class HybridConnectionListenerTest {
 	@Test
 	public void listenerReconnectionTest() {
 		AtomicInteger handlerExecuted = new AtomicInteger(0);
+		AtomicReference<Throwable> exception = new AtomicReference<>(new Exception());
 		
 		listener.setConnectingHandler((ex) -> {
-			assertTrue("Exception should be ConnectionLostException.", ex != null && ex instanceof ConnectionLostException);
+			exception.set(ex);
 			handlerExecuted.incrementAndGet();
 		});
 		
 		listener.openAsync(Duration.ofSeconds(15)).join();
 		ControlConnection controlConnection = listener.getControlConnection();
-		controlConnection.close(); // This bypasses listener.close(), simulating an unexpected close
+		controlConnection.getConnectAsyncTask().thenAccept(controlWebSocket -> {
+			controlWebSocket.closeAsync(); // This bypasses listener.close(), simulating an unexpected close
+		}).join();
 		
 		CompletableFuture<Void> reconnectTask = CompletableFutureUtil.delayAsync(Duration.ofMillis(1000), EXECUTOR).thenRun(() -> {
 			assertTrue("listener should be reconnected now", listener.isOnline());
@@ -210,6 +213,7 @@ public class HybridConnectionListenerTest {
 
 		assertFalse("listener should be disconnected temporarily for now", listener.isOnline());
 		assertEquals("The reconnecting handler was not called exactly once", 1, handlerExecuted.get());
+		assertTrue("Exception should be ConnectionLostException.", exception.get() instanceof ConnectionLostException);	
 		reconnectTask.join();
 	}
 	
