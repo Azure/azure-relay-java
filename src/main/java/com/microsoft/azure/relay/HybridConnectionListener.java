@@ -359,11 +359,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	}
 	
 	/**
-	 * Asynchronously wait for a websocket connection from the sender to be
-	 * connected
+	 * Asynchronously wait for a websocket connection from the sender to be connected. When the listener closes, 
+	 * all pending CompletableFutures that are still waiting to accept a connection will complete with null.
 	 * 
-	 * @return A CompletableFuture which completes when aa websocket connection from
-	 *         the sender is connected
+	 * @return A CompletableFuture which completes when a websocket connection from the sender is established.
 	 */
 	public CompletableFuture<HybridConnectionChannel> acceptConnectionAsync() {
 		synchronized (this.thisLock) {
@@ -514,6 +513,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private CompletableFuture<ClientWebSocket> connectAsyncTask;
 		private int connectDelayIndex;
 		private Throwable lastError;
+		private boolean closeCalled;
 
 		boolean isOnline() {
 			synchronized (this.thisLock) {
@@ -525,6 +525,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			return lastError;
 		}
 		
+		// For test and debugging access only
 		CompletableFuture<ClientWebSocket> getConnectAsyncTask() {
 			synchronized (this.thisLock) {
 				return this.connectAsyncTask;
@@ -577,6 +578,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			
 			CompletableFuture<ClientWebSocket> connectTask;
 			synchronized (this.thisLock) {
+				if (this.closeCalled) {
+					return CompletableFuture.completedFuture(null);
+				}
+				this.closeCalled = true;
 				connectTask = this.connectAsyncTask;
 				this.connectAsyncTask = null;
 			}
@@ -586,9 +591,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				return connectTask.thenCompose((webSocket) -> {
 					return this.sendAsyncLock.acquireThenCompose(duration, () -> {
 						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
-						return webSocket.closeAsync(reason).whenComplete(($void, ex) -> {
-							this.onOffline(ex);
-						});
+						return webSocket.closeAsync(reason);
 					});
 				});
 			}
@@ -756,8 +759,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 						try {
 							if (!webSocket.isOpen()) {
 								this.closeOrAbortWebSocketAsync(connectTask, webSocket.getCloseReason());
-								if (this.listener.closeCalled) {
-									// This is the cloud service responding to our clean shutdown.
+								if (this.closeCalled) {
 									keepGoing = false;
 								} 
 								else {
