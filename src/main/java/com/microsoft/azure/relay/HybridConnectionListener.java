@@ -578,6 +578,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			
 			CompletableFuture<ClientWebSocket> connectTask;
 			synchronized (this.thisLock) {
+				if (this.closeCalled) {
+					return CompletableFuture.completedFuture(null);
+				}
 				this.closeCalled = true;
 				connectTask = this.connectAsyncTask;
 				this.connectAsyncTask = null;
