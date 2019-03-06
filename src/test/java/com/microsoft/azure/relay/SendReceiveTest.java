@@ -207,15 +207,16 @@ public class SendReceiveTest {
 	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
-		return client.createConnectionAsync().thenAccept((channel) -> {
-			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
-			channel.readAsync().thenAccept((bytesReceived) -> {
+		return client.createConnectionAsync().thenCompose((channel) -> {
+			return channel.writeAsync(StringUtil.toBuffer(msgToSend)).thenCompose($void -> {
+				return channel.readAsync();
+			}).thenCompose((bytesReceived) -> {
 				String msgReceived = new String(bytesReceived.array());
 				receivedReply.set(true);
 				assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
-				channel.closeAsync().join();
-			});
-		}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
+				return channel.closeAsync();
+			}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
+		});
 	}
 	
 	private static CompletableFuture<Void> websocketListener(String msgExpected, String msgToSend) {

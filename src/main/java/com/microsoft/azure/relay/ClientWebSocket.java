@@ -328,7 +328,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			} catch (Exception e) {
 				RelayLogger.handledExceptionAsWarning(e, this);
 			}
-		});
+		}, executor);
 		
 		this.closeReason = reason;
 		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
