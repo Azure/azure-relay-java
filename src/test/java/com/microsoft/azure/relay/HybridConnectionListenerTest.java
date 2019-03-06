@@ -203,8 +203,8 @@ public class HybridConnectionListenerTest {
 		
 		listener.openAsync(Duration.ofSeconds(15)).join();
 		ControlConnection controlConnection = listener.getControlConnection();
-		controlConnection.getConnectAsyncTask().thenAccept(controlWebSocket -> {
-			controlWebSocket.closeAsync(); // This bypasses listener.close(), simulating an unexpected close
+		controlConnection.getConnectAsyncTask().thenCompose(controlWebSocket -> {
+			return controlWebSocket.closeAsync(); // This bypasses listener.close(), simulating an unexpected close
 		}).join();
 		
 		CompletableFuture<Void> reconnectTask = CompletableFutureUtil.delayAsync(Duration.ofMillis(1000), EXECUTOR).thenRun(() -> {
