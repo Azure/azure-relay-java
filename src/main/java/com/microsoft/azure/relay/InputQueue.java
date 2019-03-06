@@ -118,8 +118,8 @@ final class InputQueue<T> {
 		}
 
 		if (outstandingReaders != null) {
-			AtomicReference<Object> readersRef = new AtomicReference<>(outstandingReaders);
-			executor.submit(() -> completeOutstandingReadersCallback(readersRef.get()));
+			CompletableFuture<T>[] outstandingReadersRef = outstandingReaders;
+			executor.submit(() -> completeOutstandingReadersCallback(outstandingReadersRef));
 		}
 
 		if (reader != null) {
@@ -216,10 +216,7 @@ final class InputQueue<T> {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
-	void completeOutstandingReadersCallback(Object readers) {
-		CompletableFuture<T>[] outstandingReaders = (CompletableFuture<T>[]) readers;
-
+	void completeOutstandingReadersCallback(CompletableFuture<T>[] outstandingReaders) {
 		for (int i = 0; i < outstandingReaders.length; i++) {
 			outstandingReaders[i].complete(null);
 		}
