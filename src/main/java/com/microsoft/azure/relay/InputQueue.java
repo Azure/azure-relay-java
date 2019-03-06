@@ -9,6 +9,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -20,8 +21,6 @@ final class InputQueue<T> {
 	private QueueState queueState;
 	private final Object thisLock = new Object();
 
-	private Consumer<T> disposeItemCallback;
-
 	public int getPendingCount() {
 		synchronized (thisLock) {
 			return this.itemQueue.getTotalCount();
@@ -32,14 +31,6 @@ final class InputQueue<T> {
 		synchronized (thisLock) {
 			return this.readerQueue.size();
 		}
-	}
-
-	public Consumer<T> getDisposeItemCallback() {
-		return this.disposeItemCallback;
-	}
-
-	public void setDisposeItemCallback(Consumer<T> callback) {
-		this.disposeItemCallback = callback;
 	}
 
 	public InputQueue(ScheduledExecutorService executor) {
@@ -127,8 +118,8 @@ final class InputQueue<T> {
 		}
 
 		if (outstandingReaders != null) {
-			ActionItem.schedule(s -> completeOutstandingReadersCallback(s), outstandingReaders);
-			
+			AtomicReference<Object> readersRef = new AtomicReference<>(outstandingReaders);
+			executor.submit(() -> completeOutstandingReadersCallback(readersRef.get()));
 		}
 
 		if (reader != null) {
@@ -220,15 +211,8 @@ final class InputQueue<T> {
 
 			while (itemQueue.hasAnyItem()) {
 				Item item = itemQueue.dequeueAnyItem();
-				disposeItem(item);
 				invokeDequeuedCallback(item);
 			}
-		}
-	}
-
-	void disposeItem(Item item) {
-		if (item.getValue() != null && this.disposeItemCallback != null) {
-			this.disposeItemCallback.accept(item.getValue());
 		}
 	}
 
@@ -241,30 +225,6 @@ final class InputQueue<T> {
 		}
 	}
 
-	static void completeWaiters(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
-		for (int i = 0; i < waiters.length; i++) {
-			waiters[i].complete(itemAvailable);
-		}
-	}
-
-	@SuppressWarnings("unchecked")
-	static void completeWaitersFalseCallback(Object waiters) {
-		completeWaiters(false, (CompletableFuture<Boolean>[]) waiters);
-	}
-
-	static void completeWaitersLater(boolean itemAvailable, CompletableFuture<Boolean>[] waiters) {
-		if (itemAvailable) {
-			ActionItem.schedule(s -> completeWaitersTrueCallback(s), waiters);
-		} else {
-			ActionItem.schedule(s -> completeWaitersFalseCallback(s), waiters);
-		}
-	}
-
-	@SuppressWarnings("unchecked")
-	static void completeWaitersTrueCallback(Object waiters) {
-		completeWaiters(true, (CompletableFuture<Boolean>[]) waiters);
-	}
-
 	void invokeDequeuedCallback(Item item) {
 		if (item != null && item.getDequeuedCallback() != null) {
 			item.dequeuedCallback.accept(item.getValueWithException());
@@ -273,7 +233,7 @@ final class InputQueue<T> {
 
 	void invokeDequeuedCallbackLater(Item item) {
 		if (item != null && item.getDequeuedCallback() != null) {
-			ActionItem.schedule(s -> onInvokeDequeuedCallback(s), item);
+			executor.submit(() -> onInvokeDequeuedCallback(item));
 		}
 	}
 
@@ -320,10 +280,9 @@ final class InputQueue<T> {
 		}
 
 		if (dispatchLater) {
-			ActionItem.schedule(s -> onDispatchCallback(s), this);
+			executor.submit(() -> onDispatchCallback(this));
 		} else if (disposeItem) {
 			invokeDequeuedCallback(item);
-			disposeItem(item);
 		}
 	}
 
@@ -343,7 +302,6 @@ final class InputQueue<T> {
 			}
 		}
 
-		disposeItem(item);
 		invokeDequeuedCallbackLater(item);
 		return false;
 	}
