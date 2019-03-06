@@ -16,6 +16,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
 
@@ -203,16 +205,18 @@ public class SendReceiveTest {
 	}
 	
 	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
-		CompletableFuture<Boolean> receivedReply = new CompletableFuture<Boolean>();
+		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
-		return client.createConnectionAsync().thenAccept((channel) -> {
-			channel.writeAsync(StringUtil.toBuffer(msgToSend)).join();
-			channel.readAsync().thenAccept((bytesReceived) -> {
+		return client.createConnectionAsync().thenCompose((channel) -> {
+			return channel.writeAsync(StringUtil.toBuffer(msgToSend)).thenCompose($void -> {
+				return channel.readAsync();
+			}).thenCompose((bytesReceived) -> {
 				String msgReceived = new String(bytesReceived.array());
-				receivedReply.complete(true);
+				receivedReply.set(true);
 				assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
-			});
-		}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.join()));
+				return channel.closeAsync();
+			}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
+		});
 	}
 	
 	private static CompletableFuture<Void> websocketListener(String msgExpected, String msgToSend) {

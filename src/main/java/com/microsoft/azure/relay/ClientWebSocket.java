@@ -289,7 +289,6 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			} else {
 				this.session.close();
 			}
-			((LifeCycle) this.container).stop();
 		} 
 		catch (Throwable e) {
 			this.closeTask.completeExceptionally(e);
@@ -323,6 +322,14 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	
 	@OnClose
 	public void onClose(Session session, CloseReason reason) {
+		CompletableFuture.runAsync(() -> {
+			try {
+				((LifeCycle) this.container).stop();	
+			} catch (Exception e) {
+				RelayLogger.handledExceptionAsWarning(e, this);
+			}
+		}, executor);
+		
 		this.closeReason = reason;
 		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
 		this.textQueue.shutdown();
