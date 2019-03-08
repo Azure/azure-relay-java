@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -189,6 +190,55 @@ public class HybridConnectionListenerTest {
 
 		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
 		assertEquals("Listener failed to accept connections exactly once from sender in http mode.", 1, handlerExecuted.get());
+	}
+	
+	@Test
+	public void parseRequestPathAndQueryTest() throws IOException, URISyntaxException {
+		CompletableFuture<Void> requestReceived = new CompletableFuture<Void>();
+		String extraPath = "/extraPath/extraPath2";
+		String extraQuery = "queryKey=queryValue&queryKey2=queryValue;"; // mixing in a special char just for fun
+		
+		listener.setRequestHandler((context) -> {
+			try {
+				assertNotNull("Listener should have received a valid http context.", context);
+				assertNotNull("Listener should have received a valid http request.", context.getRequest());
+				
+				URI requestUri = context.getRequest().getUri();
+				assertNotNull("Listener should have a URI from request", requestUri);
+				assertEquals(
+						"The path wasn't the expected value", 
+						"/bailiu-relay-hc/bailiu-relay-hc" + extraPath, 
+						requestUri.getPath()
+				);
+				assertEquals("The query wasn't the expected value", extraQuery, requestUri.getQuery());
+				
+				requestReceived.complete(null);
+			} catch (Throwable ex) {
+				requestReceived.completeExceptionally(ex);
+			} finally {
+				context.getResponse().close();
+			}
+		});
+		
+		listener.openAsync(Duration.ofSeconds(15)).join();
+		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
+		urlBuilder.replace(0, 5, "https://");
+		urlBuilder.append(extraPath);
+		urlBuilder.append("?").append(extraQuery);
+		
+		URL url = new URI(urlBuilder.toString()).toURL();
+		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
+		
+		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+		conn.setRequestMethod("GET");
+		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
+
+		conn.getResponseCode();
+		try {
+			assertNull(requestReceived.get(30, TimeUnit.SECONDS));
+		} catch (Exception e) {
+			fail(e.getMessage());
+		}
 	}
 	
 	@Test

@@ -8,7 +8,7 @@ import java.util.Map;
 
 public final class RelayedHttpListenerRequest {
 	private final String httpMethod;
-	private final URI url;
+	private final URI uri;
 	private ByteArrayInputStream inputStream;
 	private Map<String, String> headers;
 	private boolean hasEntityBody;
@@ -42,13 +42,13 @@ public final class RelayedHttpListenerRequest {
 		return remoteEndPoint;
 	}
 
-	public URI getUrl() {
-		return url;
+	public URI getUri() {
+		return uri;
 	}
 
 	RelayedHttpListenerRequest(URI uri, String method, Map<String, String> requestHeaders) {
 		this.httpMethod = method;
-		this.url = uri;
+		this.uri = uri;
 		this.inputStream = null;
 		this.headers = new HashMap<String, String>();
 		requestHeaders.forEach((k, v) -> this.headers.put(k, v));
