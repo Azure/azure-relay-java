@@ -151,14 +151,16 @@ class HybridHttpConnection implements RelayTraceSource {
 
 	void invokeRequestHandler(RequestCommandAndStream requestAndStream) {
 		ListenerCommand.RequestCommand requestCommand = requestAndStream.getRequestCommand();
-		String listenerAddress = this.listener.getAddress().toString();
+		URI listenerAddress = this.listener.getAddress();
 		String requestTarget = requestCommand.getRequestTarget();
 		URI requestUri = null;
 
 		try {
-			requestUri = (listenerAddress.endsWith("/") || requestTarget.startsWith("/"))
-					? new URI(listenerAddress + requestTarget)
-					: new URI(listenerAddress + "/" + requestTarget);
+			String listenerAddressStr = listenerAddress.toString();
+			requestTarget = requestTarget.replaceFirst(listenerAddress.getPath(), "");
+			requestUri = (listenerAddressStr.endsWith("/") || requestTarget.startsWith("/"))
+					? new URI(listenerAddressStr + requestTarget)
+					: new URI(listenerAddressStr + "/" + requestTarget);
 		} catch (URISyntaxException e) {
 			throw new RuntimeException(e);
 		}

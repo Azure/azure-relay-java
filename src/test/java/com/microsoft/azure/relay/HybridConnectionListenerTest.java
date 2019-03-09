@@ -207,7 +207,7 @@ public class HybridConnectionListenerTest {
 				assertNotNull("Listener should have a URI from request", requestUri);
 				assertEquals(
 						"The path wasn't the expected value", 
-						"/" + TestUtil.ENTITY_PATH + "/" + TestUtil.ENTITY_PATH + extraPath, 
+						"/" + TestUtil.ENTITY_PATH + extraPath, 
 						requestUri.getPath()
 				);
 				assertEquals("The query wasn't the expected value", extraQuery, requestUri.getQuery());
