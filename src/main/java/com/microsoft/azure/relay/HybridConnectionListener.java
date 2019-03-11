@@ -40,6 +40,107 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private Consumer<Throwable> offlineHandler;
 	private Runnable onlineHandler;
 
+	/**
+	 * Create a new HybridConnectionListener instance for accepting
+	 * HybridConnections.
+	 * 
+	 * @param address       The address on which to listen for HybridConnections.
+	 *                      This address should be of the format
+	 *                      "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 * @param tokenProvider The TokenProvider for connecting this listener to
+	 *                      ServiceBus.
+	 */
+	public HybridConnectionListener(URI address, TokenProvider tokenProvider) {
+
+		if (address == null || tokenProvider == null) {
+			throw RelayLogger.argumentNull("address or tokenProvider", this);
+		} else if (!address.getScheme().equals(RelayConstants.HYBRID_CONNECTION_SCHEME)) {
+			throw RelayLogger.throwingException(
+					new IllegalArgumentException("Invalid scheme. Expected: " + RelayConstants.HYBRID_CONNECTION_SCHEME + ", Actual: " + address.getScheme() + "."), this);
+		}
+
+		this.address = address;
+		this.tokenProvider = tokenProvider;
+		this.operationTimeout = RelayConstants.DEFAULT_OPERATION_TIMEOUT;
+		this.trackingContext = TrackingContext.create(this.address);
+		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
+		this.controlConnection = new ControlConnection(this);
+	}
+
+	/**
+	 * Create a new HybridConnectionListener instance for accepting
+	 * HybridConnections.
+	 * 
+	 * @param connectionString The connection string to use. This connection string
+	 *                         must include the EntityPath property.
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is
+	 *                            incorrect
+	 */
+	public HybridConnectionListener(String connectionString) throws URISyntaxException {
+		this(connectionString, null, true);
+	}
+
+	/**
+	 * Creates a new instance of HybridConnectionListener from a connection string
+	 * and the specified HybridConection path. Use this overload only when the
+	 * connection string does not use the RelayConnectionStringBuilder.EntityPath
+	 * property.
+	 * 
+	 * @param connectionString The connection string to use. This connection string
+	 *                         must not include the EntityPath property.
+	 * @param path             The path to the HybridConnection.
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is
+	 *                            incorrect
+	 */
+	public HybridConnectionListener(String connectionString, String path) throws URISyntaxException {
+		this(connectionString, path, false);
+	}
+
+	/**
+	 * This private .ctor handles both of the public overloads which take
+	 * connectionString
+	 * 
+	 * @param connectionString         The connection String used. This connection
+	 *                                 string must not include the EntityPath
+	 *                                 property.
+	 * @param path                     path The path to the HybridConnection.
+	 * @param pathFromConnectionString True if path is implicitly defined in the
+	 *                                 connection string
+	 * @throws URISyntaxException Thrown when the format of the connectionSring is
+	 *                            incorrect
+	 */
+	HybridConnectionListener(String connectionString, String path, boolean pathFromConnectionString)
+			throws URISyntaxException {
+		if (StringUtil.isNullOrWhiteSpace(connectionString)) {
+			throw RelayLogger.argumentNull("connectionString", this);
+		}
+
+		RelayConnectionStringBuilder builder = new RelayConnectionStringBuilder(connectionString);
+		builder.validate();
+
+		if (pathFromConnectionString) {
+			if (StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
+				throw RelayLogger.argumentNull("entityPath", this);
+			}
+		} else {
+			if (StringUtil.isNullOrWhiteSpace(path)) {
+				throw RelayLogger.argumentNull("path", this);
+			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
+				throw RelayLogger.throwingException(
+					new IllegalArgumentException("EntityPath must not appear in connectionString"), this);
+			}
+
+			builder.setEntityPath(path);
+		}
+
+		this.address = new URI(builder.getEndpoint() + builder.getEntityPath());
+		this.tokenProvider = builder.createTokenProvider();
+		this.operationTimeout = builder.getOperationTimeout();
+		this.trackingContext = TrackingContext.create(this.address);
+		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
+		this.controlConnection = new ControlConnection(this);
+	}
+	
 	public boolean isOnline() {
 		return this.controlConnection.isOnline();
 	}
@@ -162,107 +263,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	// For testing and debugging access
 	ControlConnection getControlConnection() {
 		return this.controlConnection;
-	}
-	
-	/**
-	 * Create a new HybridConnectionListener instance for accepting
-	 * HybridConnections.
-	 * 
-	 * @param address       The address on which to listen for HybridConnections.
-	 *                      This address should be of the format
-	 *                      "sb://contoso.servicebus.windows.net/yourhybridconnection".
-	 * @param tokenProvider The TokenProvider for connecting this listener to
-	 *                      ServiceBus.
-	 */
-	public HybridConnectionListener(URI address, TokenProvider tokenProvider) {
-
-		if (address == null || tokenProvider == null) {
-			throw RelayLogger.argumentNull("address or tokenProvider", this);
-		} else if (!address.getScheme().equals(RelayConstants.HYBRID_CONNECTION_SCHEME)) {
-			throw RelayLogger.throwingException(
-					new IllegalArgumentException("Invalid scheme. Expected: " + RelayConstants.HYBRID_CONNECTION_SCHEME + ", Actual: " + address.getScheme() + "."), this);
-		}
-
-		this.address = address;
-		this.tokenProvider = tokenProvider;
-		this.operationTimeout = RelayConstants.DEFAULT_OPERATION_TIMEOUT;
-		this.trackingContext = TrackingContext.create(this.address);
-		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
-		this.controlConnection = new ControlConnection(this);
-	}
-
-	/**
-	 * Create a new HybridConnectionListener instance for accepting
-	 * HybridConnections.
-	 * 
-	 * @param connectionString The connection string to use. This connection string
-	 *                         must include the EntityPath property.
-	 * @throws URISyntaxException Thrown when the format of the connectionSring is
-	 *                            incorrect
-	 */
-	public HybridConnectionListener(String connectionString) throws URISyntaxException {
-		this(connectionString, null, true);
-	}
-
-	/**
-	 * Creates a new instance of HybridConnectionListener from a connection string
-	 * and the specified HybridConection path. Use this overload only when the
-	 * connection string does not use the RelayConnectionStringBuilder.EntityPath
-	 * property.
-	 * 
-	 * @param connectionString The connection string to use. This connection string
-	 *                         must not include the EntityPath property.
-	 * @param path             The path to the HybridConnection.
-	 * @throws URISyntaxException Thrown when the format of the connectionSring is
-	 *                            incorrect
-	 */
-	public HybridConnectionListener(String connectionString, String path) throws URISyntaxException {
-		this(connectionString, path, false);
-	}
-
-	/**
-	 * This private .ctor handles both of the public overloads which take
-	 * connectionString
-	 * 
-	 * @param connectionString         The connection String used. This connection
-	 *                                 string must not include the EntityPath
-	 *                                 property.
-	 * @param path                     path The path to the HybridConnection.
-	 * @param pathFromConnectionString True if path is implicitly defined in the
-	 *                                 connection string
-	 * @throws URISyntaxException Thrown when the format of the connectionSring is
-	 *                            incorrect
-	 */
-	HybridConnectionListener(String connectionString, String path, boolean pathFromConnectionString)
-			throws URISyntaxException {
-		if (StringUtil.isNullOrWhiteSpace(connectionString)) {
-			throw RelayLogger.argumentNull("connectionString", this);
-		}
-
-		RelayConnectionStringBuilder builder = new RelayConnectionStringBuilder(connectionString);
-		builder.validate();
-
-		if (pathFromConnectionString) {
-			if (StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
-				throw RelayLogger.argumentNull("entityPath", this);
-			}
-		} else {
-			if (StringUtil.isNullOrWhiteSpace(path)) {
-				throw RelayLogger.argumentNull("path", this);
-			} else if (!StringUtil.isNullOrWhiteSpace(builder.getEntityPath())) {
-				throw RelayLogger.throwingException(
-					new IllegalArgumentException("EntityPath must not appear in connectionString"), this);
-			}
-
-			builder.setEntityPath(path);
-		}
-
-		this.address = new URI(builder.getEndpoint() + builder.getEntityPath());
-		this.tokenProvider = builder.createTokenProvider();
-		this.operationTimeout = builder.getOperationTimeout();
-		this.trackingContext = TrackingContext.create(this.address);
-		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
-		this.controlConnection = new ControlConnection(this);
 	}
 
 	/**
@@ -421,7 +421,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 			RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(this, requestUri,
 					acceptCommand.getId(), "GET", acceptCommand.getConnectHeaders());
-			listenerContext.getRequest().setRemoteAddress(acceptCommand.getRemoteEndpoint());
+			listenerContext.getRequest().setRemoteEndPoint(acceptCommand.getRemoteEndpoint());
 
 			Function<RelayedHttpListenerContext, Boolean> acceptHandler = this.acceptHandler;
 
@@ -515,6 +515,16 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private Throwable lastError;
 		private boolean closeCalled;
 
+		ControlConnection(HybridConnectionListener listener) {
+			this.listener = listener;
+			this.address = listener.address;
+			String rawPath = this.address.getPath();
+			this.path = (rawPath.startsWith("/")) ? rawPath.substring(1) : rawPath;
+			this.sendAsyncLock = new AsyncLock(EXECUTOR);
+			this.tokenRenewer = new TokenRenewer(
+				this.listener, this.address.toString(),	TokenProvider.DEFAULT_TOKEN_TIMEOUT);
+		}
+		
 		boolean isOnline() {
 			synchronized (this.thisLock) {
 				return CompletableFutureUtil.isDoneNormally(connectAsyncTask) && connectAsyncTask.join().isOpen();
@@ -530,16 +540,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			synchronized (this.thisLock) {
 				return this.connectAsyncTask;
 			}
-		}
-
-		ControlConnection(HybridConnectionListener listener) {
-			this.listener = listener;
-			this.address = listener.address;
-			String rawPath = this.address.getPath();
-			this.path = (rawPath.startsWith("/")) ? rawPath.substring(1) : rawPath;
-			this.sendAsyncLock = new AsyncLock(EXECUTOR);
-			this.tokenRenewer = new TokenRenewer(
-				this.listener, this.address.toString(),	TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 		}
 
 		/**

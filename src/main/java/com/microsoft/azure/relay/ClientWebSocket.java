@@ -27,6 +27,17 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	private CompletableFuture<Void> closeTask;
 	private String cachedString;
 	
+	/**
+	 * Creates a websocket instance
+	 */
+	public ClientWebSocket(TrackingContext trackingContext, AutoShutdownScheduledExecutor executor) {
+		this.executor = executor;
+		this.textQueue = new InputQueue<String>(this.executor);
+		this.fragmentQueue = new InputQueue<MessageFragment>(this.executor);
+		this.closeReason = null;
+		this.trackingContext = trackingContext;
+	}
+	
 	public TrackingContext getTrackingContext() {
 		return trackingContext;
 	}
@@ -54,17 +65,6 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		} else {
 			throw new IllegalArgumentException("MaxBufferSize of the web socket must be a positive value.");
 		}
-	}
-
-	/**
-	 * Creates a websocket instance
-	 */
-	public ClientWebSocket(TrackingContext trackingContext, AutoShutdownScheduledExecutor executor) {
-		this.executor = executor;
-		this.textQueue = new InputQueue<String>(this.executor);
-		this.fragmentQueue = new InputQueue<MessageFragment>(this.executor);
-		this.closeReason = null;
-		this.trackingContext = trackingContext;
 	}
 	
 	/**

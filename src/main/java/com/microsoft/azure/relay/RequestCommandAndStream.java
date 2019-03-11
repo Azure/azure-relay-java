@@ -6,6 +6,11 @@ final class RequestCommandAndStream {
 	private ListenerCommand.RequestCommand requestCommand;
 	private ByteArrayInputStream stream;
 
+	public RequestCommandAndStream(ListenerCommand.RequestCommand requestCommand, ByteArrayInputStream stream) {
+		this.requestCommand = requestCommand;
+		this.stream = stream;
+	}
+	
 	public ListenerCommand.RequestCommand getRequestCommand() {
 		return requestCommand;
 	}
@@ -19,11 +24,6 @@ final class RequestCommandAndStream {
 	}
 
 	public void setStream(ByteArrayInputStream stream) {
-		this.stream = stream;
-	}
-
-	public RequestCommandAndStream(ListenerCommand.RequestCommand requestCommand, ByteArrayInputStream stream) {
-		this.requestCommand = requestCommand;
 		this.stream = stream;
 	}
 }

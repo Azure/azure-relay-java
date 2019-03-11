@@ -33,14 +33,6 @@ class HybridHttpConnection implements RelayTraceSource {
 		BUFFER_FULL, RENDEZVOUS_EXISTS, TIMER
 	}
 	
-	public TrackingContext getTrackingContext() {
-		return this.trackingContext;
-	}
-	
-	public Duration getOperationTimeout() {
-		return this.listener.getOperationTimeout();
-	}
-
 	private HybridHttpConnection(HybridConnectionListener listener, ClientWebSocket controlWebSocket,
 			String rendezvousAddress, AutoShutdownScheduledExecutor executor) throws URISyntaxException {
 		this.executor = executor;
@@ -50,6 +42,14 @@ class HybridHttpConnection implements RelayTraceSource {
 		this.trackingContext = this.getNewTrackingContext();
 
 		RelayLogger.logEvent("httpRequestStarting", this);
+	}
+	
+	public TrackingContext getTrackingContext() {
+		return this.trackingContext;
+	}
+	
+	public Duration getOperationTimeout() {
+		return this.listener.getOperationTimeout();
 	}
 
 	static CompletableFuture<Void> createAsync(HybridConnectionListener listener,
@@ -167,7 +167,7 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		RelayedHttpListenerContext listenerContext = new RelayedHttpListenerContext(this.listener, requestUri,
 				requestCommand.getId(), requestCommand.getMethod(), requestCommand.getRequestHeaders());
-		listenerContext.getRequest().setRemoteAddress(requestCommand.getRemoteEndpoint());
+		listenerContext.getRequest().setRemoteEndPoint(requestCommand.getRemoteEndpoint());
 		listenerContext.getResponse().setStatusCode(HttpStatus.OK_200);
 		listenerContext.getResponse().setOutputStream(new ResponseStream(this, listenerContext));
 
@@ -280,6 +280,14 @@ class HybridHttpConnection implements RelayTraceSource {
 		private final TrackingContext trackingContext;
 		private Duration writeTimeout;
 
+		public ResponseStream(HybridHttpConnection connection, RelayedHttpListenerContext context) {
+			this.connection = connection;
+			this.context = context;
+			this.trackingContext = context.getTrackingContext();
+			this.writeTimeout = this.connection.getOperationTimeout();
+			this.asyncLock = new AsyncLock(HybridConnectionListener.EXECUTOR);
+		}
+		
 		public TrackingContext getTrackingContext() {
 			return trackingContext;
 		}
@@ -290,14 +298,6 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		public void setWriteTimeout(Duration writeTimeout) {
 			this.writeTimeout = writeTimeout;
-		}
-
-		public ResponseStream(HybridHttpConnection connection, RelayedHttpListenerContext context) {
-			this.connection = connection;
-			this.context = context;
-			this.trackingContext = context.getTrackingContext();
-			this.writeTimeout = this.connection.getOperationTimeout();
-			this.asyncLock = new AsyncLock(HybridConnectionListener.EXECUTOR);
 		}
 
 		// The caller of this method must have acquired this.asyncLock

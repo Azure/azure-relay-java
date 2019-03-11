@@ -15,7 +15,7 @@ public class TrackingContext {
 	private String trackingId;
 	private String address;
 
-	TrackingContext(UUID activityId, String trackingId, String address) {
+	private TrackingContext(UUID activityId, String trackingId, String address) {
 		this.activityId = activityId;
 		this.trackingId = trackingId;
 		this.address = address;

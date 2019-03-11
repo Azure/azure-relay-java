@@ -14,7 +14,15 @@ public final class RelayedHttpListenerRequest {
 	private boolean hasEntityBody;
 	private InetSocketAddress remoteEndPoint;
 
-	public boolean hasEntityBody() {
+	RelayedHttpListenerRequest(URI uri, String method, Map<String, String> requestHeaders) {
+		this.httpMethod = method;
+		this.uri = uri;
+		this.inputStream = null;
+		this.headers = new HashMap<String, String>();
+		requestHeaders.forEach((k, v) -> this.headers.put(k, v));
+	}
+	
+	boolean hasEntityBody() {
 		return hasEntityBody;
 	}
 
@@ -38,23 +46,15 @@ public final class RelayedHttpListenerRequest {
 		return headers;
 	}
 
+	public URI getUri() {
+		return uri;
+	}
+	
 	public InetSocketAddress getRemoteEndPoint() {
 		return remoteEndPoint;
 	}
 
-	public URI getUri() {
-		return uri;
-	}
-
-	RelayedHttpListenerRequest(URI uri, String method, Map<String, String> requestHeaders) {
-		this.httpMethod = method;
-		this.uri = uri;
-		this.inputStream = null;
-		this.headers = new HashMap<String, String>();
-		requestHeaders.forEach((k, v) -> this.headers.put(k, v));
-	}
-
-	void setRemoteAddress(ListenerCommand.Endpoint remoteEndpoint) {
+	void setRemoteEndPoint(ListenerCommand.Endpoint remoteEndpoint) {
 		
 		if (remoteEndpoint != null) {
 			InetSocketAddress inetAddress = new InetSocketAddress(remoteEndpoint.getAddress(), remoteEndpoint.getPort());
