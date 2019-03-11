@@ -17,6 +17,16 @@ public class RelayedHttpListenerContext {
 	private final TrackingContext trackingContext;
 	private final HybridConnectionListener listener;
 
+	RelayedHttpListenerContext(HybridConnectionListener listener, URI requestUri, String trackingId,
+			String method, Map<String, String> requestHeaders) {
+		this.listener = listener;
+		this.trackingContext = TrackingContext.create(trackingId, requestUri);
+		this.request = new RelayedHttpListenerRequest(requestUri, method, requestHeaders);
+		this.response = new RelayedHttpListenerResponse(this);
+
+		this.flowSubProtocol();
+	}
+	
 	/**
 	 * @return Returns the request object that resembles the http request object in
 	 *         Hybridconnection
@@ -40,18 +50,8 @@ public class RelayedHttpListenerContext {
 		return trackingContext;
 	}
 
-	protected HybridConnectionListener getListener() {
+	public HybridConnectionListener getListener() {
 		return listener;
-	}
-
-	protected RelayedHttpListenerContext(HybridConnectionListener listener, URI requestUri, String trackingId,
-			String method, Map<String, String> requestHeaders) {
-		this.listener = listener;
-		this.trackingContext = TrackingContext.create(trackingId, requestUri);
-		this.request = new RelayedHttpListenerRequest(requestUri, method, requestHeaders);
-		this.response = new RelayedHttpListenerResponse(this);
-
-		this.flowSubProtocol();
 	}
 
 	/**
@@ -67,7 +67,7 @@ public class RelayedHttpListenerContext {
 		}
 	}
 
-	protected CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) {
+	CompletableFuture<ClientWebSocket> acceptAsync(URI rendezvousUri) {
 		// TODO: subprotocol
 		// If we are accepting a sub-protocol handle that here
 //        String subProtocol = this.response.getHeaders().get(HybridConnectionConstants.Headers.SEC_WEBSOCKET_PROTOCOL);
@@ -79,7 +79,7 @@ public class RelayedHttpListenerContext {
 		return webSocket.connectAsync(rendezvousUri, ACCEPT_TIMEOUT).thenApply(result -> webSocket);
 	}
 
-	protected CompletableFuture<Void> rejectAsync(URI rendezvousUri) {
+	CompletableFuture<Void> rejectAsync(URI rendezvousUri) {
 		
 		if (this.response.getStatusCode() == HttpStatus.CONTINUE_100) {
 			this.response.setStatusCode(HttpStatus.BAD_REQUEST_400);

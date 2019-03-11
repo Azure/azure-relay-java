@@ -15,6 +15,13 @@ public class RelayedHttpListenerResponse {
 	private String statusDescription;
 	private HybridHttpConnection.ResponseStream outputStream;
 
+	RelayedHttpListenerResponse(RelayedHttpListenerContext context) {
+		this.context = context;
+		this.statusCode = HttpStatus.CONTINUE_100;
+		this.headers = new HashMap<String, String>();
+		this.outputStream = null;
+	}
+	
 	public int getStatusCode() {
 		return statusCode;
 	}
@@ -67,13 +74,6 @@ public class RelayedHttpListenerResponse {
 
 	public RelayedHttpListenerContext getContext() {
 		return context;
-	}
-
-	protected RelayedHttpListenerResponse(RelayedHttpListenerContext context) {
-		this.context = context;
-		this.statusCode = HttpStatus.CONTINUE_100;
-		this.headers = new HashMap<String, String>();
-		this.outputStream = null;
 	}
 
 	/**

@@ -17,9 +17,15 @@ final class InputQueue<T> {
 	private final ScheduledExecutorService executor;
 	private final ItemQueue itemQueue;
 	private final Queue<CompletableFuture<T>> readerQueue;
-
 	private QueueState queueState;
 	private final Object thisLock = new Object();
+	
+	public InputQueue(ScheduledExecutorService executor) {
+		this.executor = executor;		
+		this.itemQueue = new ItemQueue();
+		this.readerQueue = new LinkedList<CompletableFuture<T>>();
+		this.queueState = QueueState.OPEN;
+	}
 
 	public int getPendingCount() {
 		synchronized (thisLock) {
@@ -31,13 +37,6 @@ final class InputQueue<T> {
 		synchronized (thisLock) {
 			return this.readerQueue.size();
 		}
-	}
-
-	public InputQueue(ScheduledExecutorService executor) {
-		this.executor = executor;		
-		this.itemQueue = new ItemQueue();
-		this.readerQueue = new LinkedList<CompletableFuture<T>>();
-		this.queueState = QueueState.OPEN;
 	}
 
 	public CompletableFuture<T> dequeueAsync() {

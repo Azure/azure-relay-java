@@ -21,53 +21,10 @@ public class HybridConnectionClient implements RelayTraceSource {
 			.toString().indexOf("-agentlib:jdwp") > 0;
 	private String cachedString;
 	private TrackingContext trackingContext;
-
-	/**
-	 * The address on which this HybridConnection will connect to. This address
-	 * should be of the format
-	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
-	 */
 	private URI address;
-
-	/**
-	 * The TokenProvider for authenticating this HybridConnection listener.
-	 */
 	private TokenProvider tokenProvider;
-
-	/**
-	 * The default timeout for connecting a HybridConnection. Default value is 70
-	 * seconds.
-	 */
 	private Duration operationTimeout;
-
-	public URI getAddress() {
-		return address;
-	}
-
-	/**
-	 * @return Get the TokenProvider for authenticating this HybridConnection
-	 *         listener.
-	 */
-	public TokenProvider getTokenProvider() {
-		return tokenProvider;
-	}
-
-	/**
-	 * @return The default timeout for connecting a HybridConnection. Default value
-	 *         is 70 seconds.
-	 */
-	public Duration getOperationTimeout() {
-		return operationTimeout;
-	}
-
-	public void setOperationTimeout(Duration operationTimeout) {
-		this.operationTimeout = operationTimeout;
-	}
 	
-	public TrackingContext getTrackingContext() {
-		return this.trackingContext;
-	}
-
 	/**
 	 * Create a new HybridConnectionClient instance for initiating HybridConnections
 	 * where no client authentication is required.
@@ -172,6 +129,36 @@ public class HybridConnectionClient implements RelayTraceSource {
 
 		this.initialize(new URI(builder.getEndpoint().toString() + builder.getEntityPath()), connectTimeout,
 				tokenProvider, tokenProvider != null);
+	}
+
+	/**
+	 * The address on which this HybridConnection will connect to. This address should be of the format
+	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
+	 */
+	public URI getAddress() {
+		return address;
+	}
+
+	/**
+	 * @return Get the TokenProvider for authenticating this HybridConnection listener.
+	 */
+	public TokenProvider getTokenProvider() {
+		return tokenProvider;
+	}
+
+	/**
+	 * @return The default timeout for connecting a HybridConnection. Default value is 70 seconds.
+	 */
+	public Duration getOperationTimeout() {
+		return operationTimeout;
+	}
+
+	public void setOperationTimeout(Duration operationTimeout) {
+		this.operationTimeout = operationTimeout;
+	}
+	
+	public TrackingContext getTrackingContext() {
+		return this.trackingContext;
 	}
 
 	@Override
