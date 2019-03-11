@@ -21,6 +21,9 @@ public class HybridConnectionClient implements RelayTraceSource {
 			.toString().indexOf("-agentlib:jdwp") > 0;
 	private String cachedString;
 	private TrackingContext trackingContext;
+	private URI address;
+	private TokenProvider tokenProvider;
+	private Duration operationTimeout;
 	
 	/**
 	 * Create a new HybridConnectionClient instance for initiating HybridConnections
@@ -129,38 +132,22 @@ public class HybridConnectionClient implements RelayTraceSource {
 	}
 
 	/**
-	 * The address on which this HybridConnection will connect to. This address
-	 * should be of the format
+	 * The address on which this HybridConnection will connect to. This address should be of the format
 	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
 	 */
-	private URI address;
-
-	/**
-	 * The TokenProvider for authenticating this HybridConnection listener.
-	 */
-	private TokenProvider tokenProvider;
-
-	/**
-	 * The default timeout for connecting a HybridConnection. Default value is 70
-	 * seconds.
-	 */
-	private Duration operationTimeout;
-
 	public URI getAddress() {
 		return address;
 	}
 
 	/**
-	 * @return Get the TokenProvider for authenticating this HybridConnection
-	 *         listener.
+	 * @return Get the TokenProvider for authenticating this HybridConnection listener.
 	 */
 	public TokenProvider getTokenProvider() {
 		return tokenProvider;
 	}
 
 	/**
-	 * @return The default timeout for connecting a HybridConnection. Default value
-	 *         is 70 seconds.
+	 * @return The default timeout for connecting a HybridConnection. Default value is 70 seconds.
 	 */
 	public Duration getOperationTimeout() {
 		return operationTimeout;
