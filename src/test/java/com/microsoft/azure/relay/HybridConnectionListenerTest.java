@@ -76,7 +76,7 @@ public class HybridConnectionListenerTest {
 	}
 	
 	@Test
-	public void customHeadersTest() {
+	public void customHeadersTest() throws InterruptedException, ExecutionException, TimeoutException {
 		String key = "GoodHeader";
 		String value = "GoodValue";
 		Map<String, List<String>> customHeaders = new HashMap<String, List<String>>();
@@ -103,6 +103,7 @@ public class HybridConnectionListenerTest {
 		client.createConnectionAsync(customHeaders).thenAccept(connection -> {
 			connection.closeAsync().join();
 		}).join();
+		requestReceived.get(10, TimeUnit.SECONDS);
 		
 		String badKey = "Bad Header";
 		String badValue = "Bad:Value";
