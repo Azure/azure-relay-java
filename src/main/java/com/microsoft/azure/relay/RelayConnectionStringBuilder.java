@@ -144,7 +144,7 @@ public class RelayConnectionStringBuilder {
 
 		if (this.operationTimeout != RelayConstants.DEFAULT_OPERATION_TIMEOUT) {
 			connectionStringBuilder.append(OPERATION_TIMEOUT_CONFIG_NAME + KEY_VALUE_SEPARATOR
-					+ this.operationTimeout.toString() + KEY_VALUE_PAIR_DELIMITER);
+					+ this.operationTimeout.getSeconds() + KEY_VALUE_PAIR_DELIMITER);
 		}
 
 		return connectionStringBuilder.toString();
@@ -244,13 +244,10 @@ public class RelayConnectionStringBuilder {
 			} else if (key.equalsIgnoreCase(SHARED_ACCESS_SIGNATURE_CONFIG_NAME)) {
 				this.sharedAccessSignature = value;
 			} else if (key.equalsIgnoreCase(OPERATION_TIMEOUT_CONFIG_NAME)) {
-				// TODO: handle duration strings in the C# TimeSpan format
 				try {
-					Duration timeValue = Duration.parse(value);
-					this.operationTimeout = timeValue;
-				} catch (DateTimeParseException e) {
-					throw new DateTimeParseException(value + " cannot be parsed into a valid duration.",
-							e.getParsedString(), e.getErrorIndex());
+					this.operationTimeout = Duration.ofSeconds(Long.parseLong(value));
+				} catch (NumberFormatException e) {
+					throw RelayLogger.throwingException(e, this);
 				}
 			} else {
 				throw new IllegalArgumentException("the following is not a valid field for connection string: " + key);
