@@ -170,14 +170,24 @@ public class HybridConnectionClient implements RelayTraceSource {
 	}
 	
 	/**
-	 * Establishes a new send-side HybridConnection and returns the websocket with
-	 * established connections.
+	 * Establishes a new send-side HybridConnection and returns the websocket with established connections.
 	 * 
 	 * @return A CompletableFuture which returns the ClientWebSocket instance when
-	 *         its connection established with the remote endpoint
+	 *         its connection established with the remote endpoint.
+	 */
+	public CompletableFuture<HybridConnectionChannel> createConnectionAsync() {
+		return createConnectionAsync(null);
+	}
+	
+	/**
+	 * Establishes a new send-side HybridConnection and returns the websocket with established connections.
+	 * 
+	 * @param customHeaders Headers to add to the connection HTTP request. 
+	 * @return A CompletableFuture which returns the ClientWebSocket instance when
+	 *         its connection established with the remote endpoint.
 	 */
 	@SuppressWarnings("resource")
-	public CompletableFuture<HybridConnectionChannel> createConnectionAsync() {
+	public CompletableFuture<HybridConnectionChannel> createConnectionAsync(Map<String, List<String>> customHeaders) {
 		this.trackingContext = createTrackingContext(this.address);
 		RelayLogger.logEvent("connecting", this);
 
@@ -190,6 +200,9 @@ public class HybridConnectionClient implements RelayTraceSource {
 		headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.join().getToken()));
 		HybridConnectionEndpointConfigurator configurator = new HybridConnectionEndpointConfigurator();
 		configurator.addHeaders(headers);
+		if (customHeaders != null) {
+			configurator.addHeaders(customHeaders);
+		}
 		ClientEndpointConfig config = ClientEndpointConfig.Builder.create().configurator(configurator).build();
 
 		try {
@@ -197,7 +210,7 @@ public class HybridConnectionClient implements RelayTraceSource {
 					this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
 					trackingContext.getTrackingId());
 			WebSocketChannel channel = new WebSocketChannel(trackingContext, EXECUTOR);
-			return channel.getWebSocket().connectAsync(uri, this.operationTimeout, config).thenApply(result -> channel);
+			return channel.getWebSocket().connectAsync(uri, this.operationTimeout, config).thenApply($void -> channel);
 		} catch (URISyntaxException e) {
 			return CompletableFutureUtil.fromException(e);
 		}
