@@ -9,6 +9,10 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -69,6 +73,49 @@ public class HybridConnectionListenerTest {
 		listener.close();
 		assertFalse("Listener should be closed", listener.isOnline());
 		assertEquals("Listener offline handler was not called exactly once", 1, offlineHandlerCalled.get());
+	}
+	
+	@Test
+	public void customHeadersTest() {
+		String key = "GoodHeader";
+		String value = "GoodValue";
+		Map<String, List<String>> customHeaders = new HashMap<String, List<String>>();
+		customHeaders.put(key, Arrays.asList(new String[]{value}));
+		
+		CompletableFuture<Void> requestReceived = new CompletableFuture<Void>();
+		listener.openAsync(Duration.ofSeconds(15)).join();
+		listener.setAcceptHandler((context) -> {
+			try {
+				assertNotNull("Listener should have received a valid http context.", context);
+				assertNotNull("Listener should have received a valid http request.", context.getRequest());
+				
+				Map<String, String> headers = context.getRequest().getHeaders();
+				assertTrue(headers.containsKey(key));
+				assertEquals(value, headers.get(key));
+				requestReceived.complete(null);
+			} catch (Throwable ex) {
+				requestReceived.completeExceptionally(ex);
+			} finally {
+				context.getResponse().close();
+			}
+			return true;
+		});
+		client.createConnectionAsync(customHeaders).thenAccept(connection -> {
+			connection.closeAsync().join();
+		}).join();
+		
+		String badKey = "Bad Header";
+		String badValue = "Bad:Value";
+		customHeaders.put(badKey, Arrays.asList(new String[]{badValue}));
+		Assertions.assertThrows(UpgradeException.class, () -> {
+			try {
+				client.createConnectionAsync(customHeaders).thenAccept(connection -> {
+					connection.closeAsync().join();
+				}).join();
+			} catch (Exception e) {
+				throw e.getCause();
+			}
+		});
 	}
 	
 	@Test
