@@ -26,6 +26,7 @@ class ListenerCommand {
 			return;
 		}
 
+		// Despite the Iterator class returned by the json API, there should only be one command in this object
 		Iterator<String> commands = json.keys();
 		while (commands.hasNext()) {
 			String command = commands.next();
@@ -234,6 +235,7 @@ class ListenerCommand {
 	}
 
 	class RenewTokenCommand {
+		static final String TOKEN_NAME = "token";
 		private String token;
 
 		String getToken() {
@@ -246,8 +248,12 @@ class ListenerCommand {
 
 		RenewTokenCommand(JSONObject json) {
 			if (json != null) {
-				this.token = json.optString("token");
+				this.token = json.optString(TOKEN_NAME);
 			}
+		}
+		
+		String toJsonString() {
+			return "{\"" + RENEW_TOKEN + "\":{\"" + TOKEN_NAME + "\":\"" + this.token + "\"}}";
 		}
 	}
 
