@@ -48,7 +48,7 @@ class ListenerCommand {
 				this.injectFault = new InjectFaultCommand();
 				break;
 			default:
-				throw new IllegalArgumentException("invalid commnd type received.");
+				throw new IllegalArgumentException("Invalid command type received.");
 			}
 		}
 	}
