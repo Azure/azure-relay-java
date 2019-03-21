@@ -33,7 +33,7 @@ class TokenRenewer {
 	}
 
 	private CompletableFuture<SecurityToken> getTokenAsync(boolean raiseTokenRenewedEvent) {
-			RelayLogger.logEvent("getTokenStart", this);
+			RelayLogger.logEvent("getTokenStart", this.listener);
 
 		return this.listener.getTokenProvider()
 			.getTokenAsync(this.appliesTo, this.tokenValidFor)
@@ -72,7 +72,7 @@ class TokenRenewer {
 		interval = interval.compareTo(RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL) < 0 ? 
 				RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL : interval;
 
-		RelayLogger.logEvent("tokenRenewScheduled", this, interval.toString());
+		RelayLogger.logEvent("tokenRenewScheduled", this.listener, interval.toString());
 		this.renewTimer.schedule(new TimerTask() {
 			@Override
 			public void run() {

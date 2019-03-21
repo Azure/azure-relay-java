@@ -50,19 +50,16 @@ public abstract class TokenProvider {
 	 *         generated
 	 */
 	public CompletableFuture<SecurityToken> getTokenAsync(String urlString, Duration validFor) {
-		if (StringUtil.isNullOrEmpty(urlString)) {
-			// TODO: trace
-//            throw RelayEventSource.Log.ArgumentNull(nameof(audience), this);
-		}
-
-		TimeoutHelper.throwIfNegativeArgument(validFor, "validFor");
 		CompletableFuture<SecurityToken> future = new CompletableFuture<SecurityToken>();
 		try {
+			if (StringUtil.isNullOrEmpty(urlString)) {
+				throw new IllegalArgumentException("Null url provided for security token");
+			}
+			TimeoutHelper.throwIfNegativeArgument(validFor, "validFor");
 			urlString = normalizeAudience(urlString);
 			future = this.onGetTokenAsync(urlString, validFor);
-		}
-		catch (URISyntaxException e) {
-			future.completeExceptionally(e);
+		} catch (Exception e) {
+			future.completeExceptionally(RelayLogger.throwingException(e, this));
 		}
 		return future;
 	}

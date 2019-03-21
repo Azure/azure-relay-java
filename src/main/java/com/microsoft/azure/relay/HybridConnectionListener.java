@@ -615,16 +615,27 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			return this.ensureConnectTask(timeout)
 				.thenCompose(webSocket -> {
 					return sendAsyncLock.acquireThenCompose(timeout, () -> {
-						String json = command.getResponse().toJsonString();
-						RelayLogger.logEvent("sendCommand", this, json);
-						return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
-							.thenCompose($void -> {
-								if (buffer != null) {
-									return webSocket.writeAsync(buffer.array());
-								} else {
-									return CompletableFuture.completedFuture(null);
-								}
-							});
+						String json = null;
+						if (command.getResponse() != null) {
+							json = command.getResponse().toJsonString();
+						}
+						else if (command.getRenewToken() != null) {
+							json = command.getRenewToken().toJsonString();
+						}
+
+						if (json != null) {
+							RelayLogger.logEvent("sendCommand", this, json);
+							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
+								.thenCompose($void -> {
+									if (buffer != null) {
+										return webSocket.writeAsync(buffer.array());
+									} else {
+										return CompletableFuture.completedFuture(null);
+									}
+								});
+						} else {
+							return CompletableFutureUtil.fromException(new IllegalArgumentException("Invalid command to be sent by the listener to the cloud service"));
+						}
 					});
 				});
 		}
