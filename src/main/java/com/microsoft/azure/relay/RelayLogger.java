@@ -164,6 +164,7 @@ final class RelayLogger {
 			this.source = source;
 		}
 
+		@SuppressWarnings("unused")
 		protected TrackingContext getTrackingContext() {
 			return trackingContext;
 		}
