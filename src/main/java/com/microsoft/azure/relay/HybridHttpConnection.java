@@ -425,7 +425,11 @@ class HybridHttpConnection implements RelayTraceSource {
 
 				return sendTask.thenCompose((result) -> {
 					this.closed = true;
-					return closeRendezvousAsync();
+					if (this.connection.rendezvousWebSocket != null) {
+						return closeRendezvousAsync();
+					} else {
+						return CompletableFuture.completedFuture(null);
+					}
 				});
 			});
 		}

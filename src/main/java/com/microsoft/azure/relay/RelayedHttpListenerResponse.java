@@ -3,6 +3,7 @@ package com.microsoft.azure.relay;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.io.RuntimeIOException;
@@ -77,12 +78,20 @@ public class RelayedHttpListenerResponse {
 	}
 
 	/**
+	 * Sends the response to the client asynchronously and releases the resources held by this
+	 * RelayedHttpListenerResponse instance.
+	 */
+	public CompletableFuture<Void> closeAsync() {
+		return this.outputStream.closeAsync().whenComplete(($void, ex) -> this.disposed = true);
+	}
+	
+	/**
 	 * Sends the response to the client and releases the resources held by this
 	 * RelayedHttpListenerResponse instance.
 	 */
 	public void close() {
 		if (this.outputStream != null) {
-			this.outputStream.closeAsync();
+			this.outputStream.closeAsync().join();
 		}
 		this.disposed = true;
 	}
