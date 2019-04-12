@@ -250,10 +250,15 @@ class HybridHttpConnection implements RelayTraceSource {
 	}
 
 	private CompletableFuture<Void> closeRendezvousAsync() {
-		RelayLogger.logEvent("closing", this);
-		return this.rendezvousWebSocket
-				.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"))
-				.thenRun(() -> RelayLogger.logEvent("closed", this));
+		if (this.rendezvousWebSocket != null) {
+			RelayLogger.logEvent("closing", this);
+			return this.rendezvousWebSocket
+					.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"))
+					.thenRun(() -> RelayLogger.logEvent("closed", this));
+		} else {
+			return CompletableFuture.completedFuture(null);
+		}
+
 	}
 
 	static ListenerCommand.ResponseCommand createResponseCommand(RelayedHttpListenerContext listenerContext) {
@@ -425,11 +430,7 @@ class HybridHttpConnection implements RelayTraceSource {
 
 				return sendTask.thenCompose((result) -> {
 					this.closed = true;
-					if (this.connection.rendezvousWebSocket != null) {
-						return closeRendezvousAsync();
-					} else {
-						return CompletableFuture.completedFuture(null);
-					}
+					return closeRendezvousAsync();
 				});
 			});
 		}
