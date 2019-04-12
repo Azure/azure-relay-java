@@ -90,10 +90,7 @@ public class RelayedHttpListenerResponse {
 	 * RelayedHttpListenerResponse instance.
 	 */
 	public void close() {
-		if (this.outputStream != null) {
-			this.outputStream.closeAsync().join();
-		}
-		this.disposed = true;
+		this.closeAsync().join();
 	}
 
 	private void checkClosed() {
