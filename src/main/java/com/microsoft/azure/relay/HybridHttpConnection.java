@@ -250,10 +250,15 @@ class HybridHttpConnection implements RelayTraceSource {
 	}
 
 	private CompletableFuture<Void> closeRendezvousAsync() {
-		RelayLogger.logEvent("closing", this);
-		return this.rendezvousWebSocket
-				.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"))
-				.thenRun(() -> RelayLogger.logEvent("closed", this));
+		if (this.rendezvousWebSocket != null) {
+			RelayLogger.logEvent("closing", this);
+			return this.rendezvousWebSocket
+					.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"))
+					.thenRun(() -> RelayLogger.logEvent("closed", this));
+		} else {
+			return CompletableFuture.completedFuture(null);
+		}
+
 	}
 
 	static ListenerCommand.ResponseCommand createResponseCommand(RelayedHttpListenerContext listenerContext) {
