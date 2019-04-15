@@ -1,9 +1,9 @@
 package com.microsoft.azure.relay;
 
+import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -381,8 +381,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		return this.cachedString;
     }
 
-	CompletableFuture<Void> sendControlCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
-		return this.controlConnection.sendCommandAndStreamAsync(command, buffer, timeout);
+	CompletableFuture<Void> sendControlCommandAndStreamAsync(ListenerCommand command, ByteArrayOutputStream writeBufferStream, Duration timeout) {
+		return this.controlConnection.sendCommandAndStreamAsync(command, writeBufferStream, timeout);
 	}
 
 	void throwIfDisposed() throws RelayException {
@@ -605,12 +605,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 * if it exists
 		 * 
 		 * @param command The Listener command to be sent
-		 * @param buffer  The message body to be sent, null if it doesn't exist
+		 * @param writeBufferStream The message body to be sent, null if it doesn't exist
 		 * @param timeout The timeout to send within
 		 * @return Returns a completableFuture which completes when the command and
 		 *         stream are finished sending
 		 */
-		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteBuffer buffer, Duration timeout) {
+		private CompletableFuture<Void> sendCommandAndStreamAsync(ListenerCommand command, ByteArrayOutputStream writeBufferStream, Duration timeout) {
 
 			return this.ensureConnectTask(timeout)
 				.thenCompose(webSocket -> {
@@ -627,8 +627,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 							RelayLogger.logEvent("sendCommand", this, json);
 							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
 								.thenCompose($void -> {
-									if (buffer != null) {
-										return webSocket.writeAsync(buffer.array());
+									if (writeBufferStream != null) {
+										return webSocket.writeAsync(writeBufferStream.toByteArray());
 									} else {
 										return CompletableFuture.completedFuture(null);
 									}

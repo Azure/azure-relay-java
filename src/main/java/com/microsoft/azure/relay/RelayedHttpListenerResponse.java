@@ -82,7 +82,9 @@ public class RelayedHttpListenerResponse {
 	 * RelayedHttpListenerResponse instance.
 	 */
 	public CompletableFuture<Void> closeAsync() {
-		return this.outputStream.closeAsync().whenComplete(($void, ex) -> this.disposed = true);
+		CompletableFuture<Void> closeTask = (this.outputStream == null) ? 
+				CompletableFuture.completedFuture(null) : this.outputStream.closeAsync();
+		return closeTask.whenComplete(($void, ex) -> this.disposed = true);
 	}
 	
 	/**
