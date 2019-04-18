@@ -338,6 +338,15 @@ class ListenerCommand {
 				fields.add("\"statusDescription\":\"" + this.statusDescription + "\"");
 			}
 
+			if (this.responseHeaders != null && !this.responseHeaders.isEmpty()) {
+				StringBuilder headerBuilder = new StringBuilder("\"responseHeaders\":{");
+				this.responseHeaders.forEach((key, val) -> {
+					headerBuilder.append("\"" + key + "\":\"" + val + "\",");
+				});
+				headerBuilder.replace(headerBuilder.length() - 1, headerBuilder.length(), "}");
+				fields.add(headerBuilder.toString());
+			}
+			
 			builder.append(String.join(",", fields)).append("}}");
 			return builder.toString();
 		}
