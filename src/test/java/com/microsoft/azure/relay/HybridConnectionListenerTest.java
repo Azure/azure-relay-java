@@ -210,6 +210,8 @@ public class HybridConnectionListenerTest {
 	public void requestHandlerTest() throws IOException {
 		AtomicInteger handlerExecuted = new AtomicInteger(0);
 		int status = HttpStatus.ACCEPTED_202;
+		String headerKey = "foo";
+		String headerVal = "bar";
 		
 		listener.setRequestHandler((context) -> {
 			if (context != null && context.getRequest() != null) {
@@ -217,6 +219,7 @@ public class HybridConnectionListenerTest {
 			}
 			RelayedHttpListenerResponse response = context.getResponse();
             response.setStatusCode(status);
+            response.getHeaders().put(headerKey, headerVal);
             
 			try {
 				response.getOutputStream().write(0);
@@ -237,6 +240,7 @@ public class HybridConnectionListenerTest {
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
 
 		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
+		assertEquals("Response did not container the expected header", headerVal, conn.getHeaderField(headerKey));
 		assertEquals("Listener failed to accept connections exactly once from sender in http mode.", 1, handlerExecuted.get());
 	}
 	
