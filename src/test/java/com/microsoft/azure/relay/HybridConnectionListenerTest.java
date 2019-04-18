@@ -240,7 +240,7 @@ public class HybridConnectionListenerTest {
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
 
 		assertEquals("Response did not have the expected response code.", status, conn.getResponseCode());
-		assertEquals("Response did not container the expected header", headerVal, conn.getHeaderField(headerKey));
+		assertEquals("Response did not contain the expected header", headerVal, conn.getHeaderField(headerKey));
 		assertEquals("Listener failed to accept connections exactly once from sender in http mode.", 1, handlerExecuted.get());
 	}
 	
