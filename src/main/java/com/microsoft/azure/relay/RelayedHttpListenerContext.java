@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.eclipse.jetty.http.HttpStatus;
 
-public class RelayedHttpListenerContext {
+public class RelayedHttpListenerContext implements RelayTraceSource {
 	private static final Duration ACCEPT_TIMEOUT = Duration.ofSeconds(20);
 	private String cachedToString;
 	private final RelayedHttpListenerRequest request;

@@ -350,6 +350,7 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
 			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(count));
+			this.context.getResponse().setReadonly();
 			return this.asyncLock.acquireThenCompose(this.writeTimeout, () -> {
 				CompletableFuture<Void> flushCoreTask = null;
 
