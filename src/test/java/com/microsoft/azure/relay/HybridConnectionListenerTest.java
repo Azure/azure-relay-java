@@ -108,15 +108,7 @@ public class HybridConnectionListenerTest {
 		String badKey = "Bad Header";
 		String badValue = "Bad:Value";
 		customHeaders.put(badKey, Arrays.asList(new String[]{badValue}));
-		Assertions.assertThrows(UpgradeException.class, () -> {
-			try {
-				client.createConnectionAsync(customHeaders).thenAccept(connection -> {
-					connection.closeAsync().join();
-				}).join();
-			} catch (Exception e) {
-				throw e.getCause();
-			}
-		});
+		Assertions.assertCFThrows(UpgradeException.class, client.createConnectionAsync(customHeaders).thenAccept(connection -> connection.closeAsync().join()));
 	}
 	
 	@Test
@@ -218,8 +210,8 @@ public class HybridConnectionListenerTest {
 				handlerExecuted.incrementAndGet();
 			}
 			RelayedHttpListenerResponse response = context.getResponse();
-            response.setStatusCode(status);
-            response.getHeaders().put(headerKey, headerVal);
+			response.setStatusCode(status);
+			response.getHeaders().put(headerKey, headerVal);
             
 			try {
 				response.getOutputStream().write(0);
@@ -401,5 +393,90 @@ public class HybridConnectionListenerTest {
 		
 		CompletableFuture.allOf(clientCloseFutures).join();
 		CompletableFuture.allOf(listenerCloseFutures).join();
+	}
+	
+	@Test
+	public void closedOrReadonlyResponseTest() throws IOException {
+		int statusCode = HttpStatus.ACCEPTED_202;
+		String headerKey = "foo";
+		String headerVal = "bar";
+		
+		listener.openAsync(Duration.ofSeconds(15)).join();
+		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
+		urlBuilder.replace(0, 5, "https://");
+		URL url = new URL(urlBuilder.toString());
+		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
+		
+		// Test setting response header after response stream has been closed
+		CompletableFuture<Void> modifiedAfterClose = new CompletableFuture<Void>();
+		listener.setRequestHandler(context -> {
+			RelayedHttpListenerResponse response = context.getResponse();
+            response.setStatusCode(statusCode);
+			try {
+				context.getResponse().close();
+				response.getHeaders().put(headerKey, headerVal);
+				modifiedAfterClose.complete(null);
+			} catch (Exception e) {
+				modifiedAfterClose.completeExceptionally(e);
+			}
+		});
+		
+		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+		conn.setRequestMethod("GET");
+		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
+
+		assertEquals("Response did not have the expected response code.", statusCode, conn.getResponseCode());
+		assertNull("Response should not have set the header successfully.", conn.getHeaderField(headerKey));
+		Assertions.assertCFThrows(IllegalStateException.class, modifiedAfterClose);
+		
+		// Test setting status code after writing to response stream
+		CompletableFuture<Void> modifiedStatusAfterWrite = new CompletableFuture<Void>();
+		listener.setRequestHandler(context -> {
+			RelayedHttpListenerResponse response = context.getResponse();
+            
+			try {
+				response.getHeaders().put(headerKey, headerVal);
+				response.getOutputStream().write(0);
+				response.setStatusCode(statusCode);
+				modifiedStatusAfterWrite.complete(null);
+			} catch (Exception e) {
+				modifiedStatusAfterWrite.completeExceptionally(e);
+			} finally {
+				context.getResponse().close();
+			}
+		});
+		
+		conn = (HttpURLConnection)url.openConnection();
+		conn.setRequestMethod("GET");
+		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
+
+		assertNotEquals("Response should not have set the status code successfully.", statusCode, conn.getResponseCode());
+		assertEquals("Response did not have the expected header field.", headerVal, conn.getHeaderField(headerKey));
+		Assertions.assertCFThrows(IllegalStateException.class, modifiedStatusAfterWrite);
+		
+		// Test setting response header after writing to response stream
+		CompletableFuture<Void> modifiedHeaderAfterWrite = new CompletableFuture<Void>();
+		listener.setRequestHandler(context -> {
+			RelayedHttpListenerResponse response = context.getResponse();
+            
+			try {
+				response.setStatusCode(statusCode);
+				response.getOutputStream().write(0);
+				response.getHeaders().put(headerKey, headerVal);
+				modifiedHeaderAfterWrite.complete(null);
+			} catch (Exception e) {
+				modifiedHeaderAfterWrite.completeExceptionally(e);
+			} finally {
+				context.getResponse().close();
+			}
+		});
+		
+		conn = (HttpURLConnection)url.openConnection();
+		conn.setRequestMethod("GET");
+		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
+
+		assertEquals("Response did not have the expected status code.", statusCode, conn.getResponseCode());
+		assertNull("Response should not have set the header field successfully.", conn.getHeaderField(headerKey));
+		Assertions.assertCFThrows(IllegalStateException.class, modifiedHeaderAfterWrite);
 	}
 }

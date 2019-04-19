@@ -1,5 +1,7 @@
 package com.microsoft.azure.relay;
 
+import java.util.concurrent.CompletableFuture;
+
 import junit.framework.AssertionFailedError;
 
 public final class Assertions {
@@ -29,5 +31,15 @@ public final class Assertions {
 
 		String message = "Expected exception of type '" + expectedType + "' to be thrown.";
 		throw new AssertionFailedError(message);
+	}
+	
+	public static <T extends Throwable> T assertCFThrows(Class<T> expectedType, CompletableFuture<?> cf) {
+		return assertThrows(expectedType, () -> {
+			try {
+				cf.join();
+			} catch (Exception e) {
+				throw e.getCause();
+			}
+		});
 	}
 }
