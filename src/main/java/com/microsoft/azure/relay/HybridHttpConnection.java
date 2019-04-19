@@ -1,10 +1,10 @@
 package com.microsoft.azure.relay;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Timer;
@@ -201,12 +201,12 @@ class HybridHttpConnection implements RelayTraceSource {
 	}
 
 	private CompletableFuture<Void> sendResponseAsync(ListenerCommand.ResponseCommand responseCommand,
-			ByteBuffer responseBodyBuffer, Duration timeout) throws CompletionException {
+			ByteArrayOutputStream writeBufferStream, Duration timeout) throws CompletionException {
 		if (this.rendezvousWebSocket == null) {
 			RelayLogger.logEvent("httpSendResponse", this, "control", String.valueOf(responseCommand.getStatusCode()));
 			ListenerCommand listenerCommand = new ListenerCommand(null);
 			listenerCommand.setResponse(responseCommand);
-			return this.listener.sendControlCommandAndStreamAsync(listenerCommand, responseBodyBuffer, timeout)
+			return this.listener.sendControlCommandAndStreamAsync(listenerCommand, writeBufferStream, timeout)
 					.thenRun(() -> RelayLogger.logEvent("httpSendResponseFinished", this, "control", String.valueOf(responseCommand.getStatusCode())));
 		} else {
 			RelayLogger.logEvent("httpSendResponse", this, "rendezvous", String.valueOf(responseCommand.getStatusCode()));
@@ -221,11 +221,10 @@ class HybridHttpConnection implements RelayTraceSource {
 					.thenAccept(bytesWritten -> {
 						RelayLogger.logEvent("httpSendResponseFinished", this, "rendezvous", String.valueOf(responseCommand.getStatusCode()));
 					});
-			if (responseCommand.hasBody() && responseBodyBuffer != null) {
+			if (responseCommand.hasBody() && writeBufferStream != null) {
 				return sendCommandTask.thenCompose((result) -> {
-					int bytesToWrite = responseBodyBuffer.remaining();
-					return this.rendezvousWebSocket.writeAsync(responseBodyBuffer.array(), timeout).thenAccept(nullResult -> {
-						RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(bytesToWrite));
+					return this.rendezvousWebSocket.writeFromByteArrayStream(writeBufferStream, timeout).thenAccept(nullResult -> {
+						RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(writeBufferStream.size()));
 					});
 				});
 			}
@@ -233,10 +232,12 @@ class HybridHttpConnection implements RelayTraceSource {
 		}
 	}
 
-	private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteBuffer buffer, Duration timeout) {
-		int bytesToWrite = buffer.remaining();
-		return this.rendezvousWebSocket.writeAsync(buffer, timeout).thenAccept(nullResult -> {
-			RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(bytesToWrite));
+	private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteArrayOutputStream writeBufferStream, Duration timeout) {
+		if (writeBufferStream == null) {
+			return CompletableFuture.completedFuture(null);
+		}
+		return this.rendezvousWebSocket.writeFromByteArrayStream(writeBufferStream, timeout).thenAccept(nullResult -> {
+			RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(writeBufferStream.size()));
 		});
 	}
 
@@ -279,7 +280,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		private final RelayedHttpListenerContext context;
 		private final AsyncLock asyncLock;
 		private boolean closed;
-		private ByteBuffer writeBufferStream;
+		private ByteArrayOutputStream writeBufferStream;
 		private Timer writeBufferFlushTimer;
 		private boolean responseCommandSent;
 		private final TrackingContext trackingContext;
@@ -321,10 +322,10 @@ class HybridHttpConnection implements RelayTraceSource {
 						}).thenRun(() -> this.responseCommandSent = true);
 
 				// When there is no request message body
-				if (this.writeBufferStream != null && this.writeBufferStream.position() > 0) {
+				if (this.writeBufferStream != null && this.writeBufferStream.size() > 0) {
 					return CompletableFuture.allOf(sendResponseTask, this.connection
 							.sendBytesOverRendezvousAsync(this.writeBufferStream, timeout).thenRun(() -> {
-								this.writeBufferStream.clear();
+								this.writeBufferStream.reset();
 								if (this.writeBufferFlushTimer != null) {
 									this.writeBufferFlushTimer.cancel();
 								}
@@ -352,31 +353,29 @@ class HybridHttpConnection implements RelayTraceSource {
 			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(count));
 			return this.asyncLock.acquireThenCompose(this.writeTimeout, () -> {
 				CompletableFuture<Void> flushCoreTask = null;
+				if (this.writeBufferStream == null) {
+					this.writeBufferStream = new ByteArrayOutputStream(count);
+				}
 
 				if (!this.responseCommandSent) {
 					FlushReason flushReason;
 					if (this.connection.rendezvousWebSocket != null) {
 						flushReason = FlushReason.RENDEZVOUS_EXISTS;
 					} else {
-						int bufferedCount = this.writeBufferStream != null ? this.writeBufferStream.position() : 0;
+						int bufferedCount = this.writeBufferStream != null ? this.writeBufferStream.size() : 0;
 						if (count + bufferedCount <= MAX_CONTROL_CONNECTION_BODY_SIZE) {
 
-							// There's still a chance we might be able to respond over the control
-							// connection, accumulate bytes
-							if (this.writeBufferStream == null) {
-								int initialStreamSize = Math.min(count, MAX_CONTROL_CONNECTION_BODY_SIZE);
-								this.writeBufferStream = ByteBuffer.allocate(initialStreamSize);
+							// Set the timer to limit the time the sender has to send
+							if (this.writeBufferFlushTimer == null) {
 								this.writeBufferFlushTimer = new Timer();
-
 								this.writeBufferFlushTimer.schedule(new TimerTask() {
 									@Override
 									public void run() {
 										onWriteBufferFlushTimer();
 									}
 								}, WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS, Long.MAX_VALUE);
-
 							}
-							this.writeBufferStream.put(array, offset, count);
+							this.writeBufferStream.write(array, offset, count);
 							return CompletableFuture.completedFuture(null);
 						}
 						flushReason = FlushReason.BUFFER_FULL;
@@ -387,13 +386,13 @@ class HybridHttpConnection implements RelayTraceSource {
 					flushCoreTask = this.flushCoreAsync(flushReason, this.writeTimeout);
 				}
 
-				ByteBuffer buffer = ByteBuffer.wrap(array, offset, count);
+				this.writeBufferStream.write(array, offset, count);
 				if (flushCoreTask == null) {
 					flushCoreTask = CompletableFuture.completedFuture(null);
 				}
 
 				return flushCoreTask.thenCompose(result -> {
-					return this.connection.sendBytesOverRendezvousAsync(buffer, this.writeTimeout);
+					return this.connection.sendBytesOverRendezvousAsync(this.writeBufferStream, this.writeTimeout);
 				});
 			});
 		}
@@ -415,7 +414,6 @@ class HybridHttpConnection implements RelayTraceSource {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
 					if (this.writeBufferStream != null) {
 						responseCommand.setBody(true);
-						this.writeBufferStream.position(0);
 					}
 
 					// Don't force any rendezvous now
@@ -429,6 +427,9 @@ class HybridHttpConnection implements RelayTraceSource {
 				}
 
 				return sendTask.thenCompose((result) -> {
+					if (this.writeBufferStream != null) {
+						this.writeBufferStream.reset();
+					}
 					this.closed = true;
 					return closeRendezvousAsync();
 				});

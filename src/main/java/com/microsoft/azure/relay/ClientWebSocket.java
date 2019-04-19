@@ -6,7 +6,9 @@ import java.time.Duration;
 import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.Writer;
 
 import javax.websocket.*;
@@ -259,6 +261,24 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		else {
 			return CompletableFutureUtil.fromException(new RuntimeIOException("cannot send because the session is not connected."));	
 		}
+	}
+	
+	/**
+	 * Write contents from provided ByteArrayOutputStream to this web socket's OutputStream
+	 * @param src The source ByteArrayOutputStream that contains the contents to be written
+	 * @param timeout Timeout to complete the write operation within
+	 * @return A CompletableFuture that completes when the output stream finishes write and close.
+	 */
+	public CompletableFuture<Void> writeFromByteArrayStream(ByteArrayOutputStream src, Duration timeout) {
+		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+			try {
+				OutputStream webSocketOut = this.session.getBasicRemote().getSendStream();
+				src.writeTo(webSocketOut);
+				webSocketOut.close();
+			} catch (Exception e) {
+				throw RelayLogger.throwingException(e, this);
+			}
+		}, executor);
 	}
 	
 	/**
