@@ -1,5 +1,6 @@
 package com.microsoft.azure.relay;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
@@ -83,8 +84,13 @@ public class RelayedHttpListenerResponse {
 	 * RelayedHttpListenerResponse instance.
 	 */
 	public CompletableFuture<Void> closeAsync() {
-		CompletableFuture<Void> closeTask = (this.outputStream != null) ? this.outputStream.closeAsync() : CompletableFuture.completedFuture(null);
-		return closeTask.whenComplete(($void, ex) -> this.disposed = true);
+		if (this.outputStream != null) {
+			return this.outputStream.closeAsync()
+				.whenComplete(($void, ex) -> this.disposed = true);
+		} else {
+			this.disposed = true;
+			return CompletableFuture.completedFuture(null);
+		}
 	}
 	
 	/**
@@ -100,15 +106,15 @@ public class RelayedHttpListenerResponse {
 	}
 	
 	private void checkClosedOrReadonly() {
-		String msg = null;
+		Exception ex = null;
 		if (this.disposed) {
-			msg = "The HTTP status code, status description, and headers cannot be modified after the output stream has already been closed.";
+			ex = new IOException("The HTTP status code, status description, and headers cannot be modified after the output stream has already been closed.");
 		} else if (this.readonly) {
-			msg = "The HTTP status code, status description, and headers cannot be modified after writing to the output.";
+			ex = new IllegalStateException("The HTTP status code, status description, and headers cannot be modified after writing to the output.");
 		}
 		
-		if (msg != null) {
-			throw RelayLogger.throwingException(new IllegalStateException(msg), this.context);
+		if (ex != null) {
+			throw RelayLogger.throwingException(ex, this.context);
 		}
 	}
 	
