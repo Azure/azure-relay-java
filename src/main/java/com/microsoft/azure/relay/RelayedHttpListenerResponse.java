@@ -12,7 +12,7 @@ public class RelayedHttpListenerResponse {
 	private final Map<String, String> headers;
 	private final RelayedHttpListenerContext context;
 	private boolean disposed;
-	private boolean readonly = false;
+	private boolean readonly;
 	private int statusCode;
 	private String statusDescription;
 	private HybridHttpConnection.ResponseStream outputStream;
