@@ -222,7 +222,7 @@ class HybridHttpConnection implements RelayTraceSource {
 						RelayLogger.logEvent("httpSendResponseFinished", this, "rendezvous", String.valueOf(responseCommand.getStatusCode()));
 					});
 			if (responseCommand.hasBody() && responseBodyBuffer != null) {
-				return sendCommandTask.thenCompose((result) -> {
+				return sendCommandTask.thenCompose($void -> {
 					int bytesToWrite = responseBodyBuffer.remaining();
 					return this.rendezvousWebSocket.writeAsync(responseBodyBuffer.array(), timeout).thenAccept(nullResult -> {
 						RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(bytesToWrite));
@@ -234,9 +234,11 @@ class HybridHttpConnection implements RelayTraceSource {
 	}
 
 	private CompletableFuture<Void> sendBytesOverRendezvousAsync(ByteBuffer buffer, Duration timeout) {
-		int bytesToWrite = buffer.remaining();
+		if (buffer == null) {
+			return CompletableFuture.completedFuture(null);
+		}
 		return this.rendezvousWebSocket.writeAsync(buffer, timeout).thenAccept(nullResult -> {
-			RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(bytesToWrite));
+			RelayLogger.logEvent("httpSendingBytes", this, String.valueOf(buffer.remaining()));
 		});
 	}
 
@@ -365,8 +367,7 @@ class HybridHttpConnection implements RelayTraceSource {
 							// There's still a chance we might be able to respond over the control
 							// connection, accumulate bytes
 							if (this.writeBufferStream == null) {
-								int initialStreamSize = Math.min(count, MAX_CONTROL_CONNECTION_BODY_SIZE);
-								this.writeBufferStream = ByteBuffer.allocate(initialStreamSize);
+								this.writeBufferStream = ByteBuffer.allocate(MAX_CONTROL_CONNECTION_BODY_SIZE);
 								this.writeBufferFlushTimer = new Timer();
 
 								this.writeBufferFlushTimer.schedule(new TimerTask() {
@@ -416,7 +417,7 @@ class HybridHttpConnection implements RelayTraceSource {
 					ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
 					if (this.writeBufferStream != null) {
 						responseCommand.setBody(true);
-						this.writeBufferStream.position(0);
+						this.writeBufferStream.flip();
 					}
 
 					// Don't force any rendezvous now
@@ -430,6 +431,9 @@ class HybridHttpConnection implements RelayTraceSource {
 				}
 
 				return sendTask.thenCompose((result) -> {
+					if (this.writeBufferStream != null) {
+						this.writeBufferStream.position(0);
+					}
 					this.closed = true;
 					return closeRendezvousAsync();
 				});
