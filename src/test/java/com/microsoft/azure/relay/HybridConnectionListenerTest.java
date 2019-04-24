@@ -417,7 +417,7 @@ public class HybridConnectionListenerTest {
 				response.getHeaders().put(headerKey, headerVal);
 				modifiedAfterClose.complete(null);
 			} catch (Exception e) {
-				modifiedAfterClose.completeExceptionally(e);
+				modifiedAfterClose.completeExceptionally(e.getCause());
 			}
 		});
 		
@@ -427,7 +427,7 @@ public class HybridConnectionListenerTest {
 
 		assertEquals("Response did not have the expected response code.", statusCode, conn.getResponseCode());
 		assertNull("Response should not have set the header successfully.", conn.getHeaderField(headerKey));
-		Assertions.assertCFThrows(IllegalStateException.class, modifiedAfterClose);
+		Assertions.assertCFThrows(IOException.class, modifiedAfterClose);
 		
 		// Test setting status code after writing to response stream
 		CompletableFuture<Void> modifiedStatusAfterWrite = new CompletableFuture<Void>();
