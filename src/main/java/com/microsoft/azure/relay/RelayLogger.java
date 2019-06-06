@@ -128,6 +128,7 @@ final class RelayLogger {
 		map.put("httpSendResponse", "%s: Sending the response command on the %s connection, status: %s.");
 		map.put("httpSendResponseFinished", "%s: Finished sending the response command on the %s connection, status: %s.");
 		map.put("httpUserRequestHandlerException", "%s: exception in the user's request handler.");
+		map.put("httpWrittenToBuffer", "%s: finished writing %s bytes to ResponseStream buffer.");
 		map.put("objectNotSet", "%s: %s was not set to the given value.");
 		map.put("offline", "%s is offline.");
 		map.put("parsingUUIDFailed", "%s: Parsing TrackingId '%s' as Guid failed, created new ActivityId '%s' for trace correlation.");

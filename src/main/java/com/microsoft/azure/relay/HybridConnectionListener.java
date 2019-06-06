@@ -625,7 +625,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 						if (json != null) {
 							RelayLogger.logEvent("sendCommand", this, json);
-							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
+							return webSocket.writeAsync(json, timeout, true, WriteMode.TEXT)
 								.thenCompose($void -> {
 									if (buffer != null) {
 										return webSocket.writeAsync(buffer);

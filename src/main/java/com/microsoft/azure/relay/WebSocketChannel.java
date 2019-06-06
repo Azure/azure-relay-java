@@ -120,7 +120,7 @@ public class WebSocketChannel implements HybridConnectionChannel {
 	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
 	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
-	CompletableFuture<Void> writeAsync(Object data, Duration timeout, WriteMode mode) {
-		return this.websocket.writeAsync(data, timeout, mode);
+	CompletableFuture<Void> writeAsync(Object data, Duration timeout, boolean isEnd, WriteMode mode) {
+		return this.websocket.writeAsync(data, timeout, isEnd, mode);
 	}
 }
