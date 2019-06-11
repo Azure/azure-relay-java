@@ -313,6 +313,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		// The caller of this method must have acquired this.asyncLock
 		CompletableFuture<Void> flushCoreAsync(FlushReason reason, Duration timeout) throws CompletionException {
 			RelayLogger.logEvent("httpResponseStreamFlush", this, reason.toString());
+			TimeoutHelper timeoutHelper = new TimeoutHelper(timeout);
 			
 			if (!this.responseCommandSent) {
 				ListenerCommand.ResponseCommand responseCommand = createResponseCommand(this.context);
@@ -320,22 +321,20 @@ class HybridHttpConnection implements RelayTraceSource {
 
 				// At this point we have no choice but to rendezvous send the response command
 				// over the rendezvous connection
-				CompletableFuture<Void> sendResponseTask = this.connection.ensureRendezvousAsync(timeout)
-						.thenComposeAsync((result) -> {
-							return this.connection.sendResponseAsync(responseCommand, null, timeout);
-						}).thenRun(() -> this.responseCommandSent = true);
+				CompletableFuture<Void> sendResponseTask = this.connection.ensureRendezvousAsync(timeoutHelper.remainingTime())
+						.thenComposeAsync($void -> {
+							return this.connection.sendResponseAsync(responseCommand, null, timeoutHelper.remainingTime());
+						})
+						.thenRun(() -> this.responseCommandSent = true);
 
 				// When there is no request message body
 				if (this.writeBufferStream != null && this.writeBufferStream.position() > 0) {
 					return sendResponseTask.thenCompose($void -> {
 						// Get a new buffer backed by the non empty segment of the write buffer array
 						this.writeBufferStream.flip();
-						ByteBuffer trimmedBuffer = ByteBuffer.wrap(
-								this.writeBufferStream.array(), 
-								this.writeBufferStream.position(), 
-								this.writeBufferStream.remaining());
-						return this.connection.sendBytesOverRendezvousAsync(trimmedBuffer, timeout);
-					}).thenRun(() -> {
+						return this.connection.sendBytesOverRendezvousAsync(this.writeBufferStream, timeoutHelper.remainingTime());
+					})
+					.thenRun(() -> {
 						this.writeBufferStream.clear();
 						if (this.writeBufferFlushTimer != null) {
 							this.writeBufferFlushTimer.cancel();

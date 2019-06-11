@@ -436,7 +436,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				} catch (Exception userException) {
                     listenerContext.getResponse().setStatusCode(HttpStatus.BAD_GATEWAY_502);
                     listenerContext.getResponse().setStatusDescription("The Listener's custom AcceptHandler threw an exception. See Listener logs for details. TrackingId: " + listenerContext.getTrackingContext().getTrackingId());
-					throw userException;
+					throw RelayLogger.throwingException(userException, this);
 				}
 			}
 

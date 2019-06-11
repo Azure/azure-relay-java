@@ -5,7 +5,7 @@
 
 	<groupId>com.microsoft.azure</groupId>
 	<artifactId>azure-relay</artifactId>
-	<version>0.0.2-PREVIEW</version>
+	<version>0.0.1-PREVIEW</version>
 	<packaging>maven-plugin</packaging>
 	<name>azure-relay</name>
 	<description>Java library for Azure Relay</description>

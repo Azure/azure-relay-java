@@ -113,7 +113,6 @@ final class RelayLogger {
 		map.put("connecting", "%s is connecting.");
 		map.put("connected", "%s is connected.");
 		map.put("disconnect", "%s: is disconnected, should reconnect = %s");
-		map.put("doneWritingBytes", "%s: finished writing %s bytes to remote.");
 		map.put("getTokenStart", "%s: getToken start.");
 		map.put("getTokenStop", "%s: getToken stop. New token expires at %s.");
 		map.put("httpCreateRendezvous", "%s: Creating the rendezvous connection.");
@@ -127,7 +126,6 @@ final class RelayLogger {
 		map.put("httpSendingBytes", "%s: Sending %s bytes on the rendezvous connection");
 		map.put("httpSendResponse", "%s: Sending the response command on the %s connection, status: %s.");
 		map.put("httpSendResponseFinished", "%s: Finished sending the response command on the %s connection, status: %s.");
-		map.put("httpUserRequestHandlerException", "%s: exception in the user's request handler.");
 		map.put("httpWrittenToBuffer", "%s: finished writing %s bytes to ResponseStream buffer.");
 		map.put("objectNotSet", "%s: %s was not set to the given value.");
 		map.put("offline", "%s is offline.");
@@ -143,6 +141,7 @@ final class RelayLogger {
 		map.put("tokenRenewNegativeDuration", "%s: Not renewing token because the duration left on the token is negative.");
 		map.put("tokenRenewScheduled", "%s: Scheduling Token renewal after %s.");
 		map.put("writingBytes", "%s: starting to write to remote. Writemode: %s");
+		map.put("writingBytesFinished", "%s: finished writing %s bytes to remote.");
 		map.put("writingBytesFailed", "%s: writing bytes failed.");
 
 		Messages = Collections.unmodifiableMap(map);

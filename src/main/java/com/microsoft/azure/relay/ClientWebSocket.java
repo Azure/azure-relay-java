@@ -15,7 +15,6 @@ import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint implements RelayTraceSource {
-	private final AsyncLock socketLock;
 	private final AutoShutdownScheduledExecutor executor;
 	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
@@ -36,7 +35,6 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		this.fragmentQueue = new InputQueue<MessageFragment>(this.executor);
 		this.closeReason = null;
 		this.trackingContext = trackingContext;
-		this.socketLock = new AsyncLock(HybridConnectionListener.EXECUTOR);
 	}
 	
 	public TrackingContext getTrackingContext() {
@@ -225,36 +223,37 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 				RelayLogger.logEvent("writingBytes", this, mode.toString());
 				
 				// The websocket API will throw if multiple sends are attempted on the same websocket simultaneously
-				// Therefore a lock is used on the send operation
-				return this.socketLock.acquireThenCompose(timeout, () -> {
-					return CompletableFutureUtil.timedRunAsync(timeout, () -> {
-						try {
-							if (mode.equals(WriteMode.TEXT)) {
-								String text = data.toString();
-								remote.sendText(text, isEnd);
-								RelayLogger.logEvent("doneWritingBytes", this, String.valueOf(text.length()));
+				return CompletableFutureUtil.timedRunAsync(timeout, () -> {
+					try {
+						if (mode.equals(WriteMode.TEXT)) {
+							String text = data.toString();
+							remote.sendText(text, isEnd);
+							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(text.length()));
+						}
+						else {
+							ByteBuffer bytes = null;
+							if (data instanceof byte[]) {
+								bytes = ByteBuffer.wrap((byte[]) data);
+							} 
+							else if (data instanceof ByteBuffer) {
+								bytes = (ByteBuffer) data;
+							}
+							else if (data instanceof String) {
+								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
 							}
 							else {
-								ByteBuffer bytes = null;
-								if (data instanceof byte[]) {
-									bytes = ByteBuffer.wrap((byte[]) data);
-								} 
-								else if (data instanceof ByteBuffer) {
-									bytes = (ByteBuffer) data;
-								}
-								else if (data instanceof String){
-									bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
-								}
-								
-								int bytesToSend = bytes.remaining();
-								remote.sendBinary(bytes, isEnd);
-								RelayLogger.logEvent("doneWritingBytes", this, String.valueOf(bytesToSend));
+								throw new IllegalArgumentException(
+										"The data to be sent should be String, ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
 							}
-						} catch (Exception e) {
-							throw RelayLogger.throwingException(e, this);
+							
+							int bytesToSend = bytes.remaining();
+							remote.sendBinary(bytes, isEnd);
+							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(bytesToSend));
 						}
-					}, executor);
-				});
+					} catch (Exception e) {
+						throw RelayLogger.throwingException(e, this);
+					}
+				}, executor);
 			}
 		}
 		else {
@@ -285,18 +284,16 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			return this.closeTask;
 		}
 
-		this.socketLock.acquireThenApply(null, () -> {
-			try {
-				if (reason != null) {
-					this.session.close(reason);
-				} else {
-					this.session.close();
-				}
-			} catch (Throwable e) {
-				this.closeTask.completeExceptionally(e);
+		try {
+			if (reason != null) {
+				this.session.close(reason);
+			} else {
+				this.session.close();
 			}
-			return null;
-		});
+		} catch (Throwable e) {
+			this.closeTask.completeExceptionally(e);
+		}
+
 		return this.closeTask;
 	}
 	
