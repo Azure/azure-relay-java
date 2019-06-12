@@ -436,7 +436,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				} catch (Exception userException) {
                     listenerContext.getResponse().setStatusCode(HttpStatus.BAD_GATEWAY_502);
                     listenerContext.getResponse().setStatusDescription("The Listener's custom AcceptHandler threw an exception. See Listener logs for details. TrackingId: " + listenerContext.getTrackingContext().getTrackingId());
-					throw userException;
+					throw RelayLogger.throwingException(userException, this);
 				}
 			}
 
@@ -625,7 +625,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 						if (json != null) {
 							RelayLogger.logEvent("sendCommand", this, json);
-							return webSocket.writeAsync(json, timeout, WriteMode.TEXT)
+							return webSocket.writeAsync(json, timeout, true, WriteMode.TEXT)
 								.thenCompose($void -> {
 									if (buffer != null) {
 										return webSocket.writeAsync(buffer);

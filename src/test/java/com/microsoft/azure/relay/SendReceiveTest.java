@@ -204,6 +204,30 @@ public class SendReceiveTest {
         httpRequestSender("POST", largeStr, largeStr);
 	}
 	
+	@Test
+	public void httpWriteSmallThenSmallResponseTest() throws IOException {
+		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, smallStr, smallStr, false));
+		httpRequestSender("POST", smallStr + smallStr, smallStr);
+	}
+	
+	@Test
+	public void httpWriteSmallThenLargeResponseTest() throws IOException {
+		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, smallStr, largeStr, false));
+		httpRequestSender("POST", smallStr + largeStr, smallStr);
+	}
+	
+	@Test
+	public void httpWriteLargeThenSmallResponseTest() throws IOException {
+		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, largeStr, smallStr, false));
+		httpRequestSender("POST", largeStr + smallStr, smallStr);
+	}
+	
+	@Test
+	public void httpWriteResponseAfterFlushTimerTest() throws IOException {
+		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, smallStr, smallStr, true));
+		httpRequestSender("POST", smallStr + smallStr, smallStr);
+	}
+	
 	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
@@ -279,7 +303,7 @@ public class SendReceiveTest {
 		out.write(message, 0, message.length());
 		out.flush();
 		out.close();
-		
+
 		String inputLine;
 		StringBuilder builder = new StringBuilder();
 		BufferedReader inStream = new BufferedReader(new InputStreamReader(conn.getInputStream()));
@@ -291,6 +315,27 @@ public class SendReceiveTest {
 			builder.append(inputLine);
 		}
 		inStream.close();
+		assertEquals("Http connection sender did not receive the expected response message size.", 
+				msgExpected.length(), 
+				builder.toString().length());
 		assertEquals("Http connection sender did not receive the expected response message.", msgExpected, builder.toString());
+	}
+	
+	private static void httpRequestHandlerMultipleSend(RelayedHttpListenerContext context, String firstMsg, String secondMsg, boolean hasPause) {
+		RelayedHttpListenerResponse response = context.getResponse();
+		response.setStatusCode(STATUS_CODE);
+		response.setStatusDescription(STATUS_DESCRIPTION);
+		
+		try {
+			response.getOutputStream().write(firstMsg.getBytes());
+			if (hasPause) {
+				Thread.sleep(2500);
+			}
+			response.getOutputStream().write(secondMsg.getBytes());
+		} catch (IOException | InterruptedException e) {
+			fail(e.getMessage());
+		} finally {
+		    context.getResponse().close();
+		}
 	}
 }

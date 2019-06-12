@@ -7,7 +7,6 @@ import java.util.LinkedList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.io.IOException;
-import java.io.Writer;
 
 import javax.websocket.*;
 
@@ -26,7 +25,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	private InputQueue<String> textQueue;
 	private CompletableFuture<Void> closeTask;
 	private String cachedString;
-	
+
 	/**
 	 * Creates a websocket instance
 	 */
@@ -200,7 +199,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
 	public CompletableFuture<Void> writeAsync(Object data, Duration timeout) {
-		return writeAsync(data, timeout, WriteMode.BINARY);
+		return writeAsync(data, timeout, true, WriteMode.BINARY);
 	}
 	
 	/**
@@ -208,52 +207,53 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * 
 	 * @param data Message to be sent.
 	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
+	 * @param isEnd Indicates if the data sent is the end of a message
 	 * @param mode The type of the message to be sent.
 	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
 	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
-	CompletableFuture<Void> writeAsync(Object data, Duration timeout, WriteMode mode) {
+	CompletableFuture<Void> writeAsync(Object data, Duration timeout, boolean isEnd, WriteMode mode) {
 		if (this.isOpen()) {
 			if (data == null) {
 				// TODO: Log warns sending nothing because message is null
 				return CompletableFuture.completedFuture(null);
 			}
 			else {
+				RemoteEndpoint.Basic remote = this.session.getBasicRemote();
+				RelayLogger.logEvent("writingBytes", this, mode.toString());
+				
+				// The websocket API will throw if multiple sends are attempted on the same websocket simultaneously
 				return CompletableFutureUtil.timedRunAsync(timeout, () -> {
-					RemoteEndpoint.Basic remote = this.session.getBasicRemote();
-					
 					try {
 						if (mode.equals(WriteMode.TEXT)) {
 							String text = data.toString();
-							RelayLogger.logEvent("writingBytes", this, "text");
-							Writer writer = remote.getSendWriter();
-							writer.write(text);
-							writer.close();
-							RelayLogger.logEvent("doneWritingBytes", this, String.valueOf(text.length()));
+							remote.sendText(text, isEnd);
+							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(text.length()));
 						}
 						else {
 							ByteBuffer bytes = null;
-							
-							RelayLogger.logEvent("writingBytes", this, "binary");
 							if (data instanceof byte[]) {
 								bytes = ByteBuffer.wrap((byte[]) data);
 							} 
 							else if (data instanceof ByteBuffer) {
 								bytes = (ByteBuffer) data;
 							}
-							else if (data instanceof String){
+							else if (data instanceof String) {
 								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
 							}
+							else {
+								throw new IllegalArgumentException(
+										"The data to be sent should be String, ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
+							}
+							
 							int bytesToSend = bytes.remaining();
-							remote.sendBinary(bytes);
-							RelayLogger.logEvent("doneWritingBytes", this, String.valueOf(bytesToSend));
+							remote.sendBinary(bytes, isEnd);
+							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(bytesToSend));
 						}
-					}
-					catch (IOException e) {
+					} catch (Exception e) {
 						throw RelayLogger.throwingException(e, this);
 					}
-				},
-				this.executor);
+				}, executor);
 			}
 		}
 		else {
@@ -283,16 +283,17 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		if (this.session == null || !this.session.isOpen()) {
 			return this.closeTask;
 		}
+
 		try {
 			if (reason != null) {
 				this.session.close(reason);
 			} else {
 				this.session.close();
 			}
-		} 
-		catch (Throwable e) {
+		} catch (Throwable e) {
 			this.closeTask.completeExceptionally(e);
 		}
+
 		return this.closeTask;
 	}
 	
