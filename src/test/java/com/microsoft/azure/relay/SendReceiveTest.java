@@ -4,9 +4,9 @@ import static org.junit.Assert.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -26,6 +26,8 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.microsoft.azure.relay.HybridHttpConnection.ResponseStream;
 
 public class SendReceiveTest {
 	private static HybridConnectionListener listener;
@@ -206,26 +208,36 @@ public class SendReceiveTest {
 	
 	@Test
 	public void httpWriteSmallThenSmallResponseTest() throws IOException {
-		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, smallStr, smallStr, false));
+		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {smallStr, smallStr}, false));
 		httpRequestSender("POST", smallStr + smallStr, smallStr);
 	}
 	
 	@Test
 	public void httpWriteSmallThenLargeResponseTest() throws IOException {
-		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, smallStr, largeStr, false));
+		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {smallStr, largeStr}, false));
 		httpRequestSender("POST", smallStr + largeStr, smallStr);
 	}
 	
 	@Test
 	public void httpWriteLargeThenSmallResponseTest() throws IOException {
-		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, largeStr, smallStr, false));
+		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {largeStr, smallStr}, false));
 		httpRequestSender("POST", largeStr + smallStr, smallStr);
 	}
 	
 	@Test
 	public void httpWriteResponseAfterFlushTimerTest() throws IOException {
-		listener.setRequestHandler(context -> httpRequestHandlerMultipleSend(context, smallStr, smallStr, true));
+		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {smallStr, smallStr}, true));
 		httpRequestSender("POST", smallStr + smallStr, smallStr);
+	}
+	
+	@Test
+	public void httpWriteResponseEnsureOrderTest() throws IOException {
+		String[] messages = new String[1010]; // 1000 small messages followed by 10 large ones
+		for (int i = 0; i < messages.length; i++) {
+			messages[i] = i + ((i < 1000) ? smallStr : largeStr);
+		}
+		listener.setRequestHandler(context -> sendResponseMessages(context, messages, false));
+		httpRequestSender("POST", String.join("", messages), smallStr);
 	}
 	
 	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
@@ -258,33 +270,13 @@ public class SendReceiveTest {
 	}
 	
 	private static void httpRequestHandler(RelayedHttpListenerContext context, String msgExpected, String msgToSend) {
-        // Do something with context.Request.Url, HttpMethod, Headers, InputStream...
-		RelayedHttpListenerResponse response = context.getResponse();
-        response.setStatusCode(STATUS_CODE);
-        response.setStatusDescription(STATUS_DESCRIPTION);
-        
-        String receivedText = "";
-        if (context.getRequest().getInputStream() != null) {
-            try (Reader reader = new BufferedReader(new InputStreamReader(context.getRequest().getInputStream(), StringUtil.UTF8))) {
-                StringBuilder builder = new StringBuilder();
-                int c;
-                while ((c = reader.read()) != -1) {
-                    builder.append((char) c);
-                }
-                receivedText = builder.toString();
-            } 
-            catch (IOException e1) {
-    			fail("IO Exception when reading from HTTP");
-    		}
-        }
-        assertEquals("Listener did not received the expected message from http connection.", msgExpected, receivedText);
-
-        try {
-			response.getOutputStream().write((msgToSend).getBytes());
+		try {
+	        String receivedText = readStringFromStream(context.getRequest().getInputStream());
+	        assertEquals("Listener did not received the expected message from http connection.", msgExpected, receivedText);
 		} catch (IOException e) {
-			fail("IO Exception when sending to HTTP");
+			fail(e.getMessage());
 		}
-        context.getResponse().close();
+        sendResponseMessages(context, new String[] {msgToSend}, false);
 	}
 	
 	private static void httpRequestSender(String method, String msgExpected, String msgToSend) throws IOException {
@@ -304,38 +296,50 @@ public class SendReceiveTest {
 		out.flush();
 		out.close();
 
-		String inputLine;
-		StringBuilder builder = new StringBuilder();
-		BufferedReader inStream = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-		
+		String received = readStringFromStream(conn.getInputStream());
 		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, conn.getResponseCode());
 		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, conn.getResponseMessage());
-		
-		while ((inputLine = inStream.readLine()) != null) {
-			builder.append(inputLine);
-		}
-		inStream.close();
 		assertEquals("Http connection sender did not receive the expected response message size.", 
 				msgExpected.length(), 
-				builder.toString().length());
-		assertEquals("Http connection sender did not receive the expected response message.", msgExpected, builder.toString());
+				received.length());
+		assertEquals("Http connection sender did not receive the expected response message.", msgExpected, received);
 	}
 	
-	private static void httpRequestHandlerMultipleSend(RelayedHttpListenerContext context, String firstMsg, String secondMsg, boolean hasPause) {
+	private static void sendResponseMessages(RelayedHttpListenerContext context, String[] messages, boolean hasPause) {
 		RelayedHttpListenerResponse response = context.getResponse();
 		response.setStatusCode(STATUS_CODE);
 		response.setStatusDescription(STATUS_DESCRIPTION);
 		
+		CompletableFuture<?>[] cfs = new CompletableFuture<?>[messages.length];
 		try {
-			response.getOutputStream().write(firstMsg.getBytes());
-			if (hasPause) {
-				Thread.sleep(2500);
+			for (int i = 0; i < messages.length; i++) {
+				cfs[i] = response.getOutputStream().writeAsync(messages[i].getBytes(), 0, messages[i].length());
+				
+				// Pause for testing the flush timeout
+				if (hasPause && i < messages.length - 1) {
+					Thread.sleep(ResponseStream.WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS);
+				}
 			}
-			response.getOutputStream().write(secondMsg.getBytes());
-		} catch (IOException | InterruptedException e) {
+			CompletableFuture.allOf(cfs).join();
+		} catch (Exception e) {
 			fail(e.getMessage());
 		} finally {
 		    context.getResponse().close();
 		}
+	}
+	
+	private static String readStringFromStream(InputStream inputStream) throws IOException {
+		if (inputStream == null) {
+			return emptyStr;
+		}
+		
+		StringBuilder builder = new StringBuilder();
+		String inputLine;
+		try (BufferedReader inStream = new BufferedReader(new InputStreamReader(inputStream))){
+			while ((inputLine = inStream.readLine()) != null) {
+				builder.append(inputLine);
+			}
+		}
+		return builder.toString();
 	}
 }

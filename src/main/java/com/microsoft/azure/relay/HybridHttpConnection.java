@@ -1,6 +1,7 @@
 package com.microsoft.azure.relay;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -279,7 +280,7 @@ class HybridHttpConnection implements RelayTraceSource {
 	}
 
 	final class ResponseStream extends OutputStream {
-		private static final long WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS = 2000;
+		static final long WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS = 2000;
 		private final HybridHttpConnection connection;
 		private final RelayedHttpListenerContext context;
 		private final AsyncLock asyncLock;
@@ -346,21 +347,58 @@ class HybridHttpConnection implements RelayTraceSource {
 			return CompletableFuture.completedFuture(null);
 		}
 
+		/**
+		 * Writes the specified byte to this response stream.
+		 */
 		@Override
-		public void write(int b) {
-			this.writeAsync(new byte[] { (byte) b }, 0, 1).join();
+		public void write(int b) throws IOException {
+			try {
+				this.writeAsync(new byte[] { (byte) b }, 0, 1).join();
+			} catch (CompletionException e) {
+				throw new IOException(e.getCause());
+			}
 		}
 
-		public void write(byte[] bytes) {
-			this.writeAsync(bytes, 0, bytes.length).join();
+		/**
+		 * Writes b.length bytes from the specified byte array to this response stream.
+		 */
+		@Override
+		public void write(byte[] b) throws IOException {
+			try {
+				this.writeAsync(b, 0, b.length).join();
+			} catch (CompletionException e) {
+				throw new IOException(e.getCause());
+			}
+		}
+		
+		/**
+		 * Writes len bytes from the specified byte array starting at offset off to this response stream.
+		 */
+		@Override
+		public void write(byte[] b, int off, int len) throws IOException {
+			try {
+				this.writeAsync(b, off, len).join();
+			} catch (CompletionException e) {
+				throw new IOException(e.getCause());
+			}
 		}
 
-		public void write(String text) {
-			this.writeAsync(text.getBytes(StringUtil.UTF8), 0, text.length()).join();
+		/**
+		 * Writes the given text to this response stream.
+		 */
+		public void write(String text) throws IOException {
+			try {
+				this.writeAsync(text.getBytes(StringUtil.UTF8), 0, text.length()).join();
+			} catch (CompletionException e) {
+				throw new IOException(e.getCause());
+			}
 		}
 
-		public CompletableFuture<Void> writeAsync(byte[] array, int offset, int count) {
-			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(count));
+		/**
+		 * Writes len bytes from the specified byte array starting at offset off to this response stream concurrently.
+		 */
+		public CompletableFuture<Void> writeAsync(byte[] b, int off, int len) {
+			RelayLogger.logEvent("httpResponseStreamWrite", this, String.valueOf(len));
 			this.context.getResponse().setReadonly();
 			return this.asyncLock.acquireThenCompose(this.writeTimeout, () -> {
 				CompletableFuture<Void> flushCoreTask = null;
@@ -371,7 +409,7 @@ class HybridHttpConnection implements RelayTraceSource {
 						flushReason = FlushReason.RENDEZVOUS_EXISTS;
 					} else {
 						int bufferedCount = this.writeBufferStream != null ? this.writeBufferStream.position() : 0;
-						if (count + bufferedCount <= MAX_CONTROL_CONNECTION_BODY_SIZE) {
+						if (len + bufferedCount <= MAX_CONTROL_CONNECTION_BODY_SIZE) {
 
 							// There's still a chance we might be able to respond over the control
 							// connection, accumulate bytes
@@ -387,7 +425,7 @@ class HybridHttpConnection implements RelayTraceSource {
 								}, WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS, Long.MAX_VALUE);
 
 							}
-							this.writeBufferStream.put(array, offset, count);
+							this.writeBufferStream.put(b, off, len);
 							return CompletableFuture.completedFuture(null);
 						}
 						flushReason = FlushReason.BUFFER_FULL;
@@ -398,7 +436,7 @@ class HybridHttpConnection implements RelayTraceSource {
 					flushCoreTask = this.flushCoreAsync(flushReason, this.writeTimeout);
 				}
 
-				ByteBuffer buffer = ByteBuffer.wrap(array, offset, count);
+				ByteBuffer buffer = ByteBuffer.wrap(b, off, len);
 				if (flushCoreTask == null) {
 					flushCoreTask = CompletableFuture.completedFuture(null);
 				}
