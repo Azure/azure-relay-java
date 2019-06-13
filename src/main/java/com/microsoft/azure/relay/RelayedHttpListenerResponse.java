@@ -1,7 +1,6 @@
 package com.microsoft.azure.relay;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -67,7 +66,7 @@ public class RelayedHttpListenerResponse {
 		return headers;
 	}
 
-	public OutputStream getOutputStream() {
+	public HybridHttpConnection.ResponseStream getOutputStream() {
 		return outputStream;
 	}
 
