@@ -383,13 +383,6 @@ class HybridHttpConnection implements RelayTraceSource {
 		}
 
 		/**
-		 * Writes the given text to this response stream.
-		 */
-		public void write(String text) throws IOException {
-			this.write(text.getBytes(StringUtil.UTF8), 0, text.length());
-		}
-
-		/**
 		 * Writes len bytes from the specified byte array starting at offset off to this response stream concurrently.
 		 */
 		public CompletableFuture<Void> writeAsync(byte[] b, int off, int len) {
