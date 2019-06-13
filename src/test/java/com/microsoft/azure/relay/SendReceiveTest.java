@@ -310,17 +310,15 @@ public class SendReceiveTest {
 		response.setStatusCode(STATUS_CODE);
 		response.setStatusDescription(STATUS_DESCRIPTION);
 		
-		CompletableFuture<?>[] cfs = new CompletableFuture<?>[messages.length];
 		try {
 			for (int i = 0; i < messages.length; i++) {
-				cfs[i] = response.getOutputStream().writeAsync(messages[i].getBytes(), 0, messages[i].length());
+				response.getOutputStream().writeAsync(messages[i].getBytes(), 0, messages[i].length()).join();
 				
 				// Pause for testing the flush timeout
 				if (hasPause && i < messages.length - 1) {
 					Thread.sleep(ResponseStream.WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS);
 				}
 			}
-			CompletableFuture.allOf(cfs).join();
 		} catch (Exception e) {
 			fail(e.getMessage());
 		} finally {

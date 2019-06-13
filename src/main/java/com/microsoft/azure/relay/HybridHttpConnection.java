@@ -279,7 +279,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		return responseCommand;
 	}
 
-	final class ResponseStream extends OutputStream {
+	public final class ResponseStream extends OutputStream {
 		static final long WRITE_BUFFER_FLUSH_TIMEOUT_MILLIS = 2000;
 		private final HybridHttpConnection connection;
 		private final RelayedHttpListenerContext context;
@@ -291,7 +291,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		private final TrackingContext trackingContext;
 		private Duration writeTimeout;
 
-		public ResponseStream(HybridHttpConnection connection, RelayedHttpListenerContext context) {
+		ResponseStream(HybridHttpConnection connection, RelayedHttpListenerContext context) {
 			this.connection = connection;
 			this.context = context;
 			this.trackingContext = context.getTrackingContext();
@@ -311,6 +311,13 @@ class HybridHttpConnection implements RelayTraceSource {
 			this.writeTimeout = writeTimeout;
 		}
 
+        // Nothing to do here. Either:
+        // 1. We're still buffering data to see if it will all fit into a single response on the control connection
+        // - Or -
+        // 2. We've got a rendezvous and each Write[Async] call flushes to the websocket immediately
+		@Override
+		public void flush() throws IOException { }
+		
 		// The caller of this method must have acquired this.asyncLock
 		CompletableFuture<Void> flushCoreAsync(FlushReason reason, Duration timeout) throws CompletionException {
 			RelayLogger.logEvent("httpResponseStreamFlush", this, reason.toString());
@@ -352,11 +359,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		 */
 		@Override
 		public void write(int b) throws IOException {
-			try {
-				this.writeAsync(new byte[] { (byte) b }, 0, 1).join();
-			} catch (CompletionException e) {
-				throw new IOException(e.getCause());
-			}
+			this.write(new byte[] { (byte) b }, 0, 1);
 		}
 
 		/**
@@ -364,11 +367,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		 */
 		@Override
 		public void write(byte[] b) throws IOException {
-			try {
-				this.writeAsync(b, 0, b.length).join();
-			} catch (CompletionException e) {
-				throw new IOException(e.getCause());
-			}
+			this.write(b, 0, b.length);
 		}
 		
 		/**
@@ -387,11 +386,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		 * Writes the given text to this response stream.
 		 */
 		public void write(String text) throws IOException {
-			try {
-				this.writeAsync(text.getBytes(StringUtil.UTF8), 0, text.length()).join();
-			} catch (CompletionException e) {
-				throw new IOException(e.getCause());
-			}
+			this.write(text.getBytes(StringUtil.UTF8), 0, text.length());
 		}
 
 		/**
@@ -452,6 +447,15 @@ class HybridHttpConnection implements RelayTraceSource {
 			return this.connection.toString() + "+" + "ResponseStream";
 		}
 
+		@Override
+		public void close() throws IOException {
+			try {
+				this.closeAsync().join();
+			} catch (CompletionException e) {
+				throw new IOException(e.getCause());
+			}
+		}
+		
 		public CompletableFuture<Void> closeAsync() {
 			if (this.closed) {
 				return CompletableFuture.completedFuture(null);
