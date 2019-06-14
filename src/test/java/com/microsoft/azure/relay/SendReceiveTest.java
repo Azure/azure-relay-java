@@ -2,16 +2,17 @@ package com.microsoft.azure.relay;
 
 import static org.junit.Assert.*;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -75,29 +76,33 @@ public class SendReceiveTest {
 	@Test
 	public void websocketSmallSendSmallResponseTest() {
 		CompletableFuture<Void> listenerTask = websocketListener(smallStr, smallStr);
-		websocketClient(smallStr, smallStr);
+		CompletableFuture<Void> clientTask = websocketClient(smallStr, smallStr);
 		listenerTask.join();
+		clientTask.join();
 	}
 	
 	@Test
 	public void websocketSmallSendLargeResponseTest() {
 		CompletableFuture<Void> listenerTask = websocketListener(smallStr, largeStr);
-		websocketClient(largeStr, smallStr);
+		CompletableFuture<Void> clientTask = websocketClient(largeStr, smallStr);
 		listenerTask.join();
+		clientTask.join();
 	}
 	
 	@Test
 	public void websocketLargeSendSmallResponseTest() {
 		CompletableFuture<Void> listenerTask = websocketListener(largeStr, smallStr);
-		websocketClient(smallStr, largeStr);
+		CompletableFuture<Void> clientTask = websocketClient(smallStr, largeStr);
 		listenerTask.join();
+		clientTask.join();
 	}
 	
 	@Test
 	public void websocketLargeSendLargeResponseTest() {
 		CompletableFuture<Void> listenerTask = websocketListener(largeStr, largeStr);
-		websocketClient(largeStr, largeStr);
+		CompletableFuture<Void> clientTask = websocketClient(largeStr, largeStr);
 		listenerTask.join();
+		clientTask.join();
 	}
 	
 	@Test
@@ -171,6 +176,34 @@ public class SendReceiveTest {
 	}
 	
 	@Test
+	public void websocketWriteReceiveAllByteValuesTest() throws URISyntaxException {
+		CompletableFuture<Void> listenerTask = listener.acceptConnectionAsync().thenCompose(connection -> {
+			return connection.readAsync()
+				.thenCompose(bufferReceived -> {
+					byte[] byteSet = getByteSet();
+					assertTrue("Websocket listener did not receive the expected bytes.", Arrays.equals(byteSet, bufferReceived.array()));
+					return connection.writeAsync(ByteBuffer.wrap(byteSet));
+				})
+				.thenCompose($void -> {
+					return connection.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal closure from listener"));
+				});
+		});
+		
+		HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
+		CompletableFuture<Void> clientTask = newClient.createConnectionAsync().thenCompose(connection -> {
+			return connection.writeAsync(ByteBuffer.wrap(getByteSet()))
+					.thenCompose($void -> {
+						return connection.readAsync();
+					})
+					.thenAccept(bufferReceived -> {
+						assertTrue("Websocket client did not receive the expected bytes.", Arrays.equals(getByteSet(), bufferReceived.array()));
+					});
+		});
+		listenerTask.join();
+		clientTask.join();
+	}
+	
+	@Test
 	public void httpGETAndSmallResponseTest() throws IOException {
 		listener.setRequestHandler((context) -> httpRequestHandler(context, emptyStr, smallStr));
         httpRequestSender("GET", smallStr, emptyStr);
@@ -240,6 +273,32 @@ public class SendReceiveTest {
 		httpRequestSender("POST", String.join("", messages), smallStr);
 	}
 	
+	@Test
+	public void httpWriteReceiveAllByteValuesTest() throws IOException {
+		byte[] byteSet = getByteSet();
+		listener.setRequestHandler(context -> {
+			RelayedHttpListenerResponse response = context.getResponse();
+			response.setStatusCode(STATUS_CODE);
+			response.setStatusDescription(STATUS_DESCRIPTION);
+			
+			try {
+				response.getOutputStream().writeAsync(byteSet, 0, byteSet.length).join();
+			} catch (Exception e) {
+				fail(e.getMessage());
+			} finally {
+			    context.getResponse().close();
+			}
+		});
+		
+		HttpURLConnection connection = getHttpConnection();
+		sendBytesOverHttp(connection, byteSet, 0, byteSet.length);
+		byte[] received = readBytesFromStream(connection.getInputStream());
+		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, connection.getResponseCode());
+		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, connection.getResponseMessage());
+		assertEquals("Http connection sender did not receive the expected response message size.", byteSet.length, received.length);
+		assertTrue("Http connection sender did not receive the expected response message.", Arrays.equals(byteSet, received));
+	}
+	
 	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
@@ -271,7 +330,7 @@ public class SendReceiveTest {
 	
 	private static void httpRequestHandler(RelayedHttpListenerContext context, String msgExpected, String msgToSend) {
 		try {
-	        String receivedText = readStringFromStream(context.getRequest().getInputStream());
+	        String receivedText = new String(readBytesFromStream(context.getRequest().getInputStream()));
 	        assertEquals("Listener did not received the expected message from http connection.", msgExpected, receivedText);
 		} catch (IOException e) {
 			fail(e.getMessage());
@@ -280,29 +339,36 @@ public class SendReceiveTest {
 	}
 	
 	private static void httpRequestSender(String method, String msgExpected, String msgToSend) throws IOException {
+		HttpURLConnection connection = getHttpConnection();
+		sendBytesOverHttp(connection, msgToSend.getBytes(), 0, msgToSend.length());
+		
+		String received = new String(readBytesFromStream(connection.getInputStream()));
+		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, connection.getResponseCode());
+		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, connection.getResponseMessage());
+		assertEquals("Http connection sender did not receive the expected response message size.", 
+				msgExpected.length(), 
+				received.length());
+		assertEquals("Http connection sender did not receive the expected response message.", msgExpected, received);
+	}
+	
+	private static HttpURLConnection getHttpConnection() throws IOException {
 		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
 		urlBuilder.replace(0, 5, "https://");
 		URL url = new URL(urlBuilder.toString());
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
 		
-		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-		conn.setRequestMethod(method);
-		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
-		
-		String message = msgToSend;
-		conn.setDoOutput(true);
-		OutputStreamWriter out = new OutputStreamWriter(conn.getOutputStream());
-		out.write(message, 0, message.length());
+		HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+		connection.setRequestProperty("ServiceBusAuthorization", tokenString);
+		return connection;
+	}
+	
+	private static void sendBytesOverHttp(HttpURLConnection connection, byte[] b, int off, int len) throws IOException {
+		connection.setRequestMethod((len > 0) ? "POST" : "GET");
+		connection.setDoOutput(true);
+		OutputStream out = connection.getOutputStream();
+		out.write(b, off, len);
 		out.flush();
 		out.close();
-
-		String received = readStringFromStream(conn.getInputStream());
-		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, conn.getResponseCode());
-		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, conn.getResponseMessage());
-		assertEquals("Http connection sender did not receive the expected response message size.", 
-				msgExpected.length(), 
-				received.length());
-		assertEquals("Http connection sender did not receive the expected response message.", msgExpected, received);
 	}
 	
 	private static void sendResponseMessages(RelayedHttpListenerContext context, String[] messages, boolean hasPause) {
@@ -326,18 +392,28 @@ public class SendReceiveTest {
 		}
 	}
 	
-	private static String readStringFromStream(InputStream inputStream) throws IOException {
+	private static byte[] readBytesFromStream(InputStream inputStream) throws IOException {
 		if (inputStream == null) {
-			return emptyStr;
+			return new byte[0];
 		}
 		
-		StringBuilder builder = new StringBuilder();
-		String inputLine;
-		try (BufferedReader inStream = new BufferedReader(new InputStreamReader(inputStream))){
-			while ((inputLine = inStream.readLine()) != null) {
-				builder.append(inputLine);
+		ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+		while (true) {
+			int i = inputStream.read();
+			if (i == -1) {
+				break;
+			} else {
+				byteStream.write(i);
 			}
 		}
-		return builder.toString();
+		return byteStream.toByteArray();
+	}
+	
+	private byte[] getByteSet() {
+		byte[] byteSet = new byte[256];
+		for (int i = 0; i < 256; i++) {
+			byteSet[i] = (byte) i;
+		}
+		return byteSet;
 	}
 }
