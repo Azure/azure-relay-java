@@ -231,7 +231,7 @@ public class SendReceiveTest {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
 		return client.createConnectionAsync().thenCompose(channel -> {
-			return channel.writeAsync(ByteBuffer.wrap(msgToSend.clone())).thenCompose($void -> {
+			return channel.writeAsync(ByteBuffer.wrap(msgToSend)).thenCompose($void -> {
 				return channel.readAsync();
 			}).thenCompose(bytesReceived -> {
 				byte[] msgReceived = bytesReceived.array();
@@ -248,7 +248,7 @@ public class SendReceiveTest {
 				assertTrue("Websocket listener did not receive the expected message.", Arrays.equals(msgExpected, bytesReceived.array()));
 			})
 			.thenCompose(nullResult -> {
-				return channel.writeAsync(ByteBuffer.wrap(msgToSend.clone()));
+				return channel.writeAsync(ByteBuffer.wrap(msgToSend));
 			})
 			.thenCompose(nullResult -> {
 				return channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
@@ -310,7 +310,7 @@ public class SendReceiveTest {
 		
 		try {
 			for (int i = 0; i < messages.length; i++) {
-				response.getOutputStream().writeAsync(messages[i].clone(), 0, messages[i].length).join();
+				response.getOutputStream().writeAsync(messages[i], 0, messages[i].length).join();
 				
 				// Pause for testing the flush timeout
 				if (hasPause && i < messages.length - 1) {

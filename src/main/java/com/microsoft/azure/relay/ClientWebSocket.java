@@ -233,17 +233,14 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 						else {
 							ByteBuffer bytes = null;
 							if (data instanceof byte[]) {
-								bytes = ByteBuffer.wrap((byte[]) data);
+								bytes = ByteBuffer.wrap(((byte[]) data).clone());
 							} 
 							else if (data instanceof ByteBuffer) {
-								bytes = (ByteBuffer) data;
-							}
-							else if (data instanceof String) {
-								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
+								bytes = deepCopyByteBuffer((ByteBuffer) data);
 							}
 							else {
 								throw new IllegalArgumentException(
-										"The data to be sent should be String, ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
+									"The data to be sent should be ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
 							}
 							
 							int bytesToSend = bytes.remaining();
@@ -342,6 +339,15 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	@OnError
 	public void onError(Session session, Throwable cause) {
 		RelayLogger.throwingException(cause, this);
+	}
+	
+	private static ByteBuffer deepCopyByteBuffer(ByteBuffer original) {
+       ByteBuffer clone = ByteBuffer.allocate(original.capacity());
+       original.rewind();
+       clone.put(original);
+       original.rewind();
+       clone.flip();
+       return clone;
 	}
 	
 	private static class MessageFragment {
