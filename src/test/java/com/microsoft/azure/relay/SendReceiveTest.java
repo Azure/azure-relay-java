@@ -31,33 +31,25 @@ import org.junit.Test;
 import com.microsoft.azure.relay.HybridHttpConnection.ResponseStream;
 
 public class SendReceiveTest {
+	private static final int EMPTY_BYTES_SIZE = 0;
+	private static final int SMALL_BYTES_SIZE = 256;
+	private static final int LARGE_BYTES_SIZE = 64*1024 + 1;
+	private static final int STATUS_CODE = HttpStatus.ACCEPTED_202;
+	private static final String STATUS_DESCRIPTION = "OK";
+	private static final byte[] EMPTY_BYTES = getTestBytes(EMPTY_BYTES_SIZE);
+	private static final byte[] SMALL_BYTES = getTestBytes(SMALL_BYTES_SIZE);
+	private static final byte[] LARGE_BYTES = getTestBytes(LARGE_BYTES_SIZE);
+	
 	private static HybridConnectionListener listener;
 	private static TokenProvider tokenProvider;
 	private static HybridConnectionClient client;
-	private static final int STATUS_CODE = HttpStatus.ACCEPTED_202;
-	private static final String STATUS_DESCRIPTION = "OK";
 	private static int listenerReceiveCount = 0;
 	private static int senderReceiveCount = 0;
-	
-	// empty test string for GET method
-	private static String emptyStr = "";
-	// small test string that's under 64kb
-	private static String smallStr = "smallStr";
-	// large test string that's over 64kb
-	private static String largeStr;
 	
 	@BeforeClass
 	public static void init() throws URISyntaxException {
 		tokenProvider = TokenProvider.createSharedAccessSignatureTokenProvider(TestUtil.KEY_NAME, TestUtil.KEY);
 		listener = new HybridConnectionListener(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
-
-		// Build the large string in small chunks because hardcoding a large string may not compile
-		StringBuilder builder = new StringBuilder();
-		String alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		for (int i = 0; i < 2000; i++) {
-			builder.append(alphabet);
-		}
-		largeStr = builder.toString();
 		listener.openAsync(Duration.ofSeconds(15)).join();
 	}
 	
@@ -75,32 +67,32 @@ public class SendReceiveTest {
 	
 	@Test
 	public void websocketSmallSendSmallResponseTest() {
-		CompletableFuture<Void> listenerTask = websocketListener(smallStr, smallStr);
-		CompletableFuture<Void> clientTask = websocketClient(smallStr, smallStr);
+		CompletableFuture<Void> listenerTask = sendAndReceiveWithWebsocketListener(SMALL_BYTES, SMALL_BYTES);
+		CompletableFuture<Void> clientTask = sendAndReceiveWithWebsocketClient(SMALL_BYTES, SMALL_BYTES);
 		listenerTask.join();
 		clientTask.join();
 	}
 	
 	@Test
 	public void websocketSmallSendLargeResponseTest() {
-		CompletableFuture<Void> listenerTask = websocketListener(smallStr, largeStr);
-		CompletableFuture<Void> clientTask = websocketClient(largeStr, smallStr);
+		CompletableFuture<Void> listenerTask = sendAndReceiveWithWebsocketListener(SMALL_BYTES, LARGE_BYTES);
+		CompletableFuture<Void> clientTask = sendAndReceiveWithWebsocketClient(LARGE_BYTES, SMALL_BYTES);
 		listenerTask.join();
 		clientTask.join();
 	}
 	
 	@Test
 	public void websocketLargeSendSmallResponseTest() {
-		CompletableFuture<Void> listenerTask = websocketListener(largeStr, smallStr);
-		CompletableFuture<Void> clientTask = websocketClient(smallStr, largeStr);
+		CompletableFuture<Void> listenerTask = sendAndReceiveWithWebsocketListener(LARGE_BYTES, SMALL_BYTES);
+		CompletableFuture<Void> clientTask = sendAndReceiveWithWebsocketClient(SMALL_BYTES, LARGE_BYTES);
 		listenerTask.join();
 		clientTask.join();
 	}
 	
 	@Test
 	public void websocketLargeSendLargeResponseTest() {
-		CompletableFuture<Void> listenerTask = websocketListener(largeStr, largeStr);
-		CompletableFuture<Void> clientTask = websocketClient(largeStr, largeStr);
+		CompletableFuture<Void> listenerTask = sendAndReceiveWithWebsocketListener(LARGE_BYTES, LARGE_BYTES);
+		CompletableFuture<Void> clientTask = sendAndReceiveWithWebsocketClient(LARGE_BYTES, LARGE_BYTES);
 		listenerTask.join();
 		clientTask.join();
 	}
@@ -111,19 +103,19 @@ public class SendReceiveTest {
 		CompletableFuture<Integer> senderReceiveCount = new CompletableFuture<Integer>();
 		CompletableFuture<Integer> listenerReceiveCount = new CompletableFuture<Integer>();
 		
-		listener.acceptConnectionAsync().thenAcceptAsync((websocket) -> {
+		listener.acceptConnectionAsync().thenAcceptAsync(websocket -> {
 			for (int i = 1; i <= timesToRepeat; i++) {
 				websocket.readAsync().join();
-				websocket.writeAsync(StringUtil.toBuffer("hi")).join();
+				websocket.writeAsync(ByteBuffer.wrap(SMALL_BYTES)).join();
 				if (i == timesToRepeat) {
 					listenerReceiveCount.complete(i);
 				}
 			}
 		});
 		
-		client.createConnectionAsync().thenAccept((clientWebSocket) -> {
+		client.createConnectionAsync().thenAccept(clientWebSocket -> {
 			for (int i = 1; i <= timesToRepeat; i++) {
-				clientWebSocket.writeAsync(StringUtil.toBuffer("hi")).join();
+				clientWebSocket.writeAsync(ByteBuffer.wrap(SMALL_BYTES)).join();
 				clientWebSocket.readAsync().join();
 				if (i == timesToRepeat) {
 					senderReceiveCount.complete(i);
@@ -146,17 +138,17 @@ public class SendReceiveTest {
 		CompletableFuture<Void> senderReceiveTask = new CompletableFuture<Void>();
 		
 		for (int i = 1; i <= numberOfSenders; i++) {
-			listener.acceptConnectionAsync().thenAccept((websocket) -> {
+			listener.acceptConnectionAsync().thenAccept(websocket -> {
 				websocket.readAsync().thenRun(() -> {
 					listenerReceiveCount++;
-					websocket.writeAsync(StringUtil.toBuffer("hi")).join();
+					websocket.writeAsync(ByteBuffer.wrap(SMALL_BYTES)).join();
 					websocket.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal closure from listener")).join();
 				});
 			});
 			
 			HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
-			newClient.createConnectionAsync().thenAccept((socket) -> {
-				socket.writeAsync(StringUtil.toBuffer("hi")).join();
+			newClient.createConnectionAsync().thenAccept(socket -> {
+				socket.writeAsync(ByteBuffer.wrap(SMALL_BYTES)).join();
 				socket.readAsync().thenRun(() -> {
 					senderReceiveCount++;
 					if (senderReceiveCount == numberOfSenders) {
@@ -176,151 +168,87 @@ public class SendReceiveTest {
 	}
 	
 	@Test
-	public void websocketWriteReceiveAllByteValuesTest() throws URISyntaxException {
-		CompletableFuture<Void> listenerTask = listener.acceptConnectionAsync().thenCompose(connection -> {
-			return connection.readAsync()
-				.thenCompose(bufferReceived -> {
-					byte[] byteSet = getByteSet();
-					assertTrue("Websocket listener did not receive the expected bytes.", Arrays.equals(byteSet, bufferReceived.array()));
-					return connection.writeAsync(ByteBuffer.wrap(byteSet));
-				})
-				.thenCompose($void -> {
-					return connection.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal closure from listener"));
-				});
-		});
-		
-		HybridConnectionClient newClient = new HybridConnectionClient(new URI(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH), tokenProvider);
-		CompletableFuture<Void> clientTask = newClient.createConnectionAsync().thenCompose(connection -> {
-			return connection.writeAsync(ByteBuffer.wrap(getByteSet()))
-					.thenCompose($void -> {
-						return connection.readAsync();
-					})
-					.thenAccept(bufferReceived -> {
-						assertTrue("Websocket client did not receive the expected bytes.", Arrays.equals(getByteSet(), bufferReceived.array()));
-					});
-		});
-		listenerTask.join();
-		clientTask.join();
-	}
-	
-	@Test
 	public void httpGETAndSmallResponseTest() throws IOException {
-		listener.setRequestHandler((context) -> httpRequestHandler(context, emptyStr, smallStr));
-        httpRequestSender("GET", smallStr, emptyStr);
+		listener.setRequestHandler(context -> handleHttpRequest(context, EMPTY_BYTES, SMALL_BYTES));
+        sendHttpRequest(SMALL_BYTES, EMPTY_BYTES);
 	}
 	
 	@Test
 	public void httpGETAndLargeResponseTest() throws IOException {
-		listener.setRequestHandler((context) -> httpRequestHandler(context, emptyStr, largeStr));
-        httpRequestSender("GET", largeStr, emptyStr);
+		listener.setRequestHandler(context -> handleHttpRequest(context, EMPTY_BYTES, LARGE_BYTES));
+        sendHttpRequest(LARGE_BYTES, EMPTY_BYTES);
 	}
 	
 	@Test
 	public void httpSmallPOSTAndSmallResponseTest() throws IOException {
-		listener.setRequestHandler((context) -> httpRequestHandler(context, smallStr, smallStr));
-        httpRequestSender("POST", smallStr, smallStr);
+		listener.setRequestHandler(context -> handleHttpRequest(context, SMALL_BYTES, SMALL_BYTES));
+        sendHttpRequest(SMALL_BYTES, SMALL_BYTES);
 	}
 	
 	@Test
 	public void httpSmallPOSTAndLargeResponseTest() throws IOException {
-		listener.setRequestHandler((context) -> httpRequestHandler(context, smallStr, largeStr));
-        httpRequestSender("POST", largeStr, smallStr);
+		listener.setRequestHandler(context -> handleHttpRequest(context, SMALL_BYTES, LARGE_BYTES));
+        sendHttpRequest(LARGE_BYTES, SMALL_BYTES);
 	}
 	
 	@Test
 	public void httpLargePOSTAndSmallResponseTest() throws IOException {
-		listener.setRequestHandler((context) -> httpRequestHandler(context, largeStr, smallStr));
-        httpRequestSender("POST", smallStr, largeStr);
+		listener.setRequestHandler(context -> handleHttpRequest(context, LARGE_BYTES, SMALL_BYTES));
+        sendHttpRequest(SMALL_BYTES, LARGE_BYTES);
 	}
 	
 	@Test
 	public void httpLargePOSTAndLargeResponseTest() throws IOException {
-		listener.setRequestHandler((context) -> httpRequestHandler(context, largeStr, largeStr));
-        httpRequestSender("POST", largeStr, largeStr);
+		listener.setRequestHandler(context -> handleHttpRequest(context, LARGE_BYTES, LARGE_BYTES));
+        sendHttpRequest(LARGE_BYTES, LARGE_BYTES);
 	}
 	
 	@Test
 	public void httpWriteSmallThenSmallResponseTest() throws IOException {
-		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {smallStr, smallStr}, false));
-		httpRequestSender("POST", smallStr + smallStr, smallStr);
+		listener.setRequestHandler(context -> sendResponseMessages(context, SMALL_BYTES, SMALL_BYTES));
+		sendHttpRequest(TestUtil.concatByteArrays(SMALL_BYTES, SMALL_BYTES), SMALL_BYTES);
 	}
 	
 	@Test
 	public void httpWriteSmallThenLargeResponseTest() throws IOException {
-		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {smallStr, largeStr}, false));
-		httpRequestSender("POST", smallStr + largeStr, smallStr);
+		listener.setRequestHandler(context -> sendResponseMessages(context, SMALL_BYTES, LARGE_BYTES));
+		sendHttpRequest(TestUtil.concatByteArrays(SMALL_BYTES, LARGE_BYTES), SMALL_BYTES);
 	}
 	
 	@Test
 	public void httpWriteLargeThenSmallResponseTest() throws IOException {
-		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {largeStr, smallStr}, false));
-		httpRequestSender("POST", largeStr + smallStr, smallStr);
+		listener.setRequestHandler(context -> sendResponseMessages(context, LARGE_BYTES, SMALL_BYTES));
+		sendHttpRequest(TestUtil.concatByteArrays(LARGE_BYTES, SMALL_BYTES), SMALL_BYTES);
 	}
 	
 	@Test
 	public void httpWriteResponseAfterFlushTimerTest() throws IOException {
-		listener.setRequestHandler(context -> sendResponseMessages(context, new String[] {smallStr, smallStr}, true));
-		httpRequestSender("POST", smallStr + smallStr, smallStr);
+		listener.setRequestHandler(context -> sendResponseMessages(context, true, SMALL_BYTES, SMALL_BYTES));
+		sendHttpRequest(TestUtil.concatByteArrays(SMALL_BYTES, SMALL_BYTES), SMALL_BYTES);
 	}
 	
-	@Test
-	public void httpWriteResponseEnsureOrderTest() throws IOException {
-		String[] messages = new String[1010]; // 1000 small messages followed by 10 large ones
-		for (int i = 0; i < messages.length; i++) {
-			messages[i] = i + ((i < 1000) ? smallStr : largeStr);
-		}
-		listener.setRequestHandler(context -> sendResponseMessages(context, messages, false));
-		httpRequestSender("POST", String.join("", messages), smallStr);
-	}
-	
-	@Test
-	public void httpWriteReceiveAllByteValuesTest() throws IOException {
-		byte[] byteSet = getByteSet();
-		listener.setRequestHandler(context -> {
-			RelayedHttpListenerResponse response = context.getResponse();
-			response.setStatusCode(STATUS_CODE);
-			response.setStatusDescription(STATUS_DESCRIPTION);
-			
-			try {
-				response.getOutputStream().writeAsync(byteSet, 0, byteSet.length).join();
-			} catch (Exception e) {
-				fail(e.getMessage());
-			} finally {
-			    context.getResponse().close();
-			}
-		});
-		
-		HttpURLConnection connection = getHttpConnection();
-		sendBytesOverHttp(connection, byteSet, 0, byteSet.length);
-		byte[] received = readBytesFromStream(connection.getInputStream());
-		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, connection.getResponseCode());
-		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, connection.getResponseMessage());
-		assertEquals("Http connection sender did not receive the expected response message size.", byteSet.length, received.length);
-		assertTrue("Http connection sender did not receive the expected response message.", Arrays.equals(byteSet, received));
-	}
-	
-	private static CompletableFuture<Void> websocketClient(String msgExpected, String msgToSend) {
+	private static CompletableFuture<Void> sendAndReceiveWithWebsocketClient(byte[] msgExpected, byte[] msgToSend) {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
-		return client.createConnectionAsync().thenCompose((channel) -> {
-			return channel.writeAsync(StringUtil.toBuffer(msgToSend)).thenCompose($void -> {
+		return client.createConnectionAsync().thenCompose(channel -> {
+			return channel.writeAsync(ByteBuffer.wrap(msgToSend.clone())).thenCompose($void -> {
 				return channel.readAsync();
-			}).thenCompose((bytesReceived) -> {
-				String msgReceived = new String(bytesReceived.array());
+			}).thenCompose(bytesReceived -> {
+				byte[] msgReceived = bytesReceived.array();
 				receivedReply.set(true);
-				assertEquals("Websocket sender did not receive the expected reply.", msgExpected, msgReceived);
+				assertTrue("Websocket sender did not receive the expected reply.", Arrays.equals(msgExpected, msgReceived));
 				return channel.closeAsync();
 			}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
 		});
 	}
 	
-	private static CompletableFuture<Void> websocketListener(String msgExpected, String msgToSend) {
-		return listener.acceptConnectionAsync().thenComposeAsync((channel) -> {
+	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(byte[] msgExpected, byte[] msgToSend) {
+		return listener.acceptConnectionAsync().thenComposeAsync(channel -> {
 			return channel.readAsync().thenAccept(bytesReceived -> {
-				assertEquals("Websocket listener did not receive the expected message.", msgExpected, new String(bytesReceived.array()));
+				assertTrue("Websocket listener did not receive the expected message.", Arrays.equals(msgExpected, bytesReceived.array()));
 			})
 			.thenCompose(nullResult -> {
-				return channel.writeAsync(StringUtil.toBuffer(msgToSend));
+				return channel.writeAsync(ByteBuffer.wrap(msgToSend.clone()));
 			})
 			.thenCompose(nullResult -> {
 				return channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
@@ -328,27 +256,27 @@ public class SendReceiveTest {
 		});
 	}
 	
-	private static void httpRequestHandler(RelayedHttpListenerContext context, String msgExpected, String msgToSend) {
+	private static void handleHttpRequest(RelayedHttpListenerContext context, byte[] msgExpected, byte[] msgToSend) {
 		try {
-	        String receivedText = new String(readBytesFromStream(context.getRequest().getInputStream()));
-	        assertEquals("Listener did not received the expected message from http connection.", msgExpected, receivedText);
+	        byte[] receivedText = readBytesFromStream(context.getRequest().getInputStream());
+	        assertTrue("Listener did not received the expected message from http connection.", Arrays.equals(msgExpected, receivedText));
 		} catch (IOException e) {
 			fail(e.getMessage());
 		}
-        sendResponseMessages(context, new String[] {msgToSend}, false);
+        sendResponseMessages(context, msgToSend);
 	}
 	
-	private static void httpRequestSender(String method, String msgExpected, String msgToSend) throws IOException {
+	private static void sendHttpRequest(byte[] msgExpected, byte[] msgToSend) throws IOException {
 		HttpURLConnection connection = getHttpConnection();
-		sendBytesOverHttp(connection, msgToSend.getBytes(), 0, msgToSend.length());
+		sendBytesOverHttp(connection, msgToSend, 0, msgToSend.length);
 		
-		String received = new String(readBytesFromStream(connection.getInputStream()));
+		byte[] received = readBytesFromStream(connection.getInputStream());
 		assertEquals("Http connection sender did not receive the expected response code.", STATUS_CODE, connection.getResponseCode());
 		assertEquals("Http connection sender did not receive the expected response description.", STATUS_DESCRIPTION, connection.getResponseMessage());
 		assertEquals("Http connection sender did not receive the expected response message size.", 
-				msgExpected.length(), 
-				received.length());
-		assertEquals("Http connection sender did not receive the expected response message.", msgExpected, received);
+				msgExpected.length, 
+				received.length);
+		assertTrue("Http connection sender did not receive the expected response message.", Arrays.equals(msgExpected, received));
 	}
 	
 	private static HttpURLConnection getHttpConnection() throws IOException {
@@ -363,7 +291,7 @@ public class SendReceiveTest {
 	}
 	
 	private static void sendBytesOverHttp(HttpURLConnection connection, byte[] b, int off, int len) throws IOException {
-		connection.setRequestMethod((len > 0) ? "POST" : "GET");
+		connection.setRequestMethod(len > 0 ? "POST" : "GET");
 		connection.setDoOutput(true);
 		OutputStream out = connection.getOutputStream();
 		out.write(b, off, len);
@@ -371,14 +299,18 @@ public class SendReceiveTest {
 		out.close();
 	}
 	
-	private static void sendResponseMessages(RelayedHttpListenerContext context, String[] messages, boolean hasPause) {
+	private static void sendResponseMessages(RelayedHttpListenerContext context, byte[]... messages) {
+		sendResponseMessages(context, false, messages);
+	}
+	
+	private static void sendResponseMessages(RelayedHttpListenerContext context, boolean hasPause, byte[]... messages) {
 		RelayedHttpListenerResponse response = context.getResponse();
 		response.setStatusCode(STATUS_CODE);
 		response.setStatusDescription(STATUS_DESCRIPTION);
 		
 		try {
 			for (int i = 0; i < messages.length; i++) {
-				response.getOutputStream().writeAsync(messages[i].getBytes(), 0, messages[i].length()).join();
+				response.getOutputStream().writeAsync(messages[i].clone(), 0, messages[i].length).join();
 				
 				// Pause for testing the flush timeout
 				if (hasPause && i < messages.length - 1) {
@@ -388,7 +320,7 @@ public class SendReceiveTest {
 		} catch (Exception e) {
 			fail(e.getMessage());
 		} finally {
-		    context.getResponse().close();
+		    response.close();
 		}
 	}
 	
@@ -409,11 +341,12 @@ public class SendReceiveTest {
 		return byteStream.toByteArray();
 	}
 	
-	private byte[] getByteSet() {
-		byte[] byteSet = new byte[256];
-		for (int i = 0; i < 256; i++) {
-			byteSet[i] = (byte) i;
+	/** Creates and fills a byte[] of given size by repeating bytes 0 to 255 **/
+	private static byte[] getTestBytes(int size) {
+		byte[] bytes = new byte[size];
+		for (int i = 0; i < size; i++) {
+			bytes[i] = (byte) (i % 256);
 		}
-		return byteSet;
+		return bytes;
 	}
 }
