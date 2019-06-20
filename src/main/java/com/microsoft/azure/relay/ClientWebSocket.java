@@ -247,6 +247,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 							}
 							
 							int bytesToSend = bytes.remaining();
+							// sendBinary() will cause the content of the byte array within the ByteBuffer to change
 							remote.sendBinary(bytes, isEnd);
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(bytesToSend));
 						}
