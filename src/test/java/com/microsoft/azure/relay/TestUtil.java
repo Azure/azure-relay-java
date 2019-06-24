@@ -1,6 +1,8 @@
 package com.microsoft.azure.relay;
 
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class TestUtil {
 	public static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
@@ -23,5 +25,5 @@ public class TestUtil {
             offset += array.length;
         }
         return result;
-	}
+    }
 }

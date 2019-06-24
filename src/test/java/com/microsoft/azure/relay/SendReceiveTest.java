@@ -72,6 +72,18 @@ public class SendReceiveTest {
 		listenerTask.join();
 		clientTask.join();
 	}
+
+	@Test
+	public void websocketSmallSendSmallResponseByteBufferTest() {
+		CompletableFuture<Void> listenerTask = sendAndReceiveWithWebsocketListener(
+			ByteBuffer.wrap(SMALL_BYTES.clone(), 10, SMALL_BYTES_SIZE / 2),
+			ByteBuffer.wrap(SMALL_BYTES.clone(), 2, SMALL_BYTES_SIZE - 20));
+		CompletableFuture<Void> clientTask = sendAndReceiveWithWebsocketClient(
+			ByteBuffer.wrap(SMALL_BYTES.clone(), 2, SMALL_BYTES_SIZE - 20),
+			ByteBuffer.wrap(SMALL_BYTES.clone(), 10, SMALL_BYTES_SIZE / 2));
+		listenerTask.join();
+		clientTask.join();
+	}
 	
 	@Test
 	public void websocketSmallSendLargeResponseTest() {
@@ -228,27 +240,34 @@ public class SendReceiveTest {
 	}
 	
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketClient(byte[] msgExpected, byte[] msgToSend) {
+		return sendAndReceiveWithWebsocketClient(ByteBuffer.wrap(msgExpected.clone()), ByteBuffer.wrap(msgToSend.clone()));
+	}
+
+	private static CompletableFuture<Void> sendAndReceiveWithWebsocketClient(ByteBuffer msgExpected, ByteBuffer msgToSend) {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
 		
 		return client.createConnectionAsync().thenCompose(channel -> {
-			return channel.writeAsync(ByteBuffer.wrap(msgToSend.clone())).thenCompose($void -> {
+			return channel.writeAsync(msgToSend).thenCompose($void -> {
 				return channel.readAsync();
-			}).thenCompose(bytesReceived -> {
-				byte[] msgReceived = bytesReceived.array();
+			}).thenCompose(msgReceived -> {
 				receivedReply.set(true);
-				assertTrue("Websocket sender did not receive the expected reply.", Arrays.equals(msgExpected, msgReceived));
+				assertTrue("Websocket sender did not receive the expected reply.", msgExpected.equals(msgReceived));
 				return channel.closeAsync();
 			}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
 		});
 	}
 	
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(byte[] msgExpected, byte[] msgToSend) {
+		return sendAndReceiveWithWebsocketListener(ByteBuffer.wrap(msgExpected.clone()), ByteBuffer.wrap(msgToSend.clone()));
+	}
+
+	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(ByteBuffer msgExpected, ByteBuffer msgToSend) {
 		return listener.acceptConnectionAsync().thenComposeAsync(channel -> {
-			return channel.readAsync().thenAccept(bytesReceived -> {
-				assertTrue("Websocket listener did not receive the expected message.", Arrays.equals(msgExpected, bytesReceived.array()));
+			return channel.readAsync().thenAccept(msgReceived -> {
+				assertTrue("Websocket listener did not receive the expected reply.", msgExpected.equals(msgReceived));
 			})
 			.thenCompose(nullResult -> {
-				return channel.writeAsync(ByteBuffer.wrap(msgToSend.clone()));
+				return channel.writeAsync(msgToSend);
 			})
 			.thenCompose(nullResult -> {
 				return channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
