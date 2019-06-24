@@ -245,6 +245,7 @@ public class SendReceiveTest {
 
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketClient(ByteBuffer msgExpected, ByteBuffer msgToSend) {
 		AtomicBoolean receivedReply = new AtomicBoolean(false);
+		ByteBuffer origMsgToSend = msgToSend.duplicate();
 		
 		return client.createConnectionAsync().thenCompose(channel -> {
 			return channel.writeAsync(msgToSend).thenCompose($void -> {
@@ -253,7 +254,10 @@ public class SendReceiveTest {
 				receivedReply.set(true);
 				assertTrue("Websocket sender did not receive the expected reply.", msgExpected.equals(msgReceived));
 				return channel.closeAsync();
-			}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
+			}).thenRun(() -> {
+				checkMsgToSendIsModified(origMsgToSend, msgToSend);
+				assertTrue("Did not receive message from websocket sender.", receivedReply.get());
+			});
 		});
 	}
 	
@@ -262,6 +266,8 @@ public class SendReceiveTest {
 	}
 
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(ByteBuffer msgExpected, ByteBuffer msgToSend) {
+		ByteBuffer origMsgToSend = msgToSend.duplicate();
+		
 		return listener.acceptConnectionAsync().thenComposeAsync(channel -> {
 			return channel.readAsync().thenAccept(msgReceived -> {
 				assertTrue("Websocket listener did not receive the expected reply.", msgExpected.equals(msgReceived));
@@ -270,6 +276,7 @@ public class SendReceiveTest {
 				return channel.writeAsync(msgToSend);
 			})
 			.thenCompose(nullResult -> {
+				checkMsgToSendIsModified(origMsgToSend, msgToSend);
 				return channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
 			});
 		});
@@ -367,5 +374,12 @@ public class SendReceiveTest {
 			bytes[i] = (byte) (i % 256);
 		}
 		return bytes;
+	}
+	
+	/** Validates if the ByteBuffer to be sent was modified after being sent **/
+	private static void checkMsgToSendIsModified(ByteBuffer msgToSend, ByteBuffer afterSend) {
+		assertEquals("The send buffer limit has been modified", msgToSend.limit(), afterSend.limit());
+		assertEquals("The send buffer position has been modified", msgToSend.position(), afterSend.position());
+		assertArrayEquals("The send buffer content has been modified", msgToSend.array(), afterSend.array());
 	}
 }
