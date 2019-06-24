@@ -26,9 +26,4 @@ public class TestUtil {
         }
         return result;
     }
-    
-    static byte[] byteBufferToArray(ByteBuffer buffer) {
-        return Arrays.copyOfRange(buffer.array(), buffer.arrayOffset() + buffer.position(),
-                buffer.remaining() + buffer.position() + buffer.arrayOffset());
-    }
 }

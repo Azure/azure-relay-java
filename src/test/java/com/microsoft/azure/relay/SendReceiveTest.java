@@ -249,13 +249,9 @@ public class SendReceiveTest {
 		return client.createConnectionAsync().thenCompose(channel -> {
 			return channel.writeAsync(msgToSend).thenCompose($void -> {
 				return channel.readAsync();
-			}).thenCompose(bytesReceived -> {
-				byte[] msgReceived = TestUtil.byteBufferToArray(bytesReceived);
+			}).thenCompose(msgReceived -> {
 				receivedReply.set(true);
-				assertArrayEquals(
-					"Websocket sender did not receive the expected reply.",
-					 TestUtil.byteBufferToArray(msgExpected),
-					 msgReceived);
+				assertTrue("Websocket sender did not receive the expected reply.", msgExpected.equals(msgReceived));
 				return channel.closeAsync();
 			}).thenRun(() -> assertTrue("Did not receive message from websocket sender.", receivedReply.get()));
 		});
@@ -268,13 +264,7 @@ public class SendReceiveTest {
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(ByteBuffer msgExpected, ByteBuffer msgToSend) {
 		return listener.acceptConnectionAsync().thenComposeAsync(channel -> {
 			return channel.readAsync().thenAccept(msgReceived -> {
-				byte[] bytesReceived = TestUtil.byteBufferToArray(msgReceived);
-				byte[] bytesExpected = TestUtil.byteBufferToArray(msgExpected);
-			
-				assertArrayEquals(
-					"Websocket listener did not receive the expected message.",
-					bytesExpected,
-					bytesReceived);
+				assertTrue("Websocket listener did not receive the expected reply.", msgExpected.equals(msgReceived));
 			})
 			.thenCompose(nullResult -> {
 				return channel.writeAsync(msgToSend);
