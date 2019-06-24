@@ -231,24 +231,23 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(text.length()));
 						}
 						else {
-							ByteBuffer bytes = null;
+							byte[] bytes;
 							if (data instanceof byte[]) {
-								bytes = ByteBuffer.wrap((byte[]) data);
+								bytes = ((byte[]) data).clone();
 							} 
 							else if (data instanceof ByteBuffer) {
-								bytes = (ByteBuffer) data;
-							}
-							else if (data instanceof String) {
-								bytes = ByteBuffer.wrap(data.toString().getBytes(StringUtil.UTF8));
+								ByteBuffer buffer = (ByteBuffer) data;
+								bytes = new byte[buffer.remaining()];
+								buffer.get(bytes);
 							}
 							else {
 								throw new IllegalArgumentException(
-										"The data to be sent should be String, ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
+									"The data to be sent should be ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
 							}
 							
-							int bytesToSend = bytes.remaining();
+							int bytesToSend = bytes.length;
 							// sendBinary() will cause the content of the byte array within the ByteBuffer to change
-							remote.sendBinary(bytes, isEnd);
+							remote.sendBinary(ByteBuffer.wrap(bytes), isEnd);
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(bytesToSend));
 						}
 					} catch (Exception e) {
