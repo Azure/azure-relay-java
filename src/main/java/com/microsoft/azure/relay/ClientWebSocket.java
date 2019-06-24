@@ -231,21 +231,23 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(text.length()));
 						}
 						else {
-							ByteBuffer bytes = null;
+							byte[] bytes;
 							if (data instanceof byte[]) {
-								bytes = ByteBuffer.wrap(((byte[]) data).clone());
+								bytes = ((byte[]) data).clone();
 							} 
 							else if (data instanceof ByteBuffer) {
-								bytes = deepCopyByteBuffer((ByteBuffer) data);
+								ByteBuffer buffer = (ByteBuffer) data;
+								bytes = new byte[buffer.remaining()];
+								buffer.get(bytes);
 							}
 							else {
 								throw new IllegalArgumentException(
 									"The data to be sent should be ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
 							}
 							
-							int bytesToSend = bytes.remaining();
+							int bytesToSend = bytes.length;
 							// sendBinary() will cause the content of the byte array within the ByteBuffer to change
-							remote.sendBinary(bytes, isEnd);
+							remote.sendBinary(ByteBuffer.wrap(bytes), isEnd);
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(bytesToSend));
 						}
 					} catch (Exception e) {
@@ -339,15 +341,6 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	@OnError
 	public void onError(Session session, Throwable cause) {
 		RelayLogger.throwingException(cause, this);
-	}
-	
-	private static ByteBuffer deepCopyByteBuffer(ByteBuffer original) {
-		ByteBuffer clone = ByteBuffer.allocate(original.capacity());
-		clone.put(original.array());
-		clone.position(original.position());
-		clone.limit(original.limit());
-		clone.order(original.order());
-    	return clone;
 	}
 	
 	private static class MessageFragment {

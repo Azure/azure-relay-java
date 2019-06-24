@@ -76,11 +76,11 @@ public class SendReceiveTest {
 	@Test
 	public void websocketSmallSendSmallResponseByteBufferTest() {
 		CompletableFuture<Void> listenerTask = sendAndReceiveWithWebsocketListener(
-			ByteBuffer.wrap(SMALL_BYTES.clone(), 10, SMALL_BYTES_SIZE / 2),
-			ByteBuffer.wrap(SMALL_BYTES.clone(), 2, SMALL_BYTES_SIZE - 20));
+			ByteBuffer.wrap(SMALL_BYTES, 10, SMALL_BYTES_SIZE / 2),
+			ByteBuffer.wrap(SMALL_BYTES, 2, SMALL_BYTES_SIZE - 20));
 		CompletableFuture<Void> clientTask = sendAndReceiveWithWebsocketClient(
-			ByteBuffer.wrap(SMALL_BYTES.clone(), 2, SMALL_BYTES_SIZE - 20),
-			ByteBuffer.wrap(SMALL_BYTES.clone(), 10, SMALL_BYTES_SIZE / 2));
+			ByteBuffer.wrap(SMALL_BYTES, 2, SMALL_BYTES_SIZE - 20),
+			ByteBuffer.wrap(SMALL_BYTES, 10, SMALL_BYTES_SIZE / 2));
 		listenerTask.join();
 		clientTask.join();
 	}
@@ -240,7 +240,7 @@ public class SendReceiveTest {
 	}
 	
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketClient(byte[] msgExpected, byte[] msgToSend) {
-		return sendAndReceiveWithWebsocketClient(ByteBuffer.wrap(msgExpected.clone()), ByteBuffer.wrap(msgToSend.clone()));
+		return sendAndReceiveWithWebsocketClient(ByteBuffer.wrap(msgExpected), ByteBuffer.wrap(msgToSend));
 	}
 
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketClient(ByteBuffer msgExpected, ByteBuffer msgToSend) {
@@ -262,7 +262,7 @@ public class SendReceiveTest {
 	}
 	
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(byte[] msgExpected, byte[] msgToSend) {
-		return sendAndReceiveWithWebsocketListener(ByteBuffer.wrap(msgExpected.clone()), ByteBuffer.wrap(msgToSend.clone()));
+		return sendAndReceiveWithWebsocketListener(ByteBuffer.wrap(msgExpected), ByteBuffer.wrap(msgToSend));
 	}
 
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(ByteBuffer msgExpected, ByteBuffer msgToSend) {
@@ -336,7 +336,7 @@ public class SendReceiveTest {
 		
 		try {
 			for (int i = 0; i < messages.length; i++) {
-				response.getOutputStream().writeAsync(messages[i].clone(), 0, messages[i].length).join();
+				response.getOutputStream().writeAsync(messages[i], 0, messages[i].length).join();
 				
 				// Pause for testing the flush timeout
 				if (hasPause && i < messages.length - 1) {
@@ -379,7 +379,7 @@ public class SendReceiveTest {
 	/** Validates if the ByteBuffer to be sent was modified after being sent **/
 	private static void checkMsgToSendIsModified(ByteBuffer msgToSend, ByteBuffer afterSend) {
 		assertEquals("The send buffer limit has been modified", msgToSend.limit(), afterSend.limit());
-		assertEquals("The send buffer position has been modified", msgToSend.position(), afterSend.position());
+		assertEquals("The send buffer position has been modified", msgToSend.limit(), afterSend.position());
 		assertArrayEquals("The send buffer content has been modified", msgToSend.array(), afterSend.array());
 	}
 }
