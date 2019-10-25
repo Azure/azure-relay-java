@@ -68,12 +68,12 @@ class TokenRenewer {
 	}
 
 	private void scheduleRenewTimer(SecurityToken token) {
-	    if (this.renewTimer == null) {
-	        this.renewTimer = new Timer();    
-	    }
-	    
 	    if (scheduleLock.tryLock()) {
 	        try {
+	            if (this.renewTimer == null) {
+	                this.renewTimer = new Timer();    
+	            }
+	            
 	            Duration interval = Duration.between(Instant.now(), token.getExpiresAtUtc());
 	            if (interval.isNegative()) {
 	                RelayLogger.logEvent("tokenRenewNegativeDuration", this.listener);
@@ -85,6 +85,7 @@ class TokenRenewer {
 	                    RelayConstants.CLIENT_MINIMUM_TOKEN_REFRESH_INTERVAL : interval;
 
 	            if (this.renewTimerTask != null) {
+	                // There may already be renew task scheduled previously, cancel to prevent replication
 	                this.renewTimerTask.cancel();
 	            }
                 this.renewTimerTask = new TimerTask() {
