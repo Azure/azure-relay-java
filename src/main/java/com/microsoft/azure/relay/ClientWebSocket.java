@@ -3,7 +3,9 @@ package com.microsoft.azure.relay;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.io.IOException;
@@ -12,6 +14,7 @@ import javax.websocket.*;
 
 import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.util.component.LifeCycle;
+import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint implements RelayTraceSource {
@@ -297,6 +300,17 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		return this.closeTask;
 	}
 	
+    /**
+     * Release the resources taken by this websocket. This is a very lengthy execution.
+     */
+    void dispose() {
+        try {
+            ((LifeCycle) this.container).stop();
+        } catch (Exception e) {
+            RelayLogger.handledExceptionAsWarning(e, this);
+        }
+    }
+    
 	@OnOpen
 	public void onOpen(Session session, EndpointConfig config) {
 		RelayLogger.logEvent("connected", this);
@@ -323,14 +337,9 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	
 	@OnClose
 	public void onClose(Session session, CloseReason reason) {
-		CompletableFuture.runAsync(() -> {
-			try {
-				((LifeCycle) this.container).stop();	
-			} catch (Exception e) {
-				RelayLogger.handledExceptionAsWarning(e, this);
-			}
-		}, executor);
-		
+        CompletableFuture.runAsync(() -> {
+            this.dispose();
+        }, executor);
 		this.closeReason = reason;
 		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
 		this.textQueue.shutdown();
@@ -339,8 +348,14 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	}
 
 	@OnError
-	public void onError(Session session, Throwable cause) {
-		RelayLogger.throwingException(cause, this);
+	public void onError(Throwable cause) {
+		if (!this.isOpen()) {
+		    // A new websocket will be created through reconnection attempt, dispose this one
+	        CompletableFuture.runAsync(() -> {
+	            this.dispose();
+	        }, executor);
+		}
+	    RelayLogger.throwingException(cause, this);
 	}
 	
 	private static class MessageFragment {

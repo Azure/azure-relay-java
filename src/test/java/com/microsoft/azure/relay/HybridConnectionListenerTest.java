@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.junit.After;
 import org.junit.Before;
@@ -289,26 +290,44 @@ public class HybridConnectionListenerTest {
 	public void listenerReconnectionTest() {
 		AtomicInteger handlerExecuted = new AtomicInteger(0);
 		AtomicReference<Throwable> exception = new AtomicReference<>(new Exception());
-		
-		listener.setConnectingHandler((ex) -> {
+		listener.setConnectingHandler(ex -> {
 			exception.set(ex);
 			handlerExecuted.incrementAndGet();
 		});
 		
 		listener.openAsync(Duration.ofSeconds(15)).join();
-		ControlConnection controlConnection = listener.getControlConnection();
-		controlConnection.getConnectAsyncTask().thenCompose(controlWebSocket -> {
-			return controlWebSocket.closeAsync(); // This bypasses listener.close(), simulating an unexpected close
-		}).join();
-		
+		listener.injectFault(new ConnectionLostException());
+		assertFalse("listener should be disconnected temporarily for now", listener.isOnline());
 		CompletableFuture<Void> reconnectTask = CompletableFutureUtil.delayAsync(Duration.ofMillis(1000), EXECUTOR).thenRun(() -> {
 			assertTrue("listener should be reconnected now", listener.isOnline());
 		});
 
-		assertFalse("listener should be disconnected temporarily for now", listener.isOnline());
-		assertEquals("The reconnecting handler was not called exactly once", 1, handlerExecuted.get());
+		assertEquals("The reconnecting handler was not called exactly once.", 1, handlerExecuted.get());
 		assertTrue("Exception should be ConnectionLostException.", exception.get() instanceof ConnectionLostException);	
 		reconnectTask.join();
+	}
+	
+	// The listener should continuously try to reconnect if network is lost
+	@Test
+	public void listenerNetworkLostTest() throws Exception {
+	    int delayIndex = 4;
+        AtomicInteger handlerExecuted = new AtomicInteger(0);
+        listener.setConnectingHandler(ex -> {
+            handlerExecuted.incrementAndGet();
+        });
+        
+        listener.openAsync(Duration.ofSeconds(15)).join();
+        listener.injectFault(new UpgradeException(CONNECTION_URI, StatusCode.TRY_AGAIN_LATER, "Connection failed due to fault injection."));
+        listener.injectFault(new ConnectionLostException());
+        assertFalse("listener should be disconnected temporarily for now", listener.isOnline());
+        
+        Thread.sleep(RelayConstants.CONNECTION_DELAY_INTERVALS[delayIndex - 1].toMillis());
+        listener.clearFault();
+        
+        // ensure we give enough time for the backoff delay then reconnect
+        Thread.sleep(RelayConstants.CONNECTION_DELAY_INTERVALS[delayIndex].toMillis() + 500);
+        assertTrue("listener should be reconnected now.", listener.isOnline());
+        assertTrue("The reconnecting handler should be triggered multiple times. Actual: " + handlerExecuted.get(), handlerExecuted.get() > 1);
 	}
 	
 	@Test

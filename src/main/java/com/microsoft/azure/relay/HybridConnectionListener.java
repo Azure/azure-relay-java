@@ -19,6 +19,7 @@ import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.json.JSONObject;
 
 public class HybridConnectionListener implements RelayTraceSource, AutoCloseable {
@@ -36,6 +37,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private URI address;
 	private TrackingContext trackingContext;
 	private TokenProvider tokenProvider;
+	private Throwable injectedFault;
 	private Consumer<Throwable> connectingHandler;
 	private Consumer<Throwable> offlineHandler;
 	private Runnable onlineHandler;
@@ -258,11 +260,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 */
 	public void setOnlineHandler(Runnable onOnline) {
 		this.onlineHandler = onOnline;
-	}
-	
-	// For testing and debugging access
-	ControlConnection getControlConnection() {
-		return this.controlConnection;
 	}
 
 	/**
@@ -494,15 +491,43 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			RelayLogger.logEvent("rendezvousStop", this);
 		});
 	}
+	
+	void clearFault() {
+        this.injectedFault = null;
+	}
+	
+	/**
+	 * Inject a specific exception to the listener or its underlying websocket for testing purposes
+	 * @param throwable The following exceptions can be interpreted:
+	 * </br><b>UpgradeException</b>    - When this exception is injected, all listener websocket connection attempts will fail 
+	 *                                   until the fault has been cleared.
+	 * </br><b>ConnectionException</b> - Injecting this exception will kill the listener's websocket (simulate a network disconnect),
+	 *                                   but should cause the listener to try to reconnect.
+	 */
+	void injectFault(Throwable throwable) {
+	    if (throwable == null) {
+	        return;
+	    }
+	    
+	    if (throwable instanceof UpgradeException) {
+	        this.injectedFault = throwable;
+	    }
+	    
+	    if (throwable instanceof ConnectionLostException) {
+	        CompletableFuture<ClientWebSocket> controlConnectionTask = this.controlConnection.connectAsyncTask;
+	        if (controlConnectionTask != null) {
+	            controlConnectionTask.thenAccept(webSocket -> {
+	                webSocket.dispose();
+	            });
+	        }
+	    }
+	}
 
 	/**
 	 * Connects, maintains, and transparently reconnects this listener's control
 	 * connection with the cloud service.
 	 */
 	static final class ControlConnection implements AutoCloseable {
-		// Retries after 0, 1, 2, 5, 10, 30 seconds
-		private static final Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),
-				Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30) };
 		private final HybridConnectionListener listener;
 		private final URI address;
 		@SuppressWarnings("unused")
@@ -535,13 +560,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			return lastError;
 		}
 		
-		// For test and debugging access only
-		CompletableFuture<ClientWebSocket> getConnectAsyncTask() {
-			synchronized (this.thisLock) {
-				return this.connectAsyncTask;
-			}
-		}
-
 		/**
 		 * Establish websocket connection between the control websocket and the cloud
 		 * service, then start receiving command messages
@@ -674,7 +692,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			try {
 				this.listener.throwIfDisposed();
 				
-				CompletableFuture<Void> delayTask = CompletableFutureUtil.delayAsync(CONNECTION_DELAY_INTERVALS[this.connectDelayIndex], EXECUTOR);
+				CompletableFuture<Void> delayTask = CompletableFutureUtil.delayAsync(RelayConstants.CONNECTION_DELAY_INTERVALS[this.connectDelayIndex], EXECUTOR);
 				CompletableFuture<SecurityToken> token = this.tokenRenewer.getTokenAsync();
 
 				// Set the authentication in request header
@@ -696,6 +714,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 
 				ClientWebSocket webSocket = new ClientWebSocket(this.listener.trackingContext, EXECUTOR);
 				return delayTask.thenCompose(($void) -> {
+	                if (this.listener.injectedFault != null && this.listener.injectedFault instanceof UpgradeException) {
+	                    return CompletableFutureUtil.fromException(this.listener.injectedFault);
+	                }
+	                
 					return webSocket.connectAsync(websocketUri, timeout, config)
 						.thenApply(($void2) -> {
 							this.onOnline();
@@ -763,7 +785,17 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 */
 		private CompletableFuture<Boolean> receivePumpCoreAsync() {
 			CompletableFuture<ClientWebSocket> connectTask = this.ensureConnectTask(null);
-			return connectTask.thenCompose(webSocket -> {
+			return connectTask.handle((webSocket, ex) -> {
+			    if (ex != null) {
+			        this.lastError = ex;
+			        return null;
+			    }
+			    return webSocket;
+			}).thenCompose(webSocket -> {
+			    if (webSocket == null || !webSocket.isOpen()) {
+			        return CompletableFuture.completedFuture(this.onDisconnect(this.lastError));
+			    }
+			    
 				return webSocket.readTextAsync()
 					.thenApply(receivedMessage -> {
 						boolean keepGoing = true;
@@ -822,12 +854,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		}
 
 		// Returns true if this control connection should attempt to reconnect after this exception.
-		private boolean onDisconnect(Exception lastError) {
+		private boolean onDisconnect(Throwable lastError) {
 
 			synchronized (this.thisLock) {
 				this.lastError = lastError;
 
-				if (this.connectDelayIndex < CONNECTION_DELAY_INTERVALS.length - 1) {
+				if (this.connectDelayIndex < RelayConstants.CONNECTION_DELAY_INTERVALS.length - 1) {
 					this.connectDelayIndex++;
 				}
 			}
@@ -847,7 +879,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			return shouldReconnect;
 		}
 
-		private boolean shouldReconnect(Exception exception) {
+		private boolean shouldReconnect(Throwable exception) {
 			return (!(exception instanceof EndpointNotFoundException));
 		}
 
