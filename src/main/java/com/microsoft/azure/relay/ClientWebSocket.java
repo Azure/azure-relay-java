@@ -134,7 +134,11 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 				throw RelayLogger.throwingException(new RuntimeIOException("connection to the server failed."), this);
 			}
 		},
-		this.executor);
+		this.executor).whenComplete(($void, ex) -> {
+		    if (ex != null) {
+		        this.dispose();
+		    }
+		});
 	}
 
 	/**

@@ -310,7 +310,7 @@ public class HybridConnectionListenerTest {
 	// The listener should continuously try to reconnect if network is lost
 	@Test
 	public void listenerNetworkLostTest() throws Exception {
-	    int delayIndex = 4;
+	    int delayIndex = 2;
         AtomicInteger handlerExecuted = new AtomicInteger(0);
         listener.setConnectingHandler(ex -> {
             handlerExecuted.incrementAndGet();
