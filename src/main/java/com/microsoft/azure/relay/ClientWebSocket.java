@@ -3,9 +3,7 @@ package com.microsoft.azure.relay;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.io.IOException;
@@ -14,7 +12,6 @@ import javax.websocket.*;
 
 import org.eclipse.jetty.io.RuntimeIOException;
 import org.eclipse.jetty.util.component.LifeCycle;
-import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 
 class ClientWebSocket extends Endpoint implements RelayTraceSource {

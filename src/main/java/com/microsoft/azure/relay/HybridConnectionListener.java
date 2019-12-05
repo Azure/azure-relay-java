@@ -670,7 +670,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		 */
 		private CompletableFuture<ClientWebSocket> ensureConnectTask(Duration timeout) {
 			synchronized (this.thisLock) {
-				if (this.connectAsyncTask == null || this.connectAsyncTask.isCompletedExceptionally() || this.connectAsyncTask.isCancelled()) {
+				if (this.connectAsyncTask == null || !this.isOnline()) {
 					this.connectAsyncTask = this.connectAsync(timeout);
 				}
 				return this.connectAsyncTask;
