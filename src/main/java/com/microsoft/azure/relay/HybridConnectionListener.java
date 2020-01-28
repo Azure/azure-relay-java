@@ -397,18 +397,19 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	}
 
 	private CompletableFuture<Void> onCommandAsync(String message, ClientWebSocket controlWebSocket) throws URISyntaxException, UnsupportedEncodingException {
-		return CompletableFuture.supplyAsync(() -> {
-			JSONObject jsonObj = new JSONObject(message);
-			return new ListenerCommand(jsonObj);
-		}).thenCompose(listenerCommand -> {
-			if (listenerCommand.getAccept() != null) {
-				return this.onAcceptCommandAsync(listenerCommand.getAccept());
-			} else if (listenerCommand.getRequest() != null) {
-				return HybridHttpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
-			} else {
-				return CompletableFutureUtil.fromException(new IllegalArgumentException("Invalid HybridConnection command was received."));
-			}
-		});
+	    JSONObject jsonObj = new JSONObject(message);
+	    ListenerCommand listenerCommand = new ListenerCommand(jsonObj);
+
+		if (listenerCommand.getAccept() != null) {
+	         // Don't block the pump waiting for the rendezvous
+			return CompletableFuture.supplyAsync(() -> listenerCommand.getAccept(), EXECUTOR).thenCompose(acceptCommand -> {
+			    return this.onAcceptCommandAsync(listenerCommand.getAccept());
+			});
+		} else if (listenerCommand.getRequest() != null) {
+			return HybridHttpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
+		} else {
+			return CompletableFutureUtil.fromException(new IllegalArgumentException("Invalid HybridConnection command was received."));
+		}
 	}
 
 	private CompletableFuture<Void> onAcceptCommandAsync(ListenerCommand.AcceptCommand acceptCommand) {
@@ -437,7 +438,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				}
 			}
 
-			// Don't block the pump waiting for the rendezvous
 			return this.completeAcceptAsync(listenerContext, rendezvousUri, shouldAccept);
 		} catch (Exception exception) {
 			RelayLogger.logEvent("rendezvousFailed", this, exception.toString());

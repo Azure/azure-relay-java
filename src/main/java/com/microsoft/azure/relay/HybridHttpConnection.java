@@ -65,13 +65,17 @@ class HybridHttpConnection implements RelayTraceSource {
 
 		// Do only what we need to do (receive any request body from control channel) and then let this Task complete.
 		Boolean requestOverControlConnection = requestCommand.hasBody();
+		CompletableFuture<RequestCommandAndStream> requestAndStreamFuture;
 		if (requestOverControlConnection != null && requestOverControlConnection == true) {
-			return hybridHttpConnection.receiveRequestBodyOverControlAsync(requestCommand)
-					.thenAccept((requestAndStream) -> hybridHttpConnection.processFirstRequestAsync(requestAndStream));
+		    requestAndStreamFuture = hybridHttpConnection.receiveRequestBodyOverControlAsync(requestCommand);
+		} else {
+		    requestAndStreamFuture = CompletableFuture.completedFuture(new RequestCommandAndStream(requestCommand, null));
 		}
 
 		// ProcessFirstRequestAsync runs without blocking the listener control connection:
-		return hybridHttpConnection.processFirstRequestAsync(new RequestCommandAndStream(requestCommand, null));
+		return requestAndStreamFuture.thenComposeAsync(requestAndStream -> {
+		    return hybridHttpConnection.processFirstRequestAsync(requestAndStream);
+		}, HybridConnectionListener.EXECUTOR);
 	}
 
     @Override
