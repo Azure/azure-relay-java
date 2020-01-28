@@ -22,6 +22,8 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.json.JSONObject;
 
+import com.microsoft.azure.relay.ListenerCommand.*;
+
 public class HybridConnectionListener implements RelayTraceSource, AutoCloseable {
 	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	private final InputQueue<HybridConnectionChannel> connectionInputQueue;
@@ -399,14 +401,16 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private CompletableFuture<Void> onCommandAsync(String message, ClientWebSocket controlWebSocket) throws URISyntaxException, UnsupportedEncodingException {
 	    JSONObject jsonObj = new JSONObject(message);
 	    ListenerCommand listenerCommand = new ListenerCommand(jsonObj);
+	    AcceptCommand accept = listenerCommand.getAccept();
+	    RequestCommand request = listenerCommand.getRequest();
 
-		if (listenerCommand.getAccept() != null) {
+		if (accept != null) {
 	         // Don't block the pump waiting for the rendezvous
-			return CompletableFuture.supplyAsync(() -> listenerCommand.getAccept(), EXECUTOR).thenCompose(acceptCommand -> {
-			    return this.onAcceptCommandAsync(listenerCommand.getAccept());
+			return CompletableFuture.completedFuture(accept).thenComposeAsync(acceptCommand -> {
+			    return this.onAcceptCommandAsync(acceptCommand);
 			});
-		} else if (listenerCommand.getRequest() != null) {
-			return HybridHttpConnection.createAsync(this, listenerCommand.getRequest(), controlWebSocket);
+		} else if (request != null) {
+			return HybridHttpConnection.createAsync(this, request, controlWebSocket);
 		} else {
 			return CompletableFutureUtil.fromException(new IllegalArgumentException("Invalid HybridConnection command was received."));
 		}
