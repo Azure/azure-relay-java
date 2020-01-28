@@ -408,7 +408,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	         // Don't block the pump waiting for the rendezvous
 			return CompletableFuture.completedFuture(accept).thenComposeAsync(acceptCommand -> {
 			    return this.onAcceptCommandAsync(acceptCommand);
-			});
+			}, EXECUTOR);
 		} else if (request != null) {
 			return HybridHttpConnection.createAsync(this, request, controlWebSocket);
 		} else {
