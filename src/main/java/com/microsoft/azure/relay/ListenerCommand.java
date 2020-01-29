@@ -339,11 +339,8 @@ class ListenerCommand {
 			}
 
 			if (this.responseHeaders != null && !this.responseHeaders.isEmpty()) {
-				StringBuilder headerBuilder = new StringBuilder("\"responseHeaders\":{");
-				this.responseHeaders.forEach((key, val) -> {
-					headerBuilder.append("\"" + key + "\":\"" + val + "\",");
-				});
-				headerBuilder.replace(headerBuilder.length() - 1, headerBuilder.length(), "}");
+				StringBuilder headerBuilder = new StringBuilder("\"responseHeaders\":");
+				headerBuilder.append(new JSONObject(responseHeaders).toString());
 				fields.add(headerBuilder.toString());
 			}
 			
