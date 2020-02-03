@@ -3,6 +3,7 @@ package com.microsoft.azure.relay;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -27,8 +28,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.microsoft.azure.relay.HybridConnectionListener.ControlConnection;
 
 public class HybridConnectionListenerTest {
 	private static final int MAX_CONNECTIONS_COUNT = Math.max(1, Runtime.getRuntime().availableProcessors() * 2);
@@ -75,43 +74,71 @@ public class HybridConnectionListenerTest {
 		assertFalse("Listener should be closed", listener.isOnline());
 		assertEquals("Listener offline handler was not called exactly once", 1, offlineHandlerCalled.get());
 	}
-	
+
 	@Test
-	public void customHeadersTest() throws InterruptedException, ExecutionException, TimeoutException {
-		String key = "GoodHeader";
-		String value = "GoodValue";
-		Map<String, List<String>> customHeaders = new HashMap<String, List<String>>();
-		customHeaders.put(key, Arrays.asList(new String[]{value}));
-		
-		CompletableFuture<Void> requestReceived = new CompletableFuture<Void>();
-		listener.openAsync(Duration.ofSeconds(15)).join();
-		listener.setAcceptHandler((context) -> {
-			try {
-				assertNotNull("Listener should have received a valid http context.", context);
-				assertNotNull("Listener should have received a valid http request.", context.getRequest());
-				
-				Map<String, String> headers = context.getRequest().getHeaders();
-				assertTrue(headers.containsKey(key));
-				assertEquals(value, headers.get(key));
-				requestReceived.complete(null);
-			} catch (Throwable ex) {
-				requestReceived.completeExceptionally(ex);
-			} finally {
-				context.getResponse().close();
-			}
-			return true;
-		});
-		client.createConnectionAsync(customHeaders).thenAccept(connection -> {
-			connection.closeAsync().join();
-		}).join();
-		requestReceived.get(10, TimeUnit.SECONDS);
-		
-		String badKey = "Bad Header";
-		String badValue = "Bad:Value";
-		customHeaders.put(badKey, Arrays.asList(new String[]{badValue}));
-		Assertions.assertCFThrows(UpgradeException.class, client.createConnectionAsync(customHeaders).thenAccept(connection -> connection.closeAsync().join()));
+	public void customHeadersTest() throws Exception {
+	    String alphaNumeric = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
+	    String allowedHeaderNameChars = "!#$%&*+-.^_`~*|" + alphaNumeric;
+	    String allowedHeaderValChars = "!#$%&*+-.^_`~*|\"\'(){}[]<>=/,:;@\\" + alphaNumeric;
+	    CompletableFuture<Void> httpRequestReceived = new CompletableFuture<Void>();
+	    CompletableFuture<Void> connectionRequestReceived = new CompletableFuture<Void>();
+
+	    listener.setRequestHandler(context -> {
+	        try {
+	            Map<String, String> headers = context.getRequest().getHeaders();
+	            assertEquals(allowedHeaderValChars, headers.get(allowedHeaderNameChars));
+	            context.getResponse().getHeaders().put(allowedHeaderNameChars, allowedHeaderValChars);
+	            httpRequestReceived.complete(null);
+	        } catch (Throwable ex) {
+	            httpRequestReceived.completeExceptionally(ex);
+	        } finally {
+	            context.getResponse().close();
+	        }
+	    });
+	    listener.setAcceptHandler(context -> {
+	        try {
+	            Map<String, String> headers = context.getRequest().getHeaders();
+	            assertEquals(allowedHeaderValChars, headers.get(allowedHeaderNameChars));
+	            connectionRequestReceived.complete(null);
+	        } catch (Throwable ex) {
+	            connectionRequestReceived.completeExceptionally(ex);
+	        }
+	        return true;
+	    });
+	    listener.openAsync(Duration.ofSeconds(10)).join();
+
+	    // Test sending and receiving custom header on HybridConnection HTTP request
+	    // from both client and listener
+	    StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
+	    urlBuilder.replace(0, 5, "https://");
+	    URL url = new URL(urlBuilder.toString());
+	    String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
+
+	    HttpURLConnection httpConnection = (HttpURLConnection) url.openConnection();
+	    httpConnection.setRequestMethod("GET");
+	    httpConnection.setRequestProperty(allowedHeaderNameChars, allowedHeaderValChars);
+	    httpConnection.setRequestProperty("ServiceBusAuthorization", tokenString);
+	    httpConnection.setDoOutput(true);
+	    OutputStream out = httpConnection.getOutputStream();
+	    out.close();
+	    int responseCode = httpConnection.getResponseCode();
+
+	    Map<String, List<String>> headers = httpConnection.getHeaderFields();
+	    assertNotNull(headers);
+	    assertEquals("The response did not contain the expected header",
+	            Arrays.asList(new String[] { allowedHeaderValChars }), headers.get(allowedHeaderNameChars));
+	    assertEquals(httpConnection.getResponseMessage(), 200, responseCode);
+	    httpRequestReceived.get(10, TimeUnit.SECONDS);
+
+	    // Test sending custom header from client and receiving from listener for
+	    // HybridConnection websocket mode
+	    Map<String, List<String>> customHeaders = new HashMap<String, List<String>>();
+	    customHeaders.put(allowedHeaderNameChars, Arrays.asList(new String[] { allowedHeaderValChars }));
+	    CompletableFuture.allOf(client.createConnectionAsync(customHeaders).thenCompose(connection -> {
+	        return connection.closeAsync();
+	    }), connectionRequestReceived).get(10, TimeUnit.SECONDS);
 	}
-	
+
 	@Test
 	public void webSocketConnectionTest() throws InterruptedException, ExecutionException, TimeoutException {
 		int waitMS = 500;
