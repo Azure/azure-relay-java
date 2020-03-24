@@ -87,6 +87,7 @@ public class HybridConnectionListenerTest {
 	        try {
 	            Map<String, String> headers = context.getRequest().getHeaders();
 	            assertEquals(allowedHeaderValChars, headers.get(allowedHeaderNameChars));
+	            context.getResponse().setStatusDescription(allowedHeaderValChars);
 	            context.getResponse().getHeaders().put(allowedHeaderNameChars, allowedHeaderValChars);
 	            httpRequestReceived.complete(null);
 	        } catch (Throwable ex) {
