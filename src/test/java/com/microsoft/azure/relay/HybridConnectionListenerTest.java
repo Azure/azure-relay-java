@@ -123,12 +123,14 @@ public class HybridConnectionListenerTest {
 	    OutputStream out = httpConnection.getOutputStream();
 	    out.close();
 	    int responseCode = httpConnection.getResponseCode();
+	    String responseDescription = httpConnection.getResponseMessage();
 
 	    Map<String, List<String>> headers = httpConnection.getHeaderFields();
 	    assertNotNull(headers);
 	    assertEquals("The response did not contain the expected header",
 	            Arrays.asList(new String[] { allowedHeaderValChars }), headers.get(allowedHeaderNameChars));
 	    assertEquals(httpConnection.getResponseMessage(), 200, responseCode);
+	    assertEquals("Http connection sender did not receive the expected response description.", allowedHeaderValChars, responseDescription);
 	    httpRequestReceived.get(10, TimeUnit.SECONDS);
 
 	    // Test sending custom header from client and receiving from listener for
