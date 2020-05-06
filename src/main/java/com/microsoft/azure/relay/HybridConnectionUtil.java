@@ -140,10 +140,13 @@ final class HybridConnectionUtil {
 		String[] pairs = query.split("&");
 		for (String pair : pairs) {
 			String[] keyValue = pair.split("=");
-			if (keyValue.length != 2) {
-				throw new IllegalArgumentException("invalid query to be parsed.");
+			if (keyValue.length == 1) {
+			    map.put(keyValue[0], "");
+			} else if (keyValue.length == 2) {
+			    map.put(keyValue[0], keyValue[1]);
+			} else {
+			    throw new IllegalArgumentException("invalid query to be parsed.");
 			}
-			map.put(keyValue[0], keyValue[1]);
 		}
 
 		return map;
