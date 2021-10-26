@@ -6,7 +6,6 @@
 	<groupId>com.microsoft.azure</groupId>
 	<artifactId>azure-relay</artifactId>
 	<version>0.0.3</version>
-	<packaging>maven-plugin</packaging>
 	<name>azure-relay</name>
 	<description>Java library for Azure Relay</description>
 	<url>https://github.com/Azure/azure-relay-java</url>
@@ -72,29 +71,4 @@
 			<version>${slf4j-version}</version>
 		</dependency>
 	</dependencies>
-
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-plugin-plugin</artifactId>
-				<version>3.4</version>
-				<configuration>
-					<goalPrefix>azure-relay</goalPrefix>
-					<skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
-					<descriptorRefs>
-						<descriptorRef>jar-with-dependencies</descriptorRef>
-					</descriptorRefs>
-				</configuration>
-				<executions>
-					<execution>
-						<id>mojo-descriptor</id>
-						<goals>
-							<goal>descriptor</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
-	</build>
 </project>
