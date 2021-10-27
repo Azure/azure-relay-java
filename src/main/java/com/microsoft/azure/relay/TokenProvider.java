@@ -5,13 +5,18 @@ package com.microsoft.azure.relay;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+
+import com.azure.core.credential.TokenCredential;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 
 public abstract class TokenProvider {
 	static final Duration DEFAULT_TOKEN_TIMEOUT = Duration.ofMinutes(60);
 
-	// Initializes a new instance of the <see cref="TokenProvider" /> class.
+	/**
+	 * Initializes a new instance of the TokenProviders class.
+	 */ 
 	protected TokenProvider() {
 	}
 
@@ -41,6 +46,16 @@ public abstract class TokenProvider {
 		return new SharedAccessSignatureTokenProvider(keyName, sharedAccessKey);
 	}
 
+	/**
+	 * Construct a TokenProvider with a provided {@link TokenCredential}. 
+	 * For options or examples, please see <a href="https://github.com/Azure/azure-sdk-for-java/wiki/Azure-Identity-Examples#authenticating-a-service-principal-with-a-client-secret">here</a>.
+	 * @param tokenCredential The token credential which will be used to obtain a token.
+	 * @return A TokenProvider instance used for authentication
+	 */
+	public static TokenProvider createAzureIdentityTokenProvider(TokenCredential tokenCredential) {
+		return new AzureIdentityTokenProvider(tokenCredential);
+	}
+	
 	/**
 	 * Gets a SecurityToken for the given audience and duration
 	 * 
