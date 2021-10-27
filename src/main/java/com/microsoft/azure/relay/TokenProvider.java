@@ -15,7 +15,7 @@ public abstract class TokenProvider {
 	static final Duration DEFAULT_TOKEN_TIMEOUT = Duration.ofMinutes(60);
 
 	/**
-	 * Initializes a new instance of the TokenProviders class.
+	 * Initializes a new instance of the TokenProvider class.
 	 */ 
 	protected TokenProvider() {
 	}
