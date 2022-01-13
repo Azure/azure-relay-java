@@ -32,7 +32,7 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<azure.identity.version>1.4.0</azure.identity.version>
-		<jetty.version>9.4.12.v20180830</jetty.version>
+		<jetty.version>9.4.44.v20210927</jetty.version>
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<slf4j-version>1.7.0</slf4j-version>
@@ -65,11 +65,6 @@
 			<artifactId>junit</artifactId>
 			<version>4.12</version>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>javax</groupId>
-			<artifactId>javaee-api</artifactId>
-			<version>7.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.slf4j</groupId>
