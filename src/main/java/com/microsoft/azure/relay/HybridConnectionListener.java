@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 package com.microsoft.azure.relay;
 
 import java.io.UnsupportedEncodingException;
@@ -11,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -29,8 +34,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private final InputQueue<HybridConnectionChannel> connectionInputQueue;
 	private final ControlConnection controlConnection;
 	private final Object thisLock = new Object();
-	private boolean openCalled;
-	private volatile boolean closeCalled;
+	private final AtomicBoolean openCalled;
+	private final AtomicBoolean closeCalled;
 	private Duration operationTimeout;
 	private int maxWebSocketBufferSize;
 	private String cachedString;
@@ -69,6 +74,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		this.trackingContext = TrackingContext.create(this.address);
 		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
 		this.controlConnection = new ControlConnection(this);
+		this.openCalled = new AtomicBoolean(false);
+		this.closeCalled = new AtomicBoolean(false);
 	}
 
 	/**
@@ -143,6 +150,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		this.trackingContext = TrackingContext.create(this.address);
 		this.connectionInputQueue = new InputQueue<HybridConnectionChannel>(EXECUTOR);
 		this.controlConnection = new ControlConnection(this);
+		this.openCalled = new AtomicBoolean(false);
+		this.closeCalled = new AtomicBoolean(false);
 	}
 	
 	public boolean isOnline() {
@@ -293,7 +302,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			} catch (RelayException e) {
 				return CompletableFutureUtil.fromException(e);
 			}
-			this.openCalled = true;
+			this.openCalled.set(true);
 		}
 
 		return this.controlConnection.openAsync(timeout);
@@ -320,12 +329,12 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		TimeoutHelper timeoutHelper = new TimeoutHelper(timeout);
 		CompletableFuture<?>[] closeTasks;
 		synchronized (this.thisLock) {
-			if (this.closeCalled) {
+			if (this.closeCalled.get()) {
 				return CompletableFuture.completedFuture(null);
 			}
 
 			RelayLogger.logEvent("closing", this);
-			this.closeCalled = true;
+			this.closeCalled.set(true);
 
 			// If the input queue is empty this completes all pending waiters with null and
 			// prevents any new items being added to the input queue.
@@ -364,12 +373,15 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * @return A CompletableFuture which completes when a websocket connection from the sender is established.
 	 */
 	public CompletableFuture<HybridConnectionChannel> acceptConnectionAsync() {
+	    CompletableFuture<HybridConnectionChannel> connection = null;
 		synchronized (this.thisLock) {
-			if (!this.openCalled) {
+			if (!this.openCalled.get()) {
 				throw RelayLogger.invalidOperation("cannot accept connection because listener is not open.", this);
 			}
+			
+			connection = this.connectionInputQueue.dequeueAsync();
 		}
-		return this.connectionInputQueue.dequeueAsync();
+		return connection;
 	}
 
 	@Override
@@ -385,16 +397,14 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	}
 
 	void throwIfDisposed() throws RelayException {
-		if (this.closeCalled) {
+		if (this.closeCalled.get()) {
 			throw RelayLogger.invalidOperation("Invalid operation. Cannot call open when it's already closed.", this);
 		}
 	}
 
 	void throwIfReadOnly() throws RelayException {
-		synchronized (this.thisLock) {
-			if (this.openCalled) {
-				throw RelayLogger.invalidOperation("Invalid operation. Cannot call open when it's already open.", this);
-			}
+		if (this.openCalled.get()) {
+			throw RelayLogger.invalidOperation("Invalid operation. Cannot call open when it's already open.", this);
 		}
 	}
 
@@ -472,7 +482,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			synchronized (this.thisLock) {
 				WebSocketChannel rendezvousConnection = new WebSocketChannel(listenerContext.getTrackingContext(), EXECUTOR);
 
-				if (this.closeCalled) {
+				if (this.closeCalled.get()) {
 					RelayLogger.logEvent("rendezvousClose", this, rendezvousUri.toString());
 					completeAcceptTask = CompletableFuture.completedFuture(null);
 				} else {
@@ -531,7 +541,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	 * Connects, maintains, and transparently reconnects this listener's control
 	 * connection with the cloud service.
 	 */
-	static final class ControlConnection implements AutoCloseable {
+	final class ControlConnection implements AutoCloseable {
 		private final HybridConnectionListener listener;
 		private final URI address;
 		@SuppressWarnings("unused")
@@ -540,9 +550,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		private final AsyncLock sendAsyncLock;
 		private final Object thisLock = new Object();
 		private CompletableFuture<ClientWebSocket> connectAsyncTask;
-		private int connectDelayIndex;
+		private AtomicInteger connectDelayIndex;
+	    private AtomicBoolean closeCalled;
 		private Throwable lastError;
-		private boolean closeCalled;
+
 
 		ControlConnection(HybridConnectionListener listener) {
 			this.listener = listener;
@@ -550,6 +561,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			String rawPath = this.address.getPath();
 			this.path = (rawPath.startsWith("/")) ? rawPath.substring(1) : rawPath;
 			this.sendAsyncLock = new AsyncLock(EXECUTOR);
+			this.connectDelayIndex = new AtomicInteger(0);
+			this.closeCalled = new AtomicBoolean(false);
 			this.tokenRenewer = new TokenRenewer(
 				this.listener, this.address.toString(),	TokenProvider.DEFAULT_TOKEN_TIMEOUT);
 		}
@@ -600,10 +613,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			
 			CompletableFuture<ClientWebSocket> connectTask;
 			synchronized (this.thisLock) {
-				if (this.closeCalled) {
+				if (this.closeCalled.get()) {
 					return CompletableFuture.completedFuture(null);
 				}
-				this.closeCalled = true;
+				this.closeCalled.set(true);
 				connectTask = this.connectAsyncTask;
 				this.connectAsyncTask = null;
 			}
@@ -696,7 +709,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			try {
 				this.listener.throwIfDisposed();
 				
-				CompletableFuture<Void> delayTask = CompletableFutureUtil.delayAsync(RelayConstants.CONNECTION_DELAY_INTERVALS[this.connectDelayIndex], EXECUTOR);
+				CompletableFuture<Void> delayTask = CompletableFutureUtil.delayAsync(RelayConstants.CONNECTION_DELAY_INTERVALS[this.connectDelayIndex.get()], EXECUTOR);
 				CompletableFuture<SecurityToken> token = this.tokenRenewer.getTokenAsync();
 
 				// Set the authentication in request header
@@ -806,7 +819,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 						try {
 							if (!webSocket.isOpen()) {
 								this.closeOrAbortWebSocketAsync(connectTask, webSocket.getCloseReason());
-								if (this.closeCalled) {
+								if (this.closeCalled.get()) {
 									keepGoing = false;
 								} 
 								else {
@@ -835,7 +848,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				}
 
 				this.lastError = null;
-				this.connectDelayIndex = -1;
+				this.connectDelayIndex.set(-1);
 			}
 			RelayLogger.logEvent("connected", this.listener);
 			
@@ -863,9 +876,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			synchronized (this.thisLock) {
 				this.lastError = lastError;
 
-				if (this.connectDelayIndex < RelayConstants.CONNECTION_DELAY_INTERVALS.length - 1) {
-					this.connectDelayIndex++;
-				}
+				this.connectDelayIndex.updateAndGet((index) -> {
+				    return index < RelayConstants.CONNECTION_DELAY_INTERVALS.length - 1 ? ++index : index;
+				});
 			}
 
 			// Inspect the close status/description to see if this is a terminal case

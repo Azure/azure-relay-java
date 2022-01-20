@@ -140,10 +140,55 @@ public class SharedAccessSignatureTokenProvider extends TokenProvider {
 		public static final String SAS_PAIR_SEPARATOR = "&";
 
 		public SharedAccessSignatureToken(String tokenString) {
-			super(tokenString, SIGNED_RESOURCE_FULL_FIELD_NAME, SIGNED_EXPIRY, SAS_KEY_VALUE_SEPARATOR,
-					SAS_PAIR_SEPARATOR);
+			super(tokenString);
+			getExpirationDateAndAudienceFromToken(tokenString);
 		}
 
+		private void getExpirationDateAndAudienceFromToken(String tokenString) {
+			HashMap<String, String> decodedToken = getDecodedTokenMap(tokenString, StandardCharsets.UTF_8.name(),
+					StandardCharsets.UTF_8.name(), SAS_KEY_VALUE_SEPARATOR, SAS_PAIR_SEPARATOR);
+			
+			String expiresOn = decodedToken.get(SIGNED_EXPIRY);
+			if (StringUtil.isNullOrEmpty(expiresOn)) {
+				throw new IllegalArgumentException("tokenString missing expiresOn field");
+			} else {
+				this.setExiresAtUtc(Instant.ofEpochSecond(Long.parseLong(expiresOn)));
+			}
+
+			String audience = decodedToken.get(SIGNED_RESOURCE_FULL_FIELD_NAME);
+			if (StringUtil.isNullOrEmpty(audience)) {
+				throw new IllegalArgumentException("tokenstring missing audience field");
+			} else {
+				this.setAudience(audience);
+			}
+		}
+
+		private static HashMap<String, String> getDecodedTokenMap(String tokenString, String keyEncodingScheme,
+				String valueEncodingScheme, String keyValueSeparator, String pairSeparator) {
+			
+			HashMap<String, String> map = new HashMap<String, String>();
+			String[] valueEncodedPairs = tokenString.split(pairSeparator);
+			
+			for (String valueEncodedPair : valueEncodedPairs) {
+				
+				String[] pair = valueEncodedPair.split(keyValueSeparator);
+				if (pair.length != 2) {
+					throw new IllegalArgumentException("invalid encoding of tokenString.");
+				}
+
+				try {
+					map.put(URLDecoder.decode(pair[0], keyEncodingScheme), URLDecoder.decode(pair[1], valueEncodingScheme));
+				} 
+				catch (UnsupportedEncodingException e) {
+					throw new RuntimeException(keyEncodingScheme
+							+ ((keyEncodingScheme.equals(valueEncodingScheme)) ? "" : " or " + valueEncodingScheme)
+							+ " decoding is not supported in the java runtime.");
+				}
+			}
+
+			return map;
+		}
+		
 		static void validate(String sharedAccessSignature) {
 			if (StringUtil.isNullOrEmpty(sharedAccessSignature)) {
 				throw new IllegalArgumentException("sharedAccessSignature cannot be null or empty");

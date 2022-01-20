@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 package com.microsoft.azure.relay;
 
 import java.io.UnsupportedEncodingException;
@@ -140,10 +143,13 @@ final class HybridConnectionUtil {
 		String[] pairs = query.split("&");
 		for (String pair : pairs) {
 			String[] keyValue = pair.split("=");
-			if (keyValue.length != 2) {
-				throw new IllegalArgumentException("invalid query to be parsed.");
+			if (keyValue.length == 1) {
+			    map.put(keyValue[0], "");
+			} else if (keyValue.length == 2) {
+			    map.put(keyValue[0], keyValue[1]);
+			} else {
+			    throw new IllegalArgumentException("invalid query to be parsed.");
 			}
-			map.put(keyValue[0], keyValue[1]);
 		}
 
 		return map;

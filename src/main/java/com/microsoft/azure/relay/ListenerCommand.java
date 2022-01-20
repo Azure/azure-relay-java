@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
 package com.microsoft.azure.relay;
 
 import java.time.Duration;
@@ -335,7 +338,10 @@ class ListenerCommand {
 			fields.add("\"statusCode\":" + this.statusCode);
 
 			if (this.statusDescription != null) {
-				fields.add("\"statusDescription\":\"" + this.statusDescription + "\"");
+			    Map<String, String> descriptionMap = new HashMap<String, String>();
+			    descriptionMap.put("statusDescription", this.statusDescription);
+			    String description = new JSONObject(descriptionMap).toString();
+			    fields.add(description.substring(1, description.length() - 1)); //.substring() to remove the {}
 			}
 
 			if (this.responseHeaders != null && !this.responseHeaders.isEmpty()) {
