@@ -36,6 +36,7 @@ public class SendReceiveTest {
 	private static final int LARGE_BYTES_SIZE = 64*1024 + 1;
 	private static final int STATUS_CODE = HttpStatus.ACCEPTED_202;
 	private static final String STATUS_DESCRIPTION = "OK";
+	private static final String WS_MSG = "TEST_MSG";
 	private static final byte[] EMPTY_BYTES = getTestBytes(EMPTY_BYTES_SIZE);
 	private static final byte[] SMALL_BYTES = getTestBytes(SMALL_BYTES_SIZE);
 	private static final byte[] LARGE_BYTES = getTestBytes(LARGE_BYTES_SIZE);
@@ -72,6 +73,16 @@ public class SendReceiveTest {
 		listenerTask.join();
 		clientTask.join();
 	}
+
+	@Test
+	public void websocketSendTextResponseTextTest() {
+		CompletableFuture<Void> listenerTask = sendAndReceiveTextWithWebsocketListener(WS_MSG, WS_MSG);
+		CompletableFuture<Void> clientTask = sendAndReceiveTextWithWebsocketClient(WS_MSG, WS_MSG);
+				
+		listenerTask.join();
+		clientTask.join();
+	}
+
 
 	@Test
 	public void websocketSmallSendSmallResponseByteBufferTest() {
@@ -260,7 +271,7 @@ public class SendReceiveTest {
 			});
 		});
 	}
-	
+
 	private static CompletableFuture<Void> sendAndReceiveWithWebsocketListener(byte[] msgExpected, byte[] msgToSend) {
 		return sendAndReceiveWithWebsocketListener(ByteBuffer.wrap(msgExpected), ByteBuffer.wrap(msgToSend));
 	}
@@ -281,7 +292,43 @@ public class SendReceiveTest {
 			});
 		});
 	}
-	
+
+	private static CompletableFuture<Void> sendAndReceiveTextWithWebsocketClient(String msgExpected, String msgToSend) {
+		AtomicBoolean receivedReply = new AtomicBoolean(false);
+		String origMsgToSend = msgToSend;
+
+		return client.createConnectionAsync().thenCompose(channel -> {
+
+			return ((WebSocketChannel)channel).writeTextAsync(msgToSend, Duration.ofSeconds(30)).thenCompose($void -> {
+				return ((WebSocketChannel)channel).readTextAsync();
+			}).thenCompose(msgReceived -> {
+				receivedReply.set(true);
+				assertTrue("Websocket sender did not receive the expected reply.", msgExpected.equals(msgReceived));
+				return channel.closeAsync();
+			}).thenRun(() -> {
+				assertTrue("Message was modified.", origMsgToSend.equals(msgToSend));
+				assertTrue("Did not receive message from websocket sender.", receivedReply.get());
+			});
+		});
+	}
+
+	private static CompletableFuture<Void> sendAndReceiveTextWithWebsocketListener(String msgExpected, String msgToSend) {
+		String origMsgToSend = msgToSend;
+
+		return listener.acceptConnectionAsync().thenComposeAsync(channel -> {
+			return ((WebSocketChannel)channel).readTextAsync().thenAccept(msgReceived -> {
+						assertTrue("Websocket listener did not receive the expected reply.", msgExpected.equals(msgReceived));
+					})
+					.thenCompose(nullResult -> {
+						return ((WebSocketChannel)channel).writeTextAsync(msgToSend,Duration.ofSeconds(30));
+					})
+					.thenCompose(nullResult -> {
+						assertTrue("Message was modified.", origMsgToSend.equals(msgToSend));
+						return channel.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
+					});
+		});
+	}
+
 	private static void handleHttpRequest(RelayedHttpListenerContext context, byte[] msgExpected, byte[] msgToSend) {
 		try {
 	        byte[] receivedText = readBytesFromStream(context.getRequest().getInputStream());
