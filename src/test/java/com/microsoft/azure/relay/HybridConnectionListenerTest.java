@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.util.URIUtil;
 import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.junit.After;
@@ -305,55 +304,6 @@ public class HybridConnectionListenerTest {
 		URL url = new URI(urlBuilder.toString()).toURL();
 		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
 		
-		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
-		conn.setRequestMethod("GET");
-		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
-
-		conn.getResponseCode();
-		try {
-			assertNull(requestReceived.get(30, TimeUnit.SECONDS));
-		} catch (Exception e) {
-			fail(e.getMessage());
-		}
-	}
-
-	@Test
-	public void parseRequestPathWithSpacesAndQueryTest() throws IOException, URISyntaxException {
-		CompletableFuture<Void> requestReceived = new CompletableFuture<Void>();
-		String extraPath = "/extra Path/extra  Path2";
-		String extraQuery = "queryKey=queryValue&queryKey2=queryValue;"; // mixing in a special char just for fun
-
-		listener.setRequestHandler((context) -> {
-			try {
-				assertNotNull("Listener should have received a valid http context.", context);
-				assertNotNull("Listener should have received a valid http request.", context.getRequest());
-
-				URI requestUri = context.getRequest().getUri();
-				assertNotNull("Listener should have a URI from request", requestUri);
-				assertEquals(
-						"The path wasn't the expected value",
-						"/" + TestUtil.ENTITY_PATH + extraPath,
-						requestUri.getPath()
-				);
-				assertEquals("The query wasn't the expected value", extraQuery, requestUri.getQuery());
-
-				requestReceived.complete(null);
-			} catch (Throwable ex) {
-				requestReceived.completeExceptionally(ex);
-			} finally {
-				context.getResponse().close();
-			}
-		});
-
-		listener.openAsync(Duration.ofSeconds(15)).join();
-		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
-		urlBuilder.replace(0, 5, "https://");
-		urlBuilder.append(URIUtil.encodePath(extraPath));
-		urlBuilder.append("?").append(extraQuery);
-
-		URL url = new URL(urlBuilder.toString());
-		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
-
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
 		conn.setRequestMethod("GET");
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);

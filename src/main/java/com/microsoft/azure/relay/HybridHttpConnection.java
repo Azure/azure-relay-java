@@ -20,7 +20,6 @@ import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.util.URIUtil;
 import org.json.JSONObject;
 
 class HybridHttpConnection implements RelayTraceSource {
@@ -165,7 +164,11 @@ class HybridHttpConnection implements RelayTraceSource {
 		URI requestUri = null;
 
 		try {
-			requestUri = parseRequestUri(listenerAddress, requestTarget);
+			String listenerAddressStr = listenerAddress.toString();
+			requestTarget = requestTarget.replaceFirst(listenerAddress.getPath(), "");
+			requestUri = (listenerAddressStr.endsWith("/") || requestTarget.startsWith("/"))
+					? new URI(listenerAddressStr + requestTarget)
+					: new URI(listenerAddressStr + "/" + requestTarget);
 		} catch (URISyntaxException e) {
 			throw new RuntimeException(e);
 		}
@@ -203,23 +206,6 @@ class HybridHttpConnection implements RelayTraceSource {
             listenerContext.getResponse().setStatusDescription("The listener RequestHandler has not been configured.");
 			listenerContext.getResponse().close();
 		}
-	}
-
-	private URI parseRequestUri(URI listenerAddress, String requestTarget) throws URISyntaxException {
-		URI requestUri;
-		String listenerAddressStr = listenerAddress.toString();
-		String requestTargetWithoutConnectionName = requestTarget.replaceFirst(listenerAddress.getPath(), "");
-
-		if (requestTargetWithoutConnectionName.startsWith("/")){
-			requestTargetWithoutConnectionName = requestTargetWithoutConnectionName.replaceFirst("/","");
-		}
-
-		String[] pathAndQuery = requestTargetWithoutConnectionName.split("\\?",2);
-		pathAndQuery[0] = URIUtil.encodePath(pathAndQuery[0]);
-
-		requestUri = new URI(listenerAddressStr + "/" +
-				String.join("?",pathAndQuery));
-		return requestUri;
 	}
 
 	private CompletableFuture<Void> sendResponseAsync(ListenerCommand.ResponseCommand responseCommand,
