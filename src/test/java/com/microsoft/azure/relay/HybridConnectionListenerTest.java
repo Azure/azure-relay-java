@@ -3,12 +3,14 @@ package com.microsoft.azure.relay;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -322,6 +324,8 @@ public class HybridConnectionListenerTest {
 		CompletableFuture<Void> requestReceived = new CompletableFuture<Void>();
 		String extraPath = "/extra Path/extra  Path2";
 		String extraQuery = "queryKey=queryValue&queryKey2=queryValue;"; // mixing in a special char just for fun
+		String responseText = "{\"foo\":\"bar\"}";
+		int responseStatusCode = 200;
 
 		listener.setRequestHandler((context) -> {
 			try {
@@ -336,6 +340,11 @@ public class HybridConnectionListenerTest {
 						requestUri.getPath()
 				);
 				assertEquals("The query wasn't the expected value", extraQuery, requestUri.getQuery());
+
+				context.getResponse().setStatusCode(responseStatusCode);
+				OutputStream responseOutput = context.getResponse().getOutputStream();
+				responseOutput.write(responseText.getBytes(StandardCharsets.UTF_8));
+				responseOutput.close();
 
 				requestReceived.complete(null);
 			} catch (Throwable ex) {
@@ -357,10 +366,18 @@ public class HybridConnectionListenerTest {
 		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
 		conn.setRequestMethod("GET");
 		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
+		assertEquals("Response code is not the expected value",responseStatusCode, conn.getResponseCode());
+		assertEquals("Response message is not the expected value","OK", conn.getResponseMessage());
 
-		conn.getResponseCode();
+		byte[] body = new byte[responseText.length()];
+		((InputStream)conn.getContent()).read(body);
+		String receivedResponseText = new String(body, StandardCharsets.UTF_8);
+
+		assertEquals("Response body is not the expected value", responseText, receivedResponseText);
+
 		try {
 			assertNull(requestReceived.get(30, TimeUnit.SECONDS));
+
 		} catch (Exception e) {
 			fail(e.getMessage());
 		}

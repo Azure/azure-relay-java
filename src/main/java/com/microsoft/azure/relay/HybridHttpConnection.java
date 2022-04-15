@@ -165,7 +165,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		URI requestUri = null;
 
 		try {
-			requestUri = parseRequestUri(listenerAddress, requestTarget);
+			requestUri = parseAndEncodeRequestUri(listenerAddress, requestTarget);
 		} catch (URISyntaxException e) {
 			throw new RuntimeException(e);
 		}
@@ -205,7 +205,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		}
 	}
 
-	private URI parseRequestUri(URI listenerAddress, String requestTarget) throws URISyntaxException {
+	static URI parseAndEncodeRequestUri(URI listenerAddress, String requestTarget) throws URISyntaxException {
 		URI requestUri;
 		String listenerAddressStr = listenerAddress.toString();
 		String requestTargetWithoutConnectionName = requestTarget.replaceFirst(listenerAddress.getPath(), "");
