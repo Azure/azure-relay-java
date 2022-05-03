@@ -70,7 +70,7 @@ public class WebSocketChannel implements HybridConnectionChannel {
 	 * 
 	 * @return Returns a CompletableFuture which completes when websocket receives text messages.
 	 */
-	CompletableFuture<String> readTextAsync() {
+	public CompletableFuture<String> readTextAsync() {
 		return this.websocket.readTextAsync();
 	}
 

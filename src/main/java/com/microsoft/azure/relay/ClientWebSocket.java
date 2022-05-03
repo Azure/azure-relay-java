@@ -156,7 +156,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * 
 	 * @return Returns a CompletableFuture which completes when websocket receives text messages
 	 */
-	public CompletableFuture<String> readTextAsync() {
+	CompletableFuture<String> readTextAsync() {
 		return this.textQueue.dequeueAsync().thenApply(text -> {
 			if (text != null) {
 				RelayLogger.logEvent("receivedText", this, String.valueOf(text.length()));
@@ -219,7 +219,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
 	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
-	public CompletableFuture<Void> writeAsync(Object data, Duration timeout, boolean isEnd, WriteMode mode) {
+	CompletableFuture<Void> writeAsync(Object data, Duration timeout, boolean isEnd, WriteMode mode) {
 		if (this.isOpen()) {
 			if (data == null) {
 				// TODO: Log warns sending nothing because message is null
@@ -330,6 +330,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 				textQueue.enqueueAndDispatch(text);
 			}
 		});
+
 
 		session.addMessageHandler(new MessageHandler.Partial<byte[]>() {
 			@Override
