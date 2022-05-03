@@ -9,7 +9,10 @@ import org.junit.Test;
 
 import javax.websocket.CloseReason;
 import javax.websocket.CloseReason.CloseCodes;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -90,7 +93,7 @@ public class SendReceiveTest {
   }
 
   @Test
-  public void websocketLargeSendTextResponseTextTest() throws UnsupportedEncodingException {
+  public void websocketLargeSendTextResponseTextTest()  {
     CompletableFuture<Void> listenerTask =
         sendAndReceiveTextWithWebsocketListener(LARGE_TEXT, LARGE_TEXT);
     CompletableFuture<Void> clientTask =

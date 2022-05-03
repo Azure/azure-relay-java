@@ -331,7 +331,6 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			}
 		});
 
-
 		session.addMessageHandler(new MessageHandler.Partial<byte[]>() {
 			@Override
 			public void onMessage(byte[] inputBytes, boolean isEnd) {
