@@ -12,13 +12,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import javax.websocket.ClientEndpointConfig;
-
 public class HybridConnectionClient implements RelayTraceSource {
 	static final AutoShutdownScheduledExecutor EXECUTOR = AutoShutdownScheduledExecutor.Create();
 	static final Duration DEFAULT_CONNECTION_TIMEOUT = Duration.ofSeconds(70);
 	static final boolean IS_DEBUG = java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()
 			.toString().indexOf("-agentlib:jdwp") > 0;
+	private HttpClientProvider httpClientProvider;
 	private String cachedString;
 	private TrackingContext trackingContext;
 	private URI address;
@@ -131,6 +130,14 @@ public class HybridConnectionClient implements RelayTraceSource {
 				tokenProvider, tokenProvider != null);
 	}
 
+	public HttpClientProvider getHttpClientProvider() {
+		return httpClientProvider;
+	}
+
+	public void setHttpClientProvider(HttpClientProvider httpClientProvider) {
+		this.httpClientProvider = httpClientProvider;
+	}
+
 	/**
 	 * The address on which this HybridConnection will connect to. This address should be of the format
 	 * "sb://contoso.servicebus.windows.net/yourhybridconnection".
@@ -198,19 +205,16 @@ public class HybridConnectionClient implements RelayTraceSource {
 		// Set the authentication in request header
 		Map<String, List<String>> headers = new HashMap<String, List<String>>();
 		headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.join().getToken()));
-		HybridConnectionEndpointConfigurator configurator = new HybridConnectionEndpointConfigurator();
-		configurator.addHeaders(headers);
 		if (customHeaders != null) {
-			configurator.addHeaders(customHeaders);
+			headers.putAll(customHeaders);
 		}
-		ClientEndpointConfig config = ClientEndpointConfig.Builder.create().configurator(configurator).build();
 
 		try {
 			URI uri = HybridConnectionUtil.buildUri(this.address.getHost(), this.address.getPort(),
 					this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.CONNECT,
 					trackingContext.getTrackingId());
-			WebSocketChannel channel = new WebSocketChannel(trackingContext, EXECUTOR);
-			return channel.getWebSocket().connectAsync(uri, this.operationTimeout, config).thenApply($void -> channel);
+			WebSocketChannel channel = new WebSocketChannel(trackingContext, this.getHttpClientProvider(), EXECUTOR);
+			return channel.getWebSocket().connectAsync(uri, this.operationTimeout, headers).thenApply($void -> channel);
 		} catch (URISyntaxException e) {
 			return CompletableFutureUtil.fromException(e);
 		}
@@ -251,5 +255,6 @@ public class HybridConnectionClient implements RelayTraceSource {
 		this.address = address;
 		this.tokenProvider = tokenProvider;
 		this.operationTimeout = operationTimeout;
+		this.httpClientProvider = new HttpClientProvider();
 	}
 }
