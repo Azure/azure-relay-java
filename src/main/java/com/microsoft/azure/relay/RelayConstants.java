@@ -18,6 +18,7 @@ final class RelayConstants {
     static final Duration MAX_DURATION = Duration.ofMillis(Integer.MAX_VALUE);
     static final Duration MIN_DURATION = Duration.ofMillis(Integer.MIN_VALUE);
     static final int DEFAULT_CONNECTION_BUFFER_SIZE = 64 * 1024;
+    static final int PING_INTERVAL_SECONDS = 15;
 	
     // Listener should reconnect after 0, 1, 2, 5, 10, 30 seconds backoff delay
     static final Duration[] CONNECTION_DELAY_INTERVALS = { Duration.ZERO, Duration.ofSeconds(1), Duration.ofSeconds(2),

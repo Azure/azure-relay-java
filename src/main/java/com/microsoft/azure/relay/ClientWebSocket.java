@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jetty.io.RuntimeIOException;
@@ -363,6 +364,8 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 
 		this.closeStatus = null;
 		this.closeTask = new CompletableFuture<Void>();
+
+    this.executor.schedule(new PingRunnable(), RelayConstants.PING_INTERVAL_SECONDS, TimeUnit.SECONDS);
 	}
 
 	@Override
@@ -475,4 +478,19 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 					});
 		}
 	}
+
+  private class PingRunnable implements Runnable {
+    @Override
+    public void run() {
+      if (ClientWebSocket.this.isConnected()) {
+        ClientWebSocket.this.executor.schedule(new PingRunnable(), RelayConstants.PING_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        try {
+          ClientWebSocket.this.getRemote().sendPing(ByteBuffer.allocate(0));
+          RelayLogger.logEvent("pingSuccess", this);
+        } catch (IOException e) {
+          RelayLogger.logEvent("pingFailed", this);
+        }
+      }
+    }
+  }
 }
