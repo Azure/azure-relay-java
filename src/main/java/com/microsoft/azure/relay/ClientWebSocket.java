@@ -3,27 +3,34 @@
 
 package com.microsoft.azure.relay;
 
+import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.io.IOException;
-
-import javax.websocket.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jetty.io.RuntimeIOException;
-import org.eclipse.jetty.util.component.LifeCycle;
+import org.eclipse.jetty.websocket.api.CloseStatus;
+import org.eclipse.jetty.websocket.api.RemoteEndpoint;
+import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.UpgradeException;
+import org.eclipse.jetty.websocket.api.WebSocketAdapter;
+import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
+import org.eclipse.jetty.websocket.client.WebSocketClient;
 
-class ClientWebSocket extends Endpoint implements RelayTraceSource {
+class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 	private final AutoShutdownScheduledExecutor executor;
-	private final WebSocketContainer container = ContainerProvider.getWebSocketContainer();
 	private final TrackingContext trackingContext;
-	private Session session;
+	private final WebSocketClient wsClient;
+	private HttpClientProvider httpClientProvider;
 	private int maxMessageBufferSize = RelayConstants.DEFAULT_CONNECTION_BUFFER_SIZE;
-	private CloseReason closeReason;
+	private CloseStatus closeStatus;
 	private InputQueue<MessageFragment> fragmentQueue;
 	private InputQueue<String> textQueue;
 	private CompletableFuture<Void> closeTask;
@@ -32,18 +39,25 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	/**
 	 * Creates a websocket instance
 	 */
-	public ClientWebSocket(TrackingContext trackingContext, AutoShutdownScheduledExecutor executor) {
+	public ClientWebSocket(TrackingContext trackingContext, HttpClientProvider httpClientProvider,
+			AutoShutdownScheduledExecutor executor) {
 		this.executor = executor;
 		this.textQueue = new InputQueue<String>(this.executor);
 		this.fragmentQueue = new InputQueue<MessageFragment>(this.executor);
-		this.closeReason = null;
 		this.trackingContext = trackingContext;
+		this.httpClientProvider = httpClientProvider;
+
+		wsClient = new WebSocketClient(httpClientProvider.getHttpClient());
 	}
-	
+
+	public HttpClientProvider getHttpClientProvider() {
+		return httpClientProvider;
+	}
+
 	public TrackingContext getTrackingContext() {
 		return trackingContext;
 	}
-	
+
 	@Override
 	public String toString() {
 		if (this.cachedString == null) {
@@ -51,9 +65,9 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 		}
 		return this.cachedString;
 	}
-	
-	CloseReason getCloseReason() {
-		return this.closeReason;
+
+	CloseStatus getCloseReason() {
+		return this.closeStatus;
 	}
 
 	int getMaxMessageBufferSize() {
@@ -63,12 +77,11 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	void setMaxMessageBufferSize(int maxMessageBufferSize) {
 		if (maxMessageBufferSize > 0) {
 			this.maxMessageBufferSize = maxMessageBufferSize;
-			this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 		} else {
 			throw new IllegalArgumentException("MaxBufferSize of the web socket must be a positive value.");
 		}
 	}
-	
+
 	/**
 	 * Establish websocket connection between the control websocket and the cloud
 	 * service if not already established.
@@ -96,7 +109,7 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout) {
 		return this.connectAsync(uri, timeout, null);
 	}
-	
+
 	/**
 	 * Establish websocket connection between the control websocket and the cloud
 	 * service if not already established.
@@ -109,35 +122,42 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 * @throws CompletionException Throws when connection could not be established
 	 *                             within the given timeout
 	 */
-	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout, ClientEndpointConfig config) {
+	public CompletableFuture<Void> connectAsync(URI uri, Duration timeout, Map<String, List<String>> headers) {
 		if (this.isOpen()) {
 			return CompletableFutureUtil.fromException(new RuntimeIOException("This connection is already connected."));
 		}
-		this.container.setDefaultMaxTextMessageBufferSize(this.maxMessageBufferSize);
 
 		return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 			RelayLogger.logEvent("connecting", this);
-			try {
-				if (config != null) {
-					this.container.connectToServer(this, config, uri);
-				} else {
-					this.container.connectToServer(this, uri);
+
+			if (!wsClient.isStarted()) {
+				try {
+					wsClient.start();
+				} catch (Exception e) {
+					throw RelayLogger.throwingException(e, this);
 				}
-			} catch (DeploymentException | IOException e) {
+			}
+
+			try {
+				ClientUpgradeRequest request = new ClientUpgradeRequest();
+				if (headers != null) {
+					request.setHeaders(headers);
+				}
+				wsClient.connect(this, uri, request).get();
+			} catch (IOException | InterruptedException | ExecutionException e) {
 				if (e.getCause() instanceof UpgradeException) {
 					throw RelayLogger.throwingException(e.getCause(), this);
 				}
 				throw RelayLogger.throwingException(e, this);
 			}
-			
-			if (this.session == null || !this.session.isOpen()) {
+
+			if (this.isNotConnected()) {
 				throw RelayLogger.throwingException(new RuntimeIOException("connection to the server failed."), this);
 			}
-		},
-		this.executor).whenComplete(($void, ex) -> {
-		    if (ex != null) {
-		        this.dispose();
-		    }
+		}, this.executor).whenComplete(($void, ex) -> {
+			if (ex != null) {
+				this.dispose();
+			}
 		});
 	}
 
@@ -148,13 +168,14 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	 *         endpoint
 	 */
 	boolean isOpen() {
-		return this.session != null && this.session.isOpen();
+		return this.isConnected();
 	}
 
 	/**
 	 * Receives text messages asynchronously.
 	 * 
-	 * @return Returns a CompletableFuture which completes when websocket receives text messages
+	 * @return Returns a CompletableFuture which completes when websocket receives
+	 *         text messages
 	 */
 	CompletableFuture<String> readTextAsync() {
 		return this.textQueue.dequeueAsync().thenApply(text -> {
@@ -164,34 +185,38 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			return text;
 		});
 	}
-	
+
 	/**
 	 * Receives byte messages from the remote sender asynchronously.
 	 * 
-	 * @return Returns a CompletableFuture of the bytes which completes when websocket receives an entire message
+	 * @return Returns a CompletableFuture of the bytes which completes when
+	 *         websocket receives an entire message
 	 */
 	public CompletableFuture<ByteBuffer> readBinaryAsync() {
 		return this.readBinaryAsync(null);
 	}
-	
+
 	/**
 	 * Receives byte messages from the remote sender asynchronously.
 	 * 
 	 * @param timeout The timeout duration for this operation.
-	 * @return Returns a CompletableFuture of the bytes which completes when websocket receives the entire message.
-	 * @throws TimeoutException thrown when a complete message frame is not received within the timeout.
+	 * @return Returns a CompletableFuture of the bytes which completes when
+	 *         websocket receives the entire message.
+	 * @throws TimeoutException thrown when a complete message frame is not received
+	 *                          within the timeout.
 	 */
 	public CompletableFuture<ByteBuffer> readBinaryAsync(Duration timeout) {
 		// Gather all fragments and return a single buffer
 		BinaryMessageReader messageReader = new BinaryMessageReader(timeout);
 		return messageReader.readAsync();
 	}
-	
+
 	/**
 	 * Sends the data to the remote endpoint as binary.
 	 * 
 	 * @param data Message to be sent.
-	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
+	 * @return A CompletableFuture which completes when websocket finishes sending
+	 *         the bytes.
 	 */
 	public CompletableFuture<Void> writeAsync(Object data) {
 		return this.writeAsync(data, null);
@@ -200,61 +225,67 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	/**
 	 * Sends the data to the remote endpoint within a timeout as binary.
 	 * 
-	 * @param data Message to be sent.
-	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
-	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
-	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
+	 * @param data    Message to be sent.
+	 * @param timeout The timeout to connect to send the data within. May be null to
+	 *                indicate no timeout limit.
+	 * @return A CompletableFuture which completes when websocket finishes sending
+	 *         the bytes.
+	 * @throws TimeoutException Throws when the sending task does not complete
+	 *                          within the given timeout.
 	 */
 	public CompletableFuture<Void> writeAsync(Object data, Duration timeout) {
 		return writeAsync(data, timeout, true, WriteMode.BINARY);
 	}
-	
+
 	/**
-	 * Sends the data to the remote endpoint within a timeout in one of the WriteModes.
+	 * Sends the data to the remote endpoint within a timeout in one of the
+	 * WriteModes.
 	 * 
-	 * @param data Message to be sent.
-	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
-	 * @param isEnd Indicates if the data sent is the end of a message
-	 * @param mode The type of the message to be sent.
-	 * @return A CompletableFuture which completes when websocket finishes sending the bytes.
-	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
+	 * @param data    Message to be sent.
+	 * @param timeout The timeout to connect to send the data within. May be null to
+	 *                indicate no timeout limit.
+	 * @param isEnd   Indicates if the data sent is the end of a message
+	 * @param mode    The type of the message to be sent.
+	 * @return A CompletableFuture which completes when websocket finishes sending
+	 *         the bytes.
+	 * @throws TimeoutException Throws when the sending task does not complete
+	 *                          within the given timeout.
 	 */
 	CompletableFuture<Void> writeAsync(Object data, Duration timeout, boolean isEnd, WriteMode mode) {
 		if (this.isOpen()) {
 			if (data == null) {
 				// TODO: Log warns sending nothing because message is null
 				return CompletableFuture.completedFuture(null);
-			}
-			else {
-				RemoteEndpoint.Basic remote = this.session.getBasicRemote();
+			} else {
+				RemoteEndpoint remote = this.getRemote();
 				RelayLogger.logEvent("writingBytes", this, mode.toString());
-				
-				// The websocket API will throw if multiple sends are attempted on the same websocket simultaneously
+
+				// The websocket API will throw if multiple sends are attempted on the same
+				// websocket simultaneously
 				return CompletableFutureUtil.timedRunAsync(timeout, () -> {
 					try {
 						if (mode.equals(WriteMode.TEXT)) {
 							String text = data.toString();
-							remote.sendText(text, isEnd);
+							remote.sendPartialString(text, isEnd);
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(text.length()));
-						}
-						else {
+						} else {
 							byte[] bytes;
 							if (data instanceof byte[]) {
 								bytes = ((byte[]) data).clone();
-							} 
-							else if (data instanceof ByteBuffer) {
+							} else if (data instanceof ByteBuffer) {
 								ByteBuffer buffer = (ByteBuffer) data;
 								bytes = new byte[buffer.remaining()];
 								buffer.get(bytes);
-							}
-							else {
+							} else {
 								throw new IllegalArgumentException(
-									"The data to be sent should be ByteBuffer or byte[], but received " + data.getClass().getSimpleName());
+										"The data to be sent should be ByteBuffer or byte[], but received "
+												+ data.getClass().getSimpleName());
 							}
-							
+
 							int bytesToSend = bytes.length;
-							// sendBinary() will cause the content of the byte array within the ByteBuffer to change
-							remote.sendBinary(ByteBuffer.wrap(bytes), isEnd);
+							// sendBinary() will cause the content of the byte array within the ByteBuffer
+							// to change
+							remote.sendPartialBytes(ByteBuffer.wrap(bytes), isEnd);
 							RelayLogger.logEvent("writingBytesFinished", this, String.valueOf(bytesToSend));
 						}
 					} catch (Exception e) {
@@ -262,12 +293,12 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 					}
 				}, executor);
 			}
-		}
-		else {
-			return CompletableFutureUtil.fromException(new RuntimeIOException("cannot send because the session is not connected."));	
+		} else {
+			return CompletableFutureUtil
+					.fromException(new RuntimeIOException("cannot send because the session is not connected."));
 		}
 	}
-	
+
 	/**
 	 * Closes the connection with the remote websocket
 	 * 
@@ -281,21 +312,23 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 	/**
 	 * Closes the connection with the remote websocket with a given CloseReason
 	 * 
-	 * @param reason The CloseReason to be given for this operation. For details please see javax.websocket.CloseReason.
-	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
+	 * @param reason The CloseReason to be given for this operation. For details
+	 *               please see javax.websocket.CloseReason.
+	 * @return Returns a CompletableFuture which completes when the connection is
+	 *         completely closed.
 	 */
-	public CompletableFuture<Void> closeAsync(CloseReason reason) {
-		RelayLogger.logEvent("clientWebSocketClosing", this, (reason != null) ? reason.getReasonPhrase() : "NONE");
-		
-		if (this.session == null || !this.session.isOpen()) {
+	public CompletableFuture<Void> closeAsync(CloseStatus reason) {
+		RelayLogger.logEvent("clientWebSocketClosing", this, (reason != null) ? reason.getPhrase() : "NONE");
+
+		if (this.isNotConnected()) {
 			return this.closeTask;
 		}
 
 		try {
 			if (reason != null) {
-				this.session.close(reason);
+				this.getSession().close(reason);
 			} else {
-				this.session.close();
+				this.getSession().close();
 			}
 		} catch (Throwable e) {
 			this.closeTask.completeExceptionally(e);
@@ -303,65 +336,82 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 
 		return this.closeTask;
 	}
-	
-    /**
-     * Release the resources taken by this websocket. This is a very lengthy execution.
-     */
-    void dispose() {
-        try {
-            ((LifeCycle) this.container).stop();
-        } catch (Exception e) {
-            RelayLogger.handledExceptionAsWarning(e, this);
-        }
-    }
-    
-	@OnOpen
-	public void onOpen(Session session, EndpointConfig config) {
-		RelayLogger.logEvent("connected", this);
-		this.closeReason = null;
-		this.session = session;
-		session.setMaxBinaryMessageBufferSize(this.maxMessageBufferSize);
-		session.setMaxTextMessageBufferSize(this.maxMessageBufferSize);
-		this.closeTask = new CompletableFuture<Void>();
-		
-		session.addMessageHandler(new MessageHandler.Whole<String>() {
-			@Override
-			public void onMessage(String text) {
-				textQueue.enqueueAndDispatch(text);
-			}
-		});
 
-		session.addMessageHandler(new MessageHandler.Partial<byte[]>() {
-			@Override
-			public void onMessage(byte[] inputBytes, boolean isEnd) {
-				fragmentQueue.enqueueAndDispatch(new MessageFragment(inputBytes, isEnd));
-			}
-		});
+	/**
+	 * Release the resources taken by this websocket. This is a very lengthy
+	 * execution.
+	 */
+	void dispose() {
+		try {
+			wsClient.stop();
+		} catch (Exception e) {
+			RelayLogger.handledExceptionAsWarning(e, this);
+		}
 	}
-	
-	@OnClose
-	public void onClose(Session session, CloseReason reason) {
-        CompletableFuture.runAsync(() -> {
-            this.dispose();
-        }, executor);
-		this.closeReason = reason;
-		RelayLogger.logEvent("clientWebSocketClosed", this, reason.getReasonPhrase());
+
+	@Override
+	public void onWebSocketConnect(Session session) {
+		super.onWebSocketConnect(session);
+
+		RelayLogger.logEvent("connected", this);
+
+		session.getPolicy().setMaxBinaryMessageBufferSize(maxMessageBufferSize);
+		session.getPolicy().setMaxTextMessageBufferSize(maxMessageBufferSize);
+
+		session.getPolicy().setMaxBinaryMessageSize(Integer.MAX_VALUE);
+		session.getPolicy().setMaxTextMessageSize(Integer.MAX_VALUE);
+
+		this.closeStatus = null;
+		this.closeTask = new CompletableFuture<Void>();
+	}
+
+	@Override
+	public void onWebSocketClose(int statusCode, String reason) {
+		super.onWebSocketClose(statusCode, reason);
+
+		if (reason == null) {
+			reason = "";
+		}
+
+		CompletableFuture.runAsync(() -> {
+			this.dispose();
+		}, executor);
+
+		this.closeStatus = new CloseStatus(statusCode, reason);
+		RelayLogger.logEvent("clientWebSocketClosed", this, closeStatus.getPhrase());
 		this.textQueue.shutdown();
 		this.fragmentQueue.shutdown();
 		this.closeTask.complete(null);
 	}
 
-	@OnError
-	public void onError(Throwable cause) {
-		if (!this.isOpen()) {
-		    // A new websocket will be created through reconnection attempt, dispose this one
-	        CompletableFuture.runAsync(() -> {
-	            this.dispose();
-	        }, executor);
-		}
-	    RelayLogger.throwingException(cause, this);
+	@Override
+	public void onWebSocketText(String message) {
+		super.onWebSocketText(message);
+
+		textQueue.enqueueAndDispatch(message);
 	}
-	
+
+	@Override
+	public void onWebSocketBinary(byte[] payload, int offset, int len) {
+		super.onWebSocketBinary(payload, offset, len);
+
+		fragmentQueue.enqueueAndDispatch(new MessageFragment(payload, true));
+	}
+
+	@Override
+	public void onWebSocketError(Throwable cause) {
+		super.onWebSocketError(cause);
+
+		if (!this.isOpen()) {
+			// A new websocket will be created through reconnection attempt, dispose this
+			// one
+			CompletableFuture.runAsync(() -> {
+				this.dispose();
+			}, executor);
+		}
+		RelayLogger.throwingException(cause, this);
+	}
+
 	private static class MessageFragment {
 		private final byte[] bytes;
 		private final boolean ended;
@@ -379,50 +429,50 @@ class ClientWebSocket extends Endpoint implements RelayTraceSource {
 			return this.ended;
 		}
 	}
-	
+
 	private final class BinaryMessageReader {
 		private final TimeoutHelper timeoutHelper;
 		private final LinkedList<byte[]> fragments;
 		private int messageSize;
-		
+
 		BinaryMessageReader(Duration timeout) {
 			timeoutHelper = new TimeoutHelper(timeout);
 			fragments = new LinkedList<byte[]>();
 		}
-		
+
 		public CompletableFuture<ByteBuffer> readAsync() {
 			return readFragmentsAsync()
-				.thenApply((voidResult) -> {
-					byte[] message = new byte[messageSize];
-					int offset = 0;
-					for (byte[] bytes : fragments) {
-						System.arraycopy(bytes, 0, message, offset, bytes.length);
-						offset += bytes.length;
-					}
-					
-					RelayLogger.logEvent("receivedBytes", this, Integer.toString(message.length));
-					return ByteBuffer.wrap(message);
-				});
+					.thenApply((voidResult) -> {
+						byte[] message = new byte[messageSize];
+						int offset = 0;
+						for (byte[] bytes : fragments) {
+							System.arraycopy(bytes, 0, message, offset, bytes.length);
+							offset += bytes.length;
+						}
+
+						RelayLogger.logEvent("receivedBytes", this, Integer.toString(message.length));
+						return ByteBuffer.wrap(message);
+					});
 		}
-		
+
 		private CompletableFuture<Void> readFragmentsAsync() {
 			return fragmentQueue.dequeueAsync(timeoutHelper.remainingTime())
-				.thenCompose((fragment) -> {
-					if (fragment == null) {
-						// TODO: In the case of shutdown should we throw if we don't make it to the end 
-						// of message? We can't just give the user partial data without telling them.
+					.thenCompose((fragment) -> {
+						if (fragment == null) {
+							// TODO: In the case of shutdown should we throw if we don't make it to the end
+							// of message? We can't just give the user partial data without telling them.
+							return CompletableFuture.completedFuture(null);
+						}
+
+						messageSize += fragment.getBytes().length;
+						fragments.add(fragment.getBytes());
+
+						if (!fragment.isEnd()) {
+							return readFragmentsAsync();
+						}
+
 						return CompletableFuture.completedFuture(null);
-					}
-	
-					messageSize += fragment.getBytes().length;
-					fragments.add(fragment.getBytes());
-	
-					if (!fragment.isEnd()) {
-						return readFragmentsAsync();
-					}
-					
-					return CompletableFuture.completedFuture(null);
-				});
+					});
 		}
 	}
 }
