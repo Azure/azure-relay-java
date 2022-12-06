@@ -5,7 +5,7 @@
 
 	<groupId>com.microsoft.azure</groupId>
 	<artifactId>azure-relay</artifactId>
-	<version>0.0.4</version>
+	<version>0.0.5</version>
 	<name>azure-relay</name>
 	<description>Java library for Azure Relay</description>
 	<url>https://github.com/Azure/azure-relay-java</url>
