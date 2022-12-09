@@ -365,7 +365,7 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 		this.closeStatus = null;
 		this.closeTask = new CompletableFuture<Void>();
 
-    this.executor.schedule(new PingRunnable(), RelayConstants.PING_INTERVAL_SECONDS, TimeUnit.SECONDS);
+    	this.executor.schedule(new PingRunnable(), RelayConstants.PING_INTERVAL_SECONDS, TimeUnit.SECONDS);
 	}
 
 	@Override
