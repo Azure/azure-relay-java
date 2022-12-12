@@ -482,15 +482,16 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 	private class PingRunnable implements Runnable {
 		@Override
 		public void run() {
-		if (ClientWebSocket.this.isConnected()) {
-			ClientWebSocket.this.executor.schedule(new PingRunnable(), RelayConstants.PING_INTERVAL_SECONDS, TimeUnit.SECONDS);
-			try {
-			ClientWebSocket.this.getRemote().sendPing(ByteBuffer.allocate(0));
-			RelayLogger.logEvent("pingSuccess", this);
-			} catch (IOException e) {
-			RelayLogger.logEvent("pingFailed", this);
+			if (ClientWebSocket.this.isConnected()) {
+				ClientWebSocket.this.executor.schedule(new PingRunnable(), RelayConstants.PING_INTERVAL_SECONDS,
+						TimeUnit.SECONDS);
+				try {
+					ClientWebSocket.this.getRemote().sendPing(ByteBuffer.allocate(0));
+					RelayLogger.logEvent("pingSuccess", this);
+				} catch (IOException e) {
+					RelayLogger.logEvent("pingFailed", this);
+				}
 			}
-		}
 		}
 	}
 }
