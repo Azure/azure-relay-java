@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jetty.io.RuntimeIOException;
@@ -21,10 +22,11 @@ import org.eclipse.jetty.websocket.api.RemoteEndpoint;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
+import org.eclipse.jetty.websocket.api.WebSocketPingPongListener;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 
-class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
+class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource, WebSocketPingPongListener {
 	private final AutoShutdownScheduledExecutor executor;
 	private final TrackingContext trackingContext;
 	private final WebSocketClient wsClient;
@@ -35,6 +37,8 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 	private InputQueue<String> textQueue;
 	private CompletableFuture<Void> closeTask;
 	private String cachedString;
+	private Duration keepAliveInterval = Duration.ofSeconds(RelayConstants.DEFAULT_PING_INTERVAL_SECONDS);
+	private Runnable keepAliveHandler;
 
 	/**
 	 * Creates a websocket instance
@@ -80,6 +84,17 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 		} else {
 			throw new IllegalArgumentException("MaxBufferSize of the web socket must be a positive value.");
 		}
+	}
+	
+	void setKeepAliveInterval(Duration interval) {
+		this.keepAliveInterval = interval;
+	}
+
+	/**
+	 * Sets the handler that will be run after the listener has received a keep alive (aka pong) response
+	 */
+	void setKeepAliveHandler(Runnable onKeepAlive) {
+		this.keepAliveHandler = onKeepAlive;
 	}
 
 	/**
@@ -363,6 +378,8 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 
 		this.closeStatus = null;
 		this.closeTask = new CompletableFuture<Void>();
+
+		this.executor.schedule(new PingRunnable(), keepAliveInterval.toMillis(), TimeUnit.MILLISECONDS);
 	}
 
 	@Override
@@ -410,6 +427,18 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 			}, executor);
 		}
 		RelayLogger.throwingException(cause, this);
+	}
+
+	@Override
+	public void onWebSocketPing(ByteBuffer payload) {
+		
+	}
+
+	@Override
+	public void onWebSocketPong(ByteBuffer payload) {
+		if (keepAliveHandler != null) {
+			keepAliveHandler.run();
+		}
 	}
 
 	private static class MessageFragment {
@@ -473,6 +502,22 @@ class ClientWebSocket extends WebSocketAdapter implements RelayTraceSource {
 
 						return CompletableFuture.completedFuture(null);
 					});
+		}
+	}
+	
+	private class PingRunnable implements Runnable {
+		@Override
+		public void run() {
+			if (ClientWebSocket.this.isConnected()) {
+				ClientWebSocket.this.executor.schedule(new PingRunnable(), keepAliveInterval.toMillis(), 
+						TimeUnit.MILLISECONDS);
+				try {
+					ClientWebSocket.this.getRemote().sendPing(ByteBuffer.allocate(0));
+					RelayLogger.logEvent("pingSuccess", this);
+				} catch (IOException e) {
+					RelayLogger.logEvent("pingFailed", this);
+				}
+			}
 		}
 	}
 }

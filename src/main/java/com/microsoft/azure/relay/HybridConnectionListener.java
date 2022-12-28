@@ -47,6 +47,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private Consumer<Throwable> connectingHandler;
 	private Consumer<Throwable> offlineHandler;
 	private Runnable onlineHandler;
+	private Runnable keepAliveHandler;
+	private Duration keepAliveInterval = Duration.ofSeconds(RelayConstants.DEFAULT_PING_INTERVAL_SECONDS);
 
 	/**
 	 * Create a new HybridConnectionListener instance for accepting
@@ -227,6 +229,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	public int getMaxWebSocketBufferSize() {
 		return maxWebSocketBufferSize;
 	}
+	
+	public void setKeepAliveInterval(Duration interval) {
+		this.keepAliveInterval = interval;
+	}
 
 	public void setMaxWebSocketBufferSize(int maxWebSocketBufferSize) {
 		if (maxWebSocketBufferSize > 0) {
@@ -281,6 +287,20 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	public void setOnlineHandler(Runnable onOnline) {
 		this.onlineHandler = onOnline;
 	}
+
+	/**
+	 * Returns the handler that will be run after the listener has received a keep alive (aka pong) response
+	 */
+	public Runnable getKeepAliveHandler() {
+		return keepAliveHandler;
+	}
+
+	/**
+	 * Sets the handler that will be run after the listener has received a keep alive (aka pong) response
+	 */
+	public void setKeepAliveHandler(Runnable onKeepAlive) {
+		this.keepAliveHandler = onKeepAlive;
+	}	
 
 	/**
 	 * Opens the HybridConnectionListener and registers it as a listener in
@@ -736,6 +756,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 							trackingId);
 
 				ClientWebSocket webSocket = new ClientWebSocket(this.listener.trackingContext, this.listener.getHttpClientProvider(), EXECUTOR);
+				webSocket.setKeepAliveInterval(this.listener.keepAliveInterval);
+				
 				return delayTask.thenCompose(($void) -> {
 	                if (this.listener.injectedFault != null && this.listener.injectedFault instanceof UpgradeException) {
 	                    return CompletableFutureUtil.fromException(this.listener.injectedFault);
@@ -744,6 +766,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 					return webSocket.connectAsync(websocketUri, timeout, headers)
 						.thenApply(($void2) -> {
 							this.onOnline();
+							webSocket.setKeepAliveHandler(() -> {
+								this.onKeepAlive();
+							});
 							return webSocket;
 						});
 				});
@@ -873,6 +898,13 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			Consumer<Throwable> offlineHandler = this.listener.getOfflineHandler();
 			if (offlineHandler != null) {
 				offlineHandler.accept(lastError);
+			}
+		}
+
+		private void onKeepAlive() {
+			Runnable keepAliveHandler = this.listener.getKeepAliveHandler();
+			if (keepAliveHandler != null) {
+				keepAliveHandler.run();
 			}
 		}
 
