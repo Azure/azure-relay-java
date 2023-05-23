@@ -3,12 +3,14 @@ package com.microsoft.azure.relay;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -22,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.util.URIUtil;
 import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.junit.After;
@@ -315,7 +318,72 @@ public class HybridConnectionListenerTest {
 			fail(e.getMessage());
 		}
 	}
-	
+
+	@Test
+	public void parseRequestPathWithSpacesAndQueryTest() throws IOException {
+		CompletableFuture<Void> requestReceived = new CompletableFuture<Void>();
+		String extraPath = "/extra Path/extra  Path2";
+		String extraQuery = "queryKey=queryValue&queryKey2=queryValue;"; // mixing in a special char just for fun
+		String responseText = "{\"foo\":\"bar\"}";
+		int responseStatusCode = 200;
+
+		listener.setRequestHandler((context) -> {
+			try {
+				assertNotNull("Listener should have received a valid http context.", context);
+				assertNotNull("Listener should have received a valid http request.", context.getRequest());
+
+				URI requestUri = context.getRequest().getUri();
+				assertNotNull("Listener should have a URI from request", requestUri);
+				assertEquals(
+						"The path wasn't the expected value",
+						"/" + TestUtil.ENTITY_PATH + extraPath,
+						requestUri.getPath()
+				);
+				assertEquals("The query wasn't the expected value", extraQuery, requestUri.getQuery());
+
+				context.getResponse().setStatusCode(responseStatusCode);
+				OutputStream responseOutput = context.getResponse().getOutputStream();
+				responseOutput.write(responseText.getBytes(StandardCharsets.UTF_8));
+				responseOutput.close();
+
+				requestReceived.complete(null);
+			} catch (Throwable ex) {
+				requestReceived.completeExceptionally(ex);
+			} finally {
+				context.getResponse().close();
+			}
+		});
+
+		listener.openAsync(Duration.ofSeconds(15)).join();
+		StringBuilder urlBuilder = new StringBuilder(TestUtil.RELAY_NAMESPACE_URI + TestUtil.ENTITY_PATH);
+		urlBuilder.replace(0, 5, "https://");
+		urlBuilder.append(URIUtil.encodePath(extraPath));
+		urlBuilder.append("?").append(extraQuery);
+
+		URL url = new URL(urlBuilder.toString());
+		String tokenString = tokenProvider.getTokenAsync(url.toString(), Duration.ofHours(1)).join().getToken();
+
+		HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+		conn.setRequestMethod("GET");
+		conn.setRequestProperty("ServiceBusAuthorization", tokenString);
+		assertEquals("Response code is not the expected value",responseStatusCode, conn.getResponseCode());
+		assertEquals("Response message is not the expected value","OK", conn.getResponseMessage());
+
+		byte[] body = new byte[responseText.length()];
+		((InputStream)conn.getContent()).read(body);
+		String receivedResponseText = new String(body, StandardCharsets.UTF_8);
+
+		assertEquals("Response body is not the expected value", responseText, receivedResponseText);
+
+		try {
+			assertNull(requestReceived.get(30, TimeUnit.SECONDS));
+
+		} catch (Exception e) {
+			fail(e.getMessage());
+		}
+	}
+
+
 	@Test
 	public void listenerReconnectionTest() {
 		AtomicInteger handlerExecuted = new AtomicInteger(0);
