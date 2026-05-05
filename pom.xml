@@ -31,7 +31,7 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<azure.identity.version>1.4.0</azure.identity.version>
+		<azure.identity.version>1.12.2</azure.identity.version>
 		<jetty.version>9.4.44.v20210927</jetty.version>
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<maven.compiler.source>1.8</maven.compiler.source>
