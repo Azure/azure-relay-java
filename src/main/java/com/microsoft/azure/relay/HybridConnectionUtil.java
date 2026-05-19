@@ -32,7 +32,7 @@ final class HybridConnectionUtil {
 		if (port > -1) {
 			audience.append(":").append(port);
 		}
-		if (StringUtil.isNullOrEmpty(path)) {
+		if (!StringUtil.isNullOrEmpty(path)) {
 			audience.append("/").append(path);
 		}
 		
