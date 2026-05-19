@@ -77,6 +77,25 @@ public class HybridConnectionListenerTest {
 		assertFalse("Listener should be closed", listener.isOnline());
 		assertEquals("Listener offline handler was not called exactly once", 1, offlineHandlerCalled.get());
 	}
+	
+	@Test
+	public void keepAliveTest() throws InterruptedException {
+		AtomicInteger keepAliveHandlerCalled = new AtomicInteger(0);
+
+		listener.setKeepAliveInterval(Duration.ofSeconds(3));
+		listener.setKeepAliveHandler(() -> {
+			keepAliveHandlerCalled.incrementAndGet();
+		});
+		
+		listener.openAsync(Duration.ofSeconds(15)).join();
+		assertTrue("Listener failed to open.", listener.isOnline());
+
+		Thread.sleep(5000);
+		
+		listener.close();
+		assertFalse("Listener should be closed", listener.isOnline());
+		assertEquals("Keep alive handler was not called exactly once", 1, keepAliveHandlerCalled.get());
+	}
 
 	@Test
 	public void customHeadersTest() throws Exception {
