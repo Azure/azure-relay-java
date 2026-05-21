@@ -7,8 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channel;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-
-import org.eclipse.jetty.websocket.api.CloseStatus;
+import javax.websocket.CloseReason;
 
 public interface HybridConnectionChannel extends Channel {
 	
@@ -22,12 +21,12 @@ public interface HybridConnectionChannel extends Channel {
 	public CompletableFuture<Void> closeAsync();
 	
 	/**
-	 * Closes the connection with the remote websocket with a given CloseStatus
+	 * Closes the connection with the remote websocket with a given CloseReason
 	 * 
-	 * @param closeStatus The CloseStatus to be given for this operation. For details please see org.eclipse.jetty.websocket.api.CloseStatus.
+	 * @param reason The CloseReason to be given for this operation. For details please see javax.websocket.CloseReason.
 	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
 	 */
-	public CompletableFuture<Void> closeAsync(CloseStatus closeStatus);
+	public CompletableFuture<Void> closeAsync(CloseReason reason);
 	
 	/**
 	 * Receives byte messages from the remote sender asynchronously.
