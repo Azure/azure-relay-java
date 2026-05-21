@@ -19,9 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+import javax.websocket.ClientEndpointConfig;
+import javax.websocket.CloseReason;
+import javax.websocket.CloseReason.CloseCodes;
+
 import org.eclipse.jetty.http.HttpStatus;
-import org.eclipse.jetty.websocket.api.CloseStatus;
-import org.eclipse.jetty.websocket.api.StatusCode;
 import org.eclipse.jetty.websocket.api.UpgradeException;
 import org.json.JSONObject;
 
@@ -34,7 +36,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private final Object thisLock = new Object();
 	private final AtomicBoolean openCalled;
 	private final AtomicBoolean closeCalled;
-	private HttpClientProvider httpClientProvider;
 	private Duration operationTimeout;
 	private int maxWebSocketBufferSize;
 	private String cachedString;
@@ -47,8 +48,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	private Consumer<Throwable> connectingHandler;
 	private Consumer<Throwable> offlineHandler;
 	private Runnable onlineHandler;
-	private Runnable keepAliveHandler;
-	private Duration keepAliveInterval = Duration.ofSeconds(RelayConstants.DEFAULT_PING_INTERVAL_SECONDS);
 
 	/**
 	 * Create a new HybridConnectionListener instance for accepting
@@ -77,7 +76,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		this.controlConnection = new ControlConnection(this);
 		this.openCalled = new AtomicBoolean(false);
 		this.closeCalled = new AtomicBoolean(false);
-		this.httpClientProvider = new HttpClientProvider();
 	}
 
 	/**
@@ -154,19 +152,10 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		this.controlConnection = new ControlConnection(this);
 		this.openCalled = new AtomicBoolean(false);
 		this.closeCalled = new AtomicBoolean(false);
-		this.httpClientProvider = new HttpClientProvider();
 	}
 	
 	public boolean isOnline() {
 		return this.controlConnection.isOnline();
-	}
-
-	public HttpClientProvider getHttpClientProvider() {
-		return httpClientProvider;
-	}
-
-	public void setHttpClientProvider(HttpClientProvider httpClientProvider) {
-		this.httpClientProvider = httpClientProvider;
 	}
 
 	public Function<RelayedHttpListenerContext, Boolean> getAcceptHandler() {
@@ -229,10 +218,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	public int getMaxWebSocketBufferSize() {
 		return maxWebSocketBufferSize;
 	}
-	
-	public void setKeepAliveInterval(Duration interval) {
-		this.keepAliveInterval = interval;
-	}
 
 	public void setMaxWebSocketBufferSize(int maxWebSocketBufferSize) {
 		if (maxWebSocketBufferSize > 0) {
@@ -287,20 +272,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 	public void setOnlineHandler(Runnable onOnline) {
 		this.onlineHandler = onOnline;
 	}
-
-	/**
-	 * Returns the handler that will be run after the listener has received a keep alive (aka pong) response
-	 */
-	public Runnable getKeepAliveHandler() {
-		return keepAliveHandler;
-	}
-
-	/**
-	 * Sets the handler that will be run after the listener has received a keep alive (aka pong) response
-	 */
-	public void setKeepAliveHandler(Runnable onKeepAlive) {
-		this.keepAliveHandler = onKeepAlive;
-	}	
 
 	/**
 	 * Opens the HybridConnectionListener and registers it as a listener in
@@ -374,7 +345,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			closeTasks = new CompletableFuture<?>[this.connectionInputQueue.getPendingCount()];
 			for (int i = 0; i < this.connectionInputQueue.getPendingCount(); i++) {
 				closeTasks[i] = this.connectionInputQueue.dequeueAsync(timeoutHelper.remainingTime()).thenAccept(connection -> {
-					connection.closeAsync(new CloseStatus(StatusCode.NORMAL, "Client closing the socket normally"));
+					connection.closeAsync(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "Client closing the socket normally"));
 				});
 			}
 		}
@@ -509,7 +480,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 		
 		if (shouldAccept) {
 			synchronized (this.thisLock) {
-				WebSocketChannel rendezvousConnection = new WebSocketChannel(listenerContext.getTrackingContext(), this.getHttpClientProvider(), EXECUTOR);
+				WebSocketChannel rendezvousConnection = new WebSocketChannel(listenerContext.getTrackingContext(), EXECUTOR);
 
 				if (this.closeCalled.get()) {
 					RelayLogger.logEvent("rendezvousClose", this, rendezvousUri.toString());
@@ -623,9 +594,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				}).whenComplete(($void, err) -> {
 					if (err != null) {
 						RelayLogger.throwingException(err, this.listener);
-						CloseStatus closeStatus = new CloseStatus(StatusCode.ABNORMAL,
+						CloseReason closeReason = new CloseReason(CloseCodes.UNEXPECTED_CONDITION,
 								"closing web socket connection because something went wrong trying to connect.");
-						this.closeOrAbortWebSocketAsync(connectTask, closeStatus);
+						this.closeOrAbortWebSocketAsync(connectTask, closeReason);
 						throw new CompletionException(err);
 					}
 				});
@@ -654,8 +625,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			if (connectTask != null) {
 				return connectTask.thenCompose((webSocket) -> {
 					return this.sendAsyncLock.acquireThenCompose(duration, () -> {
-						CloseStatus closeStatus = new CloseStatus(StatusCode.NORMAL, "Normal Closure");					
-						return webSocket.closeAsync(closeStatus);
+						CloseReason reason = new CloseReason(CloseCodes.NORMAL_CLOSURE, "Normal Closure");					
+						return webSocket.closeAsync(reason);
 					});
 				});
 			}
@@ -744,6 +715,9 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				// Set the authentication in request header
 				Map<String, List<String>> headers = new HashMap<String, List<String>>();
 				headers.put(RelayConstants.SERVICEBUS_AUTHORIZATION_HEADER_NAME, Arrays.asList(token.join().getToken()));
+				HybridConnectionEndpointConfigurator configurator = new HybridConnectionEndpointConfigurator();
+				configurator.addHeaders(headers);
+				ClientEndpointConfig config = ClientEndpointConfig.Builder.create().configurator(configurator).build();
 
 				// When we reconnect we need to remove the "_GXX" suffix otherwise trackingId
 				// gets longer after each reconnect
@@ -755,20 +729,15 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 							this.address.getPath(), this.address.getQuery(), HybridConnectionConstants.Actions.LISTEN,
 							trackingId);
 
-				ClientWebSocket webSocket = new ClientWebSocket(this.listener.trackingContext, this.listener.getHttpClientProvider(), EXECUTOR);
-				webSocket.setKeepAliveInterval(this.listener.keepAliveInterval);
-				
+				ClientWebSocket webSocket = new ClientWebSocket(this.listener.trackingContext, EXECUTOR);
 				return delayTask.thenCompose(($void) -> {
 	                if (this.listener.injectedFault != null && this.listener.injectedFault instanceof UpgradeException) {
 	                    return CompletableFutureUtil.fromException(this.listener.injectedFault);
 	                }
 	                
-					return webSocket.connectAsync(websocketUri, timeout, headers)
+					return webSocket.connectAsync(websocketUri, timeout, config)
 						.thenApply(($void2) -> {
 							this.onOnline();
-							webSocket.setKeepAliveHandler(() -> {
-								this.onKeepAlive();
-							});
 							return webSocket;
 						});
 				});
@@ -778,7 +747,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			}
 		}
 		
-		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<ClientWebSocket> connectTask, CloseStatus closeStatus) {
+		private CompletableFuture<Void> closeOrAbortWebSocketAsync(CompletableFuture<ClientWebSocket> connectTask, CloseReason reason) {
 			assert CompletableFutureUtil.isDoneNormally(connectTask);
 			
 			synchronized (this.thisLock) {
@@ -787,7 +756,7 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 				}
 			}
 			
-			return connectTask.thenCompose((webSocket) -> webSocket.closeAsync(closeStatus))
+			return connectTask.thenCompose((webSocket) -> webSocket.closeAsync(reason))
 				.exceptionally((exception) -> {
 					// catch and do not rethrow
 					RelayLogger.handledExceptionAsWarning(exception, this.listener);
@@ -854,8 +823,8 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 									keepGoing = false;
 								} 
 								else {
-									CloseStatus closeStatus = webSocket.getCloseReason();
-									keepGoing = this.onDisconnect(new ConnectionLostException(closeStatus.toString()));
+									CloseReason reason = webSocket.getCloseReason();
+									keepGoing = this.onDisconnect(new ConnectionLostException(reason.toString()));
 								}
 								return keepGoing;
 							}
@@ -898,13 +867,6 @@ public class HybridConnectionListener implements RelayTraceSource, AutoCloseable
 			Consumer<Throwable> offlineHandler = this.listener.getOfflineHandler();
 			if (offlineHandler != null) {
 				offlineHandler.accept(lastError);
-			}
-		}
-
-		private void onKeepAlive() {
-			Runnable keepAliveHandler = this.listener.getKeepAliveHandler();
-			if (keepAliveHandler != null) {
-				keepAliveHandler.run();
 			}
 		}
 
