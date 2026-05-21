@@ -2,20 +2,24 @@ package com.microsoft.azure.relay;
 
 import java.net.URI;
 
+import io.github.cdimascio.dotenv.Dotenv;
+
 public class TestUtil {
-	public static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
-	public static final RelayConnectionStringBuilder CONNECTION_STRING_BUILDER = new RelayConnectionStringBuilder(System.getenv(CONNECTION_STRING_ENV_VARIABLE_NAME));
-	public static final URI RELAY_NAMESPACE_URI = CONNECTION_STRING_BUILDER.getEndpoint();
-	public static final String ENTITY_PATH = CONNECTION_STRING_BUILDER.getEntityPath();
-	public static final String KEY_NAME = CONNECTION_STRING_BUILDER.getSharedAccessKeyName();
-	public static final String KEY = CONNECTION_STRING_BUILDER.getSharedAccessKey();
-	
-	static byte[] concatByteArrays(byte[]... arrays) {
-		int totalSize = 0;
+    public static final Dotenv dotenv = Dotenv.configure().load();
+    public static final String CONNECTION_STRING_ENV_VARIABLE_NAME = "RELAY_CONNECTION_STRING";
+    public static final RelayConnectionStringBuilder CONNECTION_STRING_BUILDER = new RelayConnectionStringBuilder(
+            dotenv.get(CONNECTION_STRING_ENV_VARIABLE_NAME));
+    public static final URI RELAY_NAMESPACE_URI = CONNECTION_STRING_BUILDER.getEndpoint();
+    public static final String ENTITY_PATH = CONNECTION_STRING_BUILDER.getEntityPath();
+    public static final String KEY_NAME = CONNECTION_STRING_BUILDER.getSharedAccessKeyName();
+    public static final String KEY = CONNECTION_STRING_BUILDER.getSharedAccessKey();
+
+    static byte[] concatByteArrays(byte[]... arrays) {
+        int totalSize = 0;
         for (byte[] array : arrays) {
             totalSize += array.length;
         }
-        
+
         byte[] result = new byte[totalSize];
         int offset = 0;
         for (byte[] array : arrays) {

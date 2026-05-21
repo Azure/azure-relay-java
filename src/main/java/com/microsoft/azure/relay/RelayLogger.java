@@ -131,6 +131,8 @@ final class RelayLogger {
 		map.put("objectNotSet", "%s: %s was not set to the given value.");
 		map.put("offline", "%s is offline.");
 		map.put("parsingUUIDFailed", "%s: Parsing TrackingId '%s' as Guid failed, created new ActivityId '%s' for trace correlation.");
+		map.put("pingSuccess", "%s Ping Success");
+		map.put("pingFailed", "%s Ping Failed");
 		map.put("receivedBytes", "%s: received bytes from remote. Total length: %s");
 		map.put("receivedText", "%s: received text from remote. Total length: %s");
 		map.put("rendezvousClose", "%s: Relayed Listener has received call to close and will not accept the incoming connection. ConnectionAddress: %s");

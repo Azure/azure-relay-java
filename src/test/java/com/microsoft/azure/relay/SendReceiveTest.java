@@ -2,6 +2,8 @@ package com.microsoft.azure.relay;
 
 import com.microsoft.azure.relay.HybridHttpConnection.ResponseStream;
 import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.websocket.api.CloseStatus;
+import org.eclipse.jetty.websocket.api.StatusCode;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -216,8 +218,8 @@ public class SendReceiveTest {
                           websocket.writeAsync(ByteBuffer.wrap(SMALL_BYTES)).join();
                           websocket
                               .closeAsync(
-                                  new CloseReason(
-                                      CloseCodes.NORMAL_CLOSURE, "Normal closure from listener"))
+                                  new CloseStatus(
+                                    StatusCode.NORMAL, "Normal closure from listener"))
                               .join();
                         });
               });
@@ -388,8 +390,8 @@ public class SendReceiveTest {
                       nullResult -> {
                         checkMsgToSendIsModified(origMsgToSend, msgToSend);
                         return channel.closeAsync(
-                            new CloseReason(
-                                CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
+                          new CloseStatus(
+                            StatusCode.NORMAL, "Listener closing normally."));
                       });
             });
   }
@@ -451,8 +453,8 @@ public class SendReceiveTest {
                       nullResult -> {
                         assertTrue("Message was modified.", origMsgToSend.equals(msgToSend));
                         return channel.closeAsync(
-                            new CloseReason(
-                                CloseCodes.NORMAL_CLOSURE, "Listener closing normally."));
+                            new CloseStatus(
+                                StatusCode.NORMAL, "Listener closing normally."));
                       });
             });
   }

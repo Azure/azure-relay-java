@@ -16,11 +16,11 @@ import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
-import javax.websocket.CloseReason;
-import javax.websocket.CloseReason.CloseCodes;
 
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.util.URIUtil;
+import org.eclipse.jetty.websocket.api.CloseStatus;
+import org.eclipse.jetty.websocket.api.StatusCode;
 import org.json.JSONObject;
 
 class HybridHttpConnection implements RelayTraceSource {
@@ -270,7 +270,7 @@ class HybridHttpConnection implements RelayTraceSource {
 	private CompletableFuture<Void> ensureRendezvousAsync(Duration timeout) throws CompletionException {
 		if (this.rendezvousWebSocket == null) {
 			RelayLogger.logEvent("httpCreateRendezvous", this);
-			this.rendezvousWebSocket = new ClientWebSocket(this.trackingContext, this.executor);
+			this.rendezvousWebSocket = new ClientWebSocket(this.trackingContext, this.controlWebSocket.getHttpClientProvider(), this.executor);
 			return this.rendezvousWebSocket.connectAsync(this.rendezvousAddress, timeout);
 		}
 		return CompletableFuture.completedFuture(null);
@@ -280,7 +280,7 @@ class HybridHttpConnection implements RelayTraceSource {
 		if (this.rendezvousWebSocket != null) {
 			RelayLogger.logEvent("closing", this);
 			return this.rendezvousWebSocket
-					.closeAsync(new CloseReason(CloseCodes.NORMAL_CLOSURE, "NormalClosure"))
+					.closeAsync(new CloseStatus(StatusCode.NORMAL, "NormalClosure"))
 					.thenRun(() -> RelayLogger.logEvent("closed", this));
 		} else {
 			return CompletableFuture.completedFuture(null);
