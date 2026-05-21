@@ -5,7 +5,7 @@
 
 	<groupId>com.microsoft.azure</groupId>
 	<artifactId>azure-relay</artifactId>
-	<version>0.0.4</version>
+	<version>0.0.6</version>
 	<name>azure-relay</name>
 	<description>Java library for Azure Relay</description>
 	<url>https://github.com/Azure/azure-relay-java</url>
@@ -31,6 +31,8 @@
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<azure.identity.version>1.12.2</azure.identity.version>
+		<jetty.version>9.4.44.v20210927</jetty.version>
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<azure.identity.version>1.6.1</azure.identity.version>
@@ -43,6 +45,21 @@
 	</properties>
 
 	<dependencies>
+        <dependency>
+		    <groupId>com.azure</groupId>
+		    <artifactId>azure-identity</artifactId>
+		    <version>${azure.identity.version}</version>
+	    </dependency>
+		<dependency>
+			<groupId>com.azure</groupId>
+			<artifactId>azure-identity</artifactId>
+			<version>${azure.identity.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>${slf4j.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>com.azure</groupId>
 			<artifactId>azure-identity</artifactId>
