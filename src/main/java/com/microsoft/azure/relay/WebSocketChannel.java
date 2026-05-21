@@ -7,14 +7,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import javax.websocket.CloseReason;
+
+import org.eclipse.jetty.websocket.api.CloseStatus;
 
 public class WebSocketChannel implements HybridConnectionChannel {
 	private final ClientWebSocket websocket;
 	private final TrackingContext trackingContext;
 	
-	WebSocketChannel(TrackingContext trackingContext, AutoShutdownScheduledExecutor executor) {
-		this(new ClientWebSocket(trackingContext, executor), trackingContext);
+	WebSocketChannel(TrackingContext trackingContext, HttpClientProvider httpClientProvider, AutoShutdownScheduledExecutor executor) {
+		this(new ClientWebSocket(trackingContext, httpClientProvider, executor), trackingContext);
 	}
 	
 	WebSocketChannel(ClientWebSocket websocket, TrackingContext trackingContext) {
@@ -56,13 +57,13 @@ public class WebSocketChannel implements HybridConnectionChannel {
 	}
 	
 	/**
-	 * Closes the connection with the remote websocket with a given CloseReason
+	 * Closes the connection with the remote websocket with a given CloseStatus
 	 * 
-	 * @param reason The CloseReason to be given for this operation. For details please see javax.websocket.CloseReason.
+	 * @param closeStatus The CloseStatus to be given for this operation. For details please see org.eclipse.jetty.websocket.api.CloseStatus.
 	 * @return Returns a CompletableFuture which completes when the connection is completely closed.
 	 */
-	public CompletableFuture<Void> closeAsync(CloseReason reason) {
-		return this.websocket.closeAsync(reason);
+	public CompletableFuture<Void> closeAsync(CloseStatus closeStatus) {
+		return this.websocket.closeAsync(closeStatus);
 	}
 
 	/**
@@ -119,6 +120,7 @@ public class WebSocketChannel implements HybridConnectionChannel {
 	 * @param textData Text message to be sent.
 	 * @param timeout The timeout to connect to send the data within. May be null to indicate no timeout limit.
 	 * @return A CompletableFuture which completes when websocket finishes sending the data.
+	 * @throws TimeoutException Throws when the sending task does not complete within the given timeout.
 	 */
 	public CompletableFuture<Void> writeTextAsync(String textData, Duration timeout) {
 		return this.websocket.writeAsync(textData, timeout, true, WriteMode.TEXT);
