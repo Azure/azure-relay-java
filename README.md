@@ -149,4 +149,6 @@ reason for why the connection could not be established.
 
 The unit tests are written using JUnit. You can simply run the unit tests from within an IDE such as Eclipse or Intellij by using their respective interfaces. 
 
+Create a .env file in the root directory with the relay connection string for use in the tests. Please see .env.sample for more details.
+
 If running from within command prompt, simply navigate to the root folder of the project (`/azure-relay-java`) and run `mvn clean test`.
