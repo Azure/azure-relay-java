@@ -38,7 +38,7 @@
 		<azure.identity.version>1.6.1</azure.identity.version>
 		<slf4j.version>2.0.3</slf4j.version>
 		<jetty.version>9.4.49.v20220914</jetty.version>
-		<json.version>20220924</json.version>
+		<json.version>20260719</json.version>
 		<log4j.version>2.25.4</log4j.version>
 		<junit.version>4.13.2</junit.version>
 		<java.dotenv.version>5.2.2</java.dotenv.version>
